@@ -18,6 +18,7 @@ namespace UndercutterFFXIV.Windows
         private readonly MarketAssistantPlugin plugin;
         private readonly ProfitScannerService scanner;
         private readonly Configuration config;
+        private readonly RetainerPriceService retainerPriceService;
 
         private MainTab selectedTab = MainTab.Dashboard;
         private string itemSearchQuery = string.Empty;
@@ -35,6 +36,8 @@ namespace UndercutterFFXIV.Windows
         
         // Copy feedback
         private DateTime lastCopyTime = DateTime.MinValue;
+        private DateTime lastAutoFillTime = DateTime.MinValue;
+        private string inventoryStatus = string.Empty;
 
         public MarketMasterWindow(MarketAssistantPlugin plugin, ProfitScannerService scanner)
             : base("Market Master Pro###MarketMasterProWindow")
@@ -42,6 +45,7 @@ namespace UndercutterFFXIV.Windows
             this.plugin = plugin;
             this.scanner = scanner;
             this.config = plugin.Configuration;
+            this.retainerPriceService = plugin.RetainerPriceService;
             Size = new Vector2(1120, 700);
             SizeCondition = ImGuiCond.FirstUseEver;
         }
@@ -284,21 +288,46 @@ namespace UndercutterFFXIV.Windows
             {
                 ImGui.SetClipboardText(inventorySuggestedPrice.ToString());
                 lastCopyTime = DateTime.Now;
+                inventoryStatus = "Copied suggested price to clipboard";
+            }
+
+            if (config.EnableRetainerAutoFill)
+            {
+                ImGui.SameLine();
+                var retainerWindowDetected = inventorySuggestedPrice > 0 && retainerPriceService.IsRetainerSellWindowOpen();
+                ImGui.BeginDisabled(!retainerWindowDetected);
+                if (ImGui.Button("Auto-Fill Retainer Price"))
+                {
+                    if (retainerPriceService.TryAutoFillPrice(inventorySuggestedPrice, out var status))
+                        lastAutoFillTime = DateTime.Now;
+                    inventoryStatus = status;
+                }
+                ImGui.EndDisabled();
             }
             ImGui.Spacing();
             
             var timeSinceCopy = DateTime.Now - lastCopyTime;
+            var timeSinceAutoFill = DateTime.Now - lastAutoFillTime;
             if (timeSinceCopy.TotalSeconds < 2)
             {
                 ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "✓ Copied to clipboard!");
+            }
+            else if (timeSinceAutoFill.TotalSeconds < 2)
+            {
+                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "✓ Auto-filled retainer price!");
             }
             else if (inventorySuggestedPrice > 0)
                 ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f),
                     $"Suggested listing price: {inventorySuggestedPrice:N0} gil");
             else
                 ImGui.TextDisabled("No suggestion yet. Fetch floor first.");
+
+            if (!string.IsNullOrWhiteSpace(inventoryStatus))
+                ImGui.TextDisabled(inventoryStatus);
             
             ImGui.TextDisabled("(Paste the price into your Retainer's listing interface)");
+            if (config.EnableRetainerAutoFill && !retainerPriceService.IsRetainerSellWindowOpen())
+                ImGui.TextDisabled("Open the Retainer sell price window to enable auto-fill.");
         }
 
         private void DrawSettingsTab()
@@ -354,6 +383,10 @@ namespace UndercutterFFXIV.Windows
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Polling jitter (+/- sec)", ref jitter))
                 config.PollingJitterSeconds = Math.Clamp(jitter, 0, 120);
+
+            var autoFill = config.EnableRetainerAutoFill;
+            if (ImGui.Checkbox("Enable retainer auto-fill button", ref autoFill))
+                config.EnableRetainerAutoFill = autoFill;
 
             if (ImGui.Button("Save Settings"))
             {

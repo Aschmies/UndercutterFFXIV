@@ -17,10 +17,12 @@ namespace UndercutterFFXIV
         [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
         [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
         [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+        [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
 
         private const string CommandName = "/ma";
 
         public Configuration Configuration { get; }
+        public RetainerPriceService RetainerPriceService { get; }
 
         private readonly WindowSystem windowSystem = new("MarketMasterPro");
         private readonly MarketMasterWindow mainWindow;
@@ -41,6 +43,7 @@ namespace UndercutterFFXIV
             var http = new HttpClient();
             var universalis = new UniversalisMarketClient(http);
             scanner = new ProfitScannerService(DataManager, universalis, database, Configuration);
+            RetainerPriceService = new RetainerPriceService(GameGui);
 
             mainWindow = new MarketMasterWindow(this, scanner);
             windowSystem.AddWindow(mainWindow);
