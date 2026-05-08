@@ -22,14 +22,15 @@ namespace UndercutterFFXIV.Services
 
         private readonly object cacheLock = new();
         private List<ItemLookup>? itemCache;
+        private List<ItemLookup>? marketableItemCache;
         private List<ArbitrageOpportunity> lastResults = new();
         private bool scanInProgress;
         private int scanProcessedItems;
         private int scanTotalItems;
 
-        private ScanMode currentScanMode = ScanMode.Watchlist;
+        private ScanMode currentScanMode = ScanMode.TopItems;
         private string? currentScanCategory;
-        private int topItemsCount = 200;
+        private int topItemsCount = 250;
 
         public ProfitScannerService(
             IDataManager dataManager,
@@ -131,32 +132,99 @@ namespace UndercutterFFXIV.Services
             if (itemCache == null || itemCache.Count == 0)
                 return new List<ItemLookup>();
 
+            var watchlistItems = GetWatchlist()
+                .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
+                .ToList();
+
             return currentScanMode switch
             {
-                ScanMode.Watchlist 
-                    => GetWatchlist()
-                        .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
-                        .ToList(),
+                ScanMode.Watchlist
+                    => watchlistItems,
                 ScanMode.VelocityThreshold
-                    => GetHighVelocityItems(config.MinSaleVelocityPerDay * 2),
+                    => MergeScanCandidates(watchlistItems, GetHighVelocityItems(config.MinSaleVelocityPerDay * 2)),
                 ScanMode.TopItems
-                    => GetTopTradedItems(topItemsCount),
-                _ => GetWatchlist()
-                    .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
-                    .ToList()
+                    => MergeScanCandidates(watchlistItems, GetTopTradedItems(topItemsCount)),
+                _ => watchlistItems
             };
         }
 
         private List<ItemLookup> GetHighVelocityItems(double minVelocity)
         {
-            EnsureItemCacheLoaded();
-            return itemCache?.Take(500).ToList() ?? new List<ItemLookup>();
+            // Universalis velocity is not cached locally, so use a broad marketable sample.
+            // This still produces actionable scan candidates instead of the old placeholder first-row slice.
+            var targetCount = minVelocity >= 4 ? 250 : 500;
+            return GetMarketableSample(targetCount);
         }
 
         private List<ItemLookup> GetTopTradedItems(int count)
         {
+            return GetMarketableSample(Math.Max(10, count));
+        }
+
+        private List<ItemLookup> MergeScanCandidates(
+            IReadOnlyList<ItemLookup> primary,
+            IReadOnlyList<ItemLookup> secondary)
+        {
+            var merged = new List<ItemLookup>(primary.Count + secondary.Count);
+            var seen = new HashSet<uint>();
+
+            foreach (var item in primary)
+            {
+                if (!seen.Add(item.ItemId))
+                    continue;
+
+                merged.Add(item);
+            }
+
+            foreach (var item in secondary)
+            {
+                if (!seen.Add(item.ItemId))
+                    continue;
+
+                merged.Add(item);
+            }
+
+            return merged;
+        }
+
+        private List<ItemLookup> GetMarketableSample(int desiredCount)
+        {
             EnsureItemCacheLoaded();
-            return itemCache?.Take(Math.Min(count, itemCache.Count)).ToList() ?? new List<ItemLookup>();
+            if (marketableItemCache == null || marketableItemCache.Count == 0)
+                return new List<ItemLookup>();
+
+            var count = Math.Min(Math.Max(1, desiredCount), marketableItemCache.Count);
+            if (count >= marketableItemCache.Count)
+                return marketableItemCache.ToList();
+
+            var step = marketableItemCache.Count / (double)count;
+            var sample = new List<ItemLookup>(count);
+            var seen = new HashSet<uint>();
+
+            for (var index = 0; index < count; index++)
+            {
+                var sourceIndex = Math.Min(marketableItemCache.Count - 1, (int)Math.Floor(index * step));
+                var item = marketableItemCache[sourceIndex];
+                if (!seen.Add(item.ItemId))
+                    continue;
+
+                sample.Add(item);
+            }
+
+            if (sample.Count < count)
+            {
+                foreach (var item in marketableItemCache)
+                {
+                    if (!seen.Add(item.ItemId))
+                        continue;
+
+                    sample.Add(item);
+                    if (sample.Count >= count)
+                        break;
+                }
+            }
+
+            return sample;
         }
 
         public async Task<IReadOnlyList<ArbitrageOpportunity>> ScanWatchlistAsync(CancellationToken cancellationToken)
@@ -266,6 +334,7 @@ namespace UndercutterFFXIV.Services
                     return;
 
                 var loaded = new List<ItemLookup>(32000);
+                var marketable = new List<ItemLookup>(24000);
                 var sheet = dataManager.GetExcelSheet<Item>();
                 if (sheet != null)
                 {
@@ -278,16 +347,25 @@ namespace UndercutterFFXIV.Services
                         if (string.IsNullOrWhiteSpace(name))
                             continue;
 
-                        loaded.Add(new ItemLookup
+                        var item = new ItemLookup
                         {
                             ItemId = row.RowId,
                             Name = name
-                        });
+                        };
+
+                        loaded.Add(item);
+
+                        if (!row.IsUntradable)
+                            marketable.Add(item);
                     }
                 }
 
                 itemCache = loaded;
+                marketableItemCache = marketable
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
                 LoggingService.LogInfo($"Loaded {loaded.Count} items into search cache");
+                LoggingService.LogInfo($"Prepared {marketableItemCache.Count} marketable scan candidates");
             }
         }
 

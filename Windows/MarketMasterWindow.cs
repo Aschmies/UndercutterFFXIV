@@ -28,11 +28,12 @@ namespace UndercutterFFXIV.Windows
         private uint inventorySelectedItemId;
         private uint inventorySuggestedPrice;
         private bool scanRunning;
+        private CancellationTokenSource? currentScanCancellation;
         private string scannerStatus = "Idle";
         
         // Full-market scan mode
-        private ScanMode currentScanMode = ScanMode.Watchlist;
-        private int topItemsCountUI = 200;
+        private ScanMode currentScanMode = ScanMode.TopItems;
+        private int topItemsCountUI = 250;
         
         // Copy feedback
         private DateTime lastCopyTime = DateTime.MinValue;
@@ -161,6 +162,14 @@ namespace UndercutterFFXIV.Windows
             ImGui.SameLine();
             if (ImGui.Button("Run Scan") && !scanRunning)
                 _ = RunScanAsync();
+            ImGui.SameLine();
+            ImGui.BeginDisabled(!scanRunning || currentScanCancellation == null);
+            if (ImGui.Button("Cancel Scan"))
+            {
+                scannerStatus = "Cancelling scan...";
+                currentScanCancellation?.Cancel();
+            }
+            ImGui.EndDisabled();
             ImGui.SameLine();
             if (ImGui.Button("Refresh List"))
                 RefreshWatchlist();
@@ -508,6 +517,8 @@ namespace UndercutterFFXIV.Windows
         {
             scanRunning = true;
             scannerStatus = "Setting up scan...";
+            currentScanCancellation?.Dispose();
+            currentScanCancellation = new CancellationTokenSource();
             
             // Set scan mode on the service
             scanner.SetScanMode(currentScanMode, null, topItemsCountUI);
@@ -515,9 +526,13 @@ namespace UndercutterFFXIV.Windows
             scannerStatus = "Scanning selected items...";
             try
             {
-                var results = await scanner.ScanWatchlistAsync(CancellationToken.None);
+                var results = await scanner.ScanWatchlistAsync(currentScanCancellation.Token);
                 latestResults = results.ToList();
                 scannerStatus = $"Scan complete: {latestResults.Count} opportunities";
+            }
+            catch (OperationCanceledException)
+            {
+                scannerStatus = "Scan cancelled";
             }
             catch (Exception ex)
             {
@@ -526,6 +541,8 @@ namespace UndercutterFFXIV.Windows
             finally
             {
                 scanRunning = false;
+                currentScanCancellation?.Dispose();
+                currentScanCancellation = null;
             }
         }
 
@@ -568,6 +585,11 @@ namespace UndercutterFFXIV.Windows
                 ImGui.PopStyleColor(3);
         }
 
-        public void Dispose() { }
+        public void Dispose()
+        {
+            currentScanCancellation?.Cancel();
+            currentScanCancellation?.Dispose();
+            currentScanCancellation = null;
+        }
     }
 }
