@@ -1,241 +1,169 @@
 using Dalamud.Game.Command;
+using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using Dalamud.Interface.Windowing;
+using System;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using UndercutterFFXIV.Services;
 using UndercutterFFXIV.Windows;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace UndercutterFFXIV
 {
     public sealed class MarketAssistantPlugin : IDalamudPlugin
     {
-        // ── Dalamud services injected statically ──────────────────────────────
         [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
         [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
+        [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
 
         private const string CommandName = "/ma";
 
-        public Configuration Configuration { get; init; }
-        private WindowSystem WindowSystem = new("UndercutterFFXIV");
+        public Configuration Configuration { get; }
 
-        // Main windows
-        private MarketBoardWindow MarketBoardWindow { get; init; }
-        private ConfigWindow ConfigWindow { get; init; }
-        private SearchWindow SearchWindow { get; init; }
+        private readonly WindowSystem windowSystem = new("MarketMasterPro");
+        private readonly MarketMasterWindow mainWindow;
+        private readonly ProfitScannerService scanner;
+        private readonly Random random = new();
+        private readonly DateTime sessionStartedUtc = DateTime.UtcNow;
 
-        // Price adjustment windows
-        private BulkAdjustWindow BulkAdjustWindow { get; init; }
-        private PriceHistoryWindow PriceHistoryWindow { get; init; }
-        private ProfitAnalysisWindow ProfitAnalysisWindow { get; init; }
-
-        // Flipping windows
-        private FlipOpportunitiesWindow FlipOpportunitiesWindow { get; init; }
-        private FlipTrackerWindow FlipTrackerWindow { get; init; }
-        private ActiveFlipsWindow ActiveFlipsWindow { get; init; }
-
-        // Services
-        private MarketTracker MarketTracker { get; init; }
-        private PersistenceService PersistenceService { get; init; }
-        private NotificationService NotificationService { get; init; }
-        private RetainerSyncService RetainerSyncService { get; init; }
-        private FlipAnalyzerService FlipAnalyzerService { get; init; }
-        private FlipTrackerService FlipTrackerService { get; init; }
-        private SellSuggestionService SellSuggestionService { get; init; }
-        private System.Timers.Timer? refreshTimer;
-        private DateTime lastSellSuggestionUpdate = DateTime.MinValue;
+        private System.Timers.Timer? backgroundTimer;
 
         public MarketAssistantPlugin()
         {
-            // Initialize logging first so everything else can use it
             LoggingService.Initialize(PluginInterface.GetPluginConfigDirectory());
 
             Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
             Configuration.Initialize(PluginInterface);
 
-            // Initialize services
-            MarketTracker = new MarketTracker(Configuration.UndercutAmount);
-            PersistenceService = new PersistenceService(PluginInterface.GetPluginConfigDirectory());
-            MarketTracker.InitializePersistence(PersistenceService);
-            NotificationService = new NotificationService();
-            RetainerSyncService = new RetainerSyncService(MarketTracker);
-            FlipAnalyzerService = new FlipAnalyzerService(MarketTracker);
-            FlipTrackerService = new FlipTrackerService();
-            FlipTrackerService.InitializePersistence(PersistenceService);
-            SellSuggestionService = new SellSuggestionService(MarketTracker);
+            var database = new MarketMasterDatabase(PluginInterface.GetPluginConfigDirectory());
+            var http = new HttpClient();
+            var universalis = new UniversalisMarketClient(http);
+            scanner = new ProfitScannerService(DataManager, universalis, database, Configuration);
 
-            LoggingService.LogInfo("Market Assistant plugin initializing");
-
-            // Register windows
-            MarketBoardWindow = new MarketBoardWindow(this, MarketTracker, NotificationService);
-            ConfigWindow = new ConfigWindow(this);
-            BulkAdjustWindow = new BulkAdjustWindow(this, MarketTracker);
-            PriceHistoryWindow = new PriceHistoryWindow(MarketTracker, FlipTrackerService);
-            ProfitAnalysisWindow = new ProfitAnalysisWindow(MarketTracker, FlipTrackerService);
-            SearchWindow = new SearchWindow(MarketTracker, FlipTrackerService, Configuration);
-            FlipOpportunitiesWindow = new FlipOpportunitiesWindow(MarketTracker, FlipAnalyzerService, FlipTrackerService);
-            FlipTrackerWindow = new FlipTrackerWindow(FlipTrackerService, FlipAnalyzerService, MarketTracker, SellSuggestionService);
-            ActiveFlipsWindow = new ActiveFlipsWindow(SellSuggestionService, FlipTrackerService);
-
-            WindowSystem.AddWindow(MarketBoardWindow);
-            WindowSystem.AddWindow(ConfigWindow);
-            WindowSystem.AddWindow(BulkAdjustWindow);
-            WindowSystem.AddWindow(PriceHistoryWindow);
-            WindowSystem.AddWindow(ProfitAnalysisWindow);
-            WindowSystem.AddWindow(SearchWindow);
-            WindowSystem.AddWindow(FlipOpportunitiesWindow);
-            WindowSystem.AddWindow(FlipTrackerWindow);
-            WindowSystem.AddWindow(ActiveFlipsWindow);
+            mainWindow = new MarketMasterWindow(this, scanner);
+            windowSystem.AddWindow(mainWindow);
 
             CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Opens the Market Assistant window | /ma active | /ma flip | /ma tracker | /ma sync"
+                HelpMessage = "Open Market Master Pro | /ma scan | /ma scanner"
             });
 
             PluginInterface.UiBuilder.Draw += DrawUI;
-            PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
             PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
+            PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
 
-            // Start background Universalis price refresh
-            if (Configuration.UseUniversalisAPI)
-            {
-                StartBackgroundRefresh();
-            }
-
-            LoggingService.LogInfo("Market Assistant plugin initialized successfully");
+            RefreshBackgroundPolling();
+            LoggingService.LogInfo("Market Master Pro initialized");
         }
 
         public void Dispose()
         {
-            LoggingService.LogInfo("Market Assistant plugin disposing");
-
             PluginInterface.UiBuilder.Draw -= DrawUI;
-            PluginInterface.UiBuilder.OpenConfigUi -= DrawConfigUI;
             PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
+            PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
 
-            if (refreshTimer != null)
+            if (backgroundTimer != null)
             {
-                refreshTimer.Stop();
-                refreshTimer.Dispose();
+                backgroundTimer.Stop();
+                backgroundTimer.Dispose();
+                backgroundTimer = null;
             }
 
-            MarketTracker.SaveToPersistence();
-            WindowSystem.RemoveAllWindows();
+            windowSystem.RemoveAllWindows();
             CommandManager.RemoveHandler(CommandName);
+        }
+
+        public void RefreshBackgroundPolling()
+        {
+            if (backgroundTimer != null)
+            {
+                backgroundTimer.Stop();
+                backgroundTimer.Dispose();
+                backgroundTimer = null;
+            }
+
+            if (!Configuration.EnableBackgroundPolling)
+                return;
+
+            backgroundTimer = new System.Timers.Timer
+            {
+                AutoReset = false,
+                Interval = 1000
+            };
+
+            backgroundTimer.Elapsed += async (_, _) =>
+            {
+                try
+                {
+                    if (Configuration.EnableSessionLimit)
+                    {
+                        var max = Math.Max(1, Configuration.SessionLimitHours);
+                        if ((DateTime.UtcNow - sessionStartedUtc) > TimeSpan.FromHours(max))
+                        {
+                            LoggingService.LogInfo("Background scanner paused due to session limit");
+                            return;
+                        }
+                    }
+
+                    await scanner.ScanWatchlistAsync(CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.LogError($"Background scan failed: {ex.Message}");
+                }
+                finally
+                {
+                    ScheduleNextBackgroundTick();
+                }
+            };
+
+            ScheduleNextBackgroundTick();
+        }
+
+        public void ToggleMainUi()
+        {
+            mainWindow.IsOpen = true;
+        }
+
+        private void DrawUI()
+        {
+            windowSystem.Draw();
+        }
+
+        private void ScheduleNextBackgroundTick()
+        {
+            if (backgroundTimer == null)
+                return;
+
+            var baseSeconds = Math.Max(30, Configuration.PollingBaseSeconds);
+            var jitter = Math.Max(0, Configuration.PollingJitterSeconds);
+            var offset = random.Next(-jitter, jitter + 1);
+            var seconds = Math.Max(15, baseSeconds + offset);
+
+            backgroundTimer.Interval = seconds * 1000;
+            backgroundTimer.Start();
         }
 
         private void OnCommand(string command, string args)
         {
-            args = args.ToLower().Trim();
+            var normalized = (args ?? string.Empty).Trim().ToLowerInvariant();
 
-            if (args == "config")
-                ConfigWindow.IsOpen = true;
-            else if (args == "search")
-                SearchWindow.IsOpen = true;
-            else if (args == "history")
-                PriceHistoryWindow.IsOpen = true;
-            else if (args == "profit")
-                ProfitAnalysisWindow.IsOpen = true;
-            else if (args == "adjust")
-                BulkAdjustWindow.Open();
-            else if (args == "flip" || args == "flips")
+            if (normalized == "scan" || normalized == "sync")
             {
-                var watchlistItems = FlipTrackerService.GetWatchlist().Select(w => (w.ItemId, w.ItemName));
-                FlipAnalyzerService.AnalyzeForFlips(100, 5.0, watchlistItems);
-                FlipOpportunitiesWindow.IsOpen = true;
-            }
-            else if (args == "tracker")
-                FlipTrackerWindow.IsOpen = true;
-            else if (args == "active" || args == "selling")
-            {
-                SellSuggestionService.UpdateMarketPrices();
-                ActiveFlipsWindow.IsOpen = true;
-            }
-            else if (args.StartsWith("sync"))
-            {
-                var tokens = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                var world = tokens.Length > 1 ? tokens[1] : ActiveWorldName;
-                _ = SyncUniversalisAsync(world);
-            }
-            else
-                MarketBoardWindow.IsOpen = true;
-        }
-
-        /// Returns the configured world name, used for all Universalis API calls.
-        private string ActiveWorldName => Configuration.WorldName;
-
-        public void ToggleMainUi() => MarketBoardWindow.Toggle();
-
-        private void DrawConfigUI() => ConfigWindow.IsOpen = true;
-
-        private void DrawUI()
-        {
-            // Keep sell suggestions fresh between background timer ticks (5-second throttle)
-            if (Configuration.EnableSellSuggestions &&
-                DateTime.Now - lastSellSuggestionUpdate > TimeSpan.FromSeconds(5))
-            {
-                SellSuggestionService.UpdateMarketPrices();
-                lastSellSuggestionUpdate = DateTime.Now;
-            }
-
-            WindowSystem.Draw();
-        }
-
-        private async Task SyncUniversalisAsync(string worldName)
-        {
-            try
-            {
-                var watchlistItems = FlipTrackerService.GetWatchlist().Select(w => (w.ItemId, w.ItemName));
-                await MarketTracker.RefreshPricesFromUniversalis(worldName, watchlistItems);
-                SellSuggestionService.UpdateMarketPrices();
-                NotificationService.SendChatNotification($"✓ Synced prices from Universalis ({worldName})");
-            }
-            catch (Exception ex)
-            {
-                LoggingService.LogError($"Manual sync error: {ex.Message}");
-                NotificationService.SendChatNotification($"✗ Sync failed: {ex.Message}");
-            }
-        }
-
-        private void StartBackgroundRefresh()
-        {
-            if (string.IsNullOrWhiteSpace(Configuration.WorldName))
-            {
-                LoggingService.LogWarning("WorldName not configured — skipping background Universalis refresh");
+                _ = scanner.ScanWatchlistAsync(CancellationToken.None);
+                mainWindow.IsOpen = true;
                 return;
             }
 
-            var minutes = Math.Max(1, Configuration.UniversalisRefreshMinutes); // clamp: min 1 minute
-            var intervalMs = minutes * 60 * 1000;
-            refreshTimer = new System.Timers.Timer(intervalMs);
-            refreshTimer.Elapsed += async (sender, e) =>
+            if (normalized == "scanner")
             {
-                try
-                {
-                    var watchlistItems = FlipTrackerService.GetWatchlist().Select(w => (w.ItemId, w.ItemName));
-                    await MarketTracker.RefreshPricesFromUniversalis(ActiveWorldName, watchlistItems);
-                    SellSuggestionService.UpdateMarketPrices();
+                mainWindow.OpenScanner();
+                return;
+            }
 
-                    var readyToSell = SellSuggestionService.GetSellReadyItems();
-                    if (readyToSell.Count > 0)
-                    {
-                        NotificationService.SendChatNotification(
-                            $"💰 {readyToSell.Count} item(s) ready to sell!");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LoggingService.LogError($"Background refresh error: {ex.Message}");
-                }
-            };
-            refreshTimer.AutoReset = true;
-            refreshTimer.Start();
-
-            LoggingService.LogInfo(
-                $"Background price refresh started (every {Configuration.UniversalisRefreshMinutes} minutes)");
+            mainWindow.IsOpen = true;
         }
     }
 }

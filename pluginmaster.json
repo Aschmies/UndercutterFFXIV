@@ -1,13 +1,13 @@
 ﻿[
   {
     "Author": "Market Assistant Dev",
-    "Name": "Market Assistant",
-    "Punchline": "A ToS-compliant FFXIV market trading assistant with Universalis integration.",
-    "Description": "Tracks market prices via Universalis, alerts you when undercut, suggests optimal sell timing with a 4-signal algorithm, and tracks flip profitability — all without requiring you to visit the market board.",
+    "Name": "Market Master Pro",
+    "Punchline": "Manual market intelligence and arbitrage scanner for FFXIV.",
+    "Description": "Analyzes market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual.",
     "Changelog": "",
     "InternalName": "UndercutterFFXIV",
-    "AssemblyVersion": "1.0.1.0",
-    "TestingAssemblyVersion": "1.0.1.0",
+    "AssemblyVersion": "1.1.0.0",
+    "TestingAssemblyVersion": "1.1.0.0",
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
@@ -18,6 +18,7 @@
     "ApplicableVersion": "any",
     "Tags": [
       "market",
+      "arbitrage",
       "economy",
       "gil",
       "universalis"

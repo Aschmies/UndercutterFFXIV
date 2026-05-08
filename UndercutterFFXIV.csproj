@@ -2,11 +2,15 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <AssemblyName>UndercutterFFXIV</AssemblyName>
     <RootNamespace>UndercutterFFXIV</RootNamespace>
     <Authors>Market Assistant Dev</Authors>
-    <Description>A compliant FFXIV market trading assistant plugin for Dalamud</Description>
+    <Description>Market Master Pro: manual market intelligence and arbitrage analytics for Dalamud</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.7" />
+  </ItemGroup>
 
 </Project>
