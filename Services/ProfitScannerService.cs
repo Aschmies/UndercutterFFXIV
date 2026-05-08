@@ -15,7 +15,6 @@ namespace UndercutterFFXIV.Services
     public sealed class ProfitScannerService
     {
         private const int PartialPublishBatchSize = 5;
-            private const int MaxConcurrentItemScans = 16;
 
         private readonly IDataManager dataManager;
         private readonly UniversalisMarketClient universalis;
@@ -31,6 +30,7 @@ namespace UndercutterFFXIV.Services
         private List<ItemLookup>? armorItemCache;
         private List<ItemLookup>? accessoryItemCache;
         private List<ArbitrageOpportunity> lastResults = new();
+        private ScanTimingSnapshot lastScanTiming = new();
         private bool scanInProgress;
         private int scanProcessedItems;
         private int scanTotalItems;
@@ -106,6 +106,11 @@ namespace UndercutterFFXIV.Services
         }
 
         public ApiHealthSnapshot GetApiHealth() => universalis.GetHealthSnapshot();
+        public ScanTimingSnapshot GetLastScanTiming()
+        {
+            lock (cacheLock)
+                return lastScanTiming;
+        }
 
         public IReadOnlyList<(DateTime DateUtc, double TotalNetProfit)> GetProfitSeries(int days) =>
             database.GetDailyProfitSeries(days);
@@ -312,17 +317,61 @@ namespace UndercutterFFXIV.Services
             try
             {
                 var sw = Stopwatch.StartNew();
+                var homeFetchSw = Stopwatch.StartNew();
                 var scannedSinceLastPublish = 0;
                 var publishCounterLock = new object();
 
-                using var throttler = new SemaphoreSlim(MaxConcurrentItemScans, MaxConcurrentItemScans);
-                var scanTasks = itemsToScan.Select(async item =>
+                var itemIds = itemsToScan
+                    .Select(item => item.ItemId)
+                    .Where(id => id > 0)
+                    .Distinct()
+                    .ToList();
+
+                // Phase 1: batch-fetch home world snapshots for all scan items.
+                var homeSnapshots = await universalis.GetMarketSnapshotsAsync(config.WorldName, itemIds, cancellationToken);
+                homeFetchSw.Stop();
+
+                var homeFilterSw = Stopwatch.StartNew();
+                var homeCandidatesByItemId = new Dictionary<uint, HomeSnapshotCandidate>();
+
+                foreach (var item in itemsToScan)
                 {
-                    await throttler.WaitAsync(cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (!homeSnapshots.TryGetValue(item.ItemId, out var home))
+                        continue;
+
+                    if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, out var candidate))
+                        continue;
+
+                    homeCandidatesByItemId[item.ItemId] = candidate;
+                }
+                homeFilterSw.Stop();
+
+                // Phase 2: batch-fetch DC snapshots only for home-eligible candidates.
+                var candidateIds = homeCandidatesByItemId.Keys.ToList();
+                var dcFetchSw = Stopwatch.StartNew();
+                var dcSnapshots = candidateIds.Count == 0
+                    ? new Dictionary<uint, MarketSnapshot>()
+                    : await universalis.GetMarketSnapshotsAsync(config.DataCenterName, candidateIds, cancellationToken);
+                dcFetchSw.Stop();
+
+                var evaluationSw = Stopwatch.StartNew();
+
+                foreach (var item in itemsToScan)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var publishNow = false;
+
                     try
                     {
-                        var opportunity = await ScanItemForOpportunityAsync(item, currentScanMode, cancellationToken);
+                        if (!homeCandidatesByItemId.TryGetValue(item.ItemId, out var homeCandidate))
+                            continue;
+
+                        if (!dcSnapshots.TryGetValue(item.ItemId, out var dcSnapshot))
+                            continue;
+
+                        var opportunity = BuildOpportunity(item, homeCandidate, dcSnapshot);
                         if (opportunity != null)
                         {
                             lock (resultsLock)
@@ -349,12 +398,9 @@ namespace UndercutterFFXIV.Services
                             lock (resultsLock)
                                 PublishPartialResults(results);
                         }
-
-                        throttler.Release();
                     }
-                }).ToList();
-
-                await Task.WhenAll(scanTasks);
+                }
+                evaluationSw.Stop();
 
                 sw.Stop();
                 var sorted = results
@@ -365,7 +411,18 @@ namespace UndercutterFFXIV.Services
                 database.SaveScanResults(config.WorldName, config.DataCenterName, sorted, sw.ElapsedMilliseconds);
 
                 lock (cacheLock)
+                {
                     lastResults = sorted;
+                    lastScanTiming = new ScanTimingSnapshot
+                    {
+                        HomeFetchMs = homeFetchSw.ElapsedMilliseconds,
+                        HomeFilterMs = homeFilterSw.ElapsedMilliseconds,
+                        DcFetchMs = dcFetchSw.ElapsedMilliseconds,
+                        EvaluationMs = evaluationSw.ElapsedMilliseconds,
+                        TotalMs = sw.ElapsedMilliseconds,
+                        CandidateCount = candidateIds.Count
+                    };
+                }
 
                 return sorted;
             }
@@ -376,20 +433,12 @@ namespace UndercutterFFXIV.Services
             }
         }
 
-        private async Task<ArbitrageOpportunity?> ScanItemForOpportunityAsync(ItemLookup item, ScanMode scanMode, CancellationToken cancellationToken)
+        private bool TryBuildHomeSnapshotCandidate(
+            MarketSnapshot home,
+            ScanMode scanMode,
+            out HomeSnapshotCandidate candidate)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-                // Parallelize home world and DC lookups to speed up scan
-                var homeTask = universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
-                var dcTask = universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
-            
-                await Task.WhenAll(homeTask, dcTask);
-            
-                var home = homeTask.Result;
-                var dc = dcTask.Result;
-            
-            if (home == null)
-                return null;
+            candidate = new HomeSnapshotCandidate();
 
             // Always use the actual lowest active listing on Home World as the sell-side reference.
             var homeLowestListingPrice = home.Listings
@@ -398,23 +447,38 @@ namespace UndercutterFFXIV.Services
                 .DefaultIfEmpty(home.LowestPrice)
                 .Min();
             if (homeLowestListingPrice == 0)
-                return null;
+                return false;
 
-            // Fast-fail before DC lookup to reduce total API calls.
             var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
-            
-            // Use lower velocity threshold for gear items
             var minVelocity = (scanMode == ScanMode.WeaponsOnly || scanMode == ScanMode.ArmorOnly || scanMode == ScanMode.AccessoriesOnly || scanMode == ScanMode.GearOnly)
                 ? config.GearMinVelocityPerDay
                 : config.MinSaleVelocityPerDay;
-            
+
             if (velocity < minVelocity)
-                return null;
+                return false;
 
             var (salesCount24h, unitsSold24h) = CalculateRecentSales24h(home.RecentSales);
             if (unitsSold24h < Math.Max(0, config.MinUnitsSold24h))
-                return null;
-            if (dc == null || dc.LowestPrice == 0)
+                return false;
+
+            candidate = new HomeSnapshotCandidate
+            {
+                HomeLowestListingPrice = homeLowestListingPrice,
+                VelocityPerDay = velocity,
+                SalesCount24h = salesCount24h,
+                UnitsSold24h = unitsSold24h,
+                HomeListings = home.Listings
+            };
+
+            return true;
+        }
+
+        private ArbitrageOpportunity? BuildOpportunity(
+            ItemLookup item,
+            HomeSnapshotCandidate homeCandidate,
+            MarketSnapshot dc)
+        {
+            if (dc.LowestPrice == 0)
                 return null;
 
             var sortedDcListings = dc.Listings
@@ -424,7 +488,7 @@ namespace UndercutterFFXIV.Services
             if (sortedDcListings.Count == 0)
                 return null;
 
-            var netSellPerUnit = homeLowestListingPrice * (1 - (config.MarketTaxRatePercent / 100.0));
+            var netSellPerUnit = homeCandidate.HomeLowestListingPrice * (1 - (config.MarketTaxRatePercent / 100.0));
             var buySelection = SelectBuyReference(sortedDcListings, netSellPerUnit);
             if (buySelection == null)
                 return null;
@@ -438,22 +502,22 @@ namespace UndercutterFFXIV.Services
             if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
                 return null;
 
-            var botPattern = DetectPotentialBotPattern(home.Listings);
+            var botPattern = DetectPotentialBotPattern(homeCandidate.HomeListings);
 
             return new ArbitrageOpportunity
             {
                 ItemId = item.ItemId,
                 ItemName = item.Name,
-                HomeWorldMinPrice = homeLowestListingPrice,
+                HomeWorldMinPrice = homeCandidate.HomeLowestListingPrice,
                 DataCenterLowestPrice = (uint)Math.Max(0, Math.Round(buyPrice)),
                 BuyFromWorld = buyWorld,
                 NetProfitPerUnit = netProfit,
                 ProfitPercent = profitPercent,
-                SaleVelocityPerDay = velocity,
-                SalesCount24h = salesCount24h,
-                UnitsSold24h = unitsSold24h,
+                SaleVelocityPerDay = homeCandidate.VelocityPerDay,
+                SalesCount24h = homeCandidate.SalesCount24h,
+                UnitsSold24h = homeCandidate.UnitsSold24h,
                 PotentialBotSellerPattern = botPattern,
-                SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(velocity, botPattern),
+                SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(homeCandidate.VelocityPerDay, botPattern),
                 ScannedUtc = DateTime.UtcNow
             };
         }
@@ -535,6 +599,15 @@ namespace UndercutterFFXIV.Services
             public string BuyWorld { get; init; } = string.Empty;
         }
 
+        private sealed class HomeSnapshotCandidate
+        {
+            public uint HomeLowestListingPrice { get; init; }
+            public double VelocityPerDay { get; init; }
+            public int SalesCount24h { get; init; }
+            public int UnitsSold24h { get; init; }
+            public IReadOnlyList<ListingRecord> HomeListings { get; init; } = Array.Empty<ListingRecord>();
+        }
+
         private void PublishPartialResults(List<ArbitrageOpportunity> inProgressResults)
         {
             var partial = inProgressResults
@@ -580,7 +653,10 @@ namespace UndercutterFFXIV.Services
                         var item = new ItemLookup
                         {
                             ItemId = row.RowId,
-                            Name = name
+                            Name = name,
+                            IsGear = row.EquipSlotCategory.RowId > 0,
+                            RequiredLevel = (int)row.LevelEquip,
+                            ItemLevel = (int)row.LevelItem.RowId
                         };
 
                         loaded.Add(item);

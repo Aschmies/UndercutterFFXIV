@@ -7,6 +7,9 @@ namespace UndercutterFFXIV.Models
     {
         public uint ItemId { get; init; }
         public string Name { get; init; } = string.Empty;
+        public bool IsGear { get; init; }
+        public int RequiredLevel { get; init; }
+        public int ItemLevel { get; init; }
     }
 
     public sealed class WatchedItem
@@ -110,5 +113,15 @@ namespace UndercutterFFXIV.Models
                 return "Red";
             }
         }
+    }
+
+    public sealed class ScanTimingSnapshot
+    {
+        public long HomeFetchMs { get; init; }
+        public long HomeFilterMs { get; init; }
+        public long DcFetchMs { get; init; }
+        public long EvaluationMs { get; init; }
+        public long TotalMs { get; init; }
+        public int CandidateCount { get; init; }
     }
 }

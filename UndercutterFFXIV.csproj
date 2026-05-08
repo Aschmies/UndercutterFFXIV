@@ -2,8 +2,7 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <Version>1.1.17</Version>
-      <Version>1.1.18</Version>
+    <Version>1.1.19</Version>
     <AssemblyName>UndercutterFFXIV</AssemblyName>
     <RootNamespace>UndercutterFFXIV</RootNamespace>
     <Authors>Market Assistant Dev</Authors>
@@ -12,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-      <Version>1.1.18</Version>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.7" />
+  </ItemGroup>
 
 </Project>

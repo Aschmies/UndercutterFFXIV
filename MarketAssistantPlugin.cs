@@ -79,6 +79,7 @@ namespace UndercutterFFXIV
 
             windowSystem.RemoveAllWindows();
             CommandManager.RemoveHandler(CommandName);
+            Configuration.Save();
         }
 
         public void RefreshBackgroundPolling()
