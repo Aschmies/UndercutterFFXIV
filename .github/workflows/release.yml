@@ -79,11 +79,11 @@ jobs:
           # Regex-replace values in-place to avoid PowerShell ConvertTo-Json
           # stripping the outer array brackets.
           $content = Get-Content pluginmaster.json -Raw
-          $ver  = "${{ steps.version.outputs.FULL }}"
-          $ts   = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-          $content = $content -replace '("AssemblyVersion"\s*:\s*)"[^"]*"',        "`$1`"$ver`""
-          $content = $content -replace '("TestingAssemblyVersion"\s*:\s*)"[^"]*"', "`$1`"$ver`""
-          $content = $content -replace '("LastUpdated"\s*:\s*)\d+',                "`$1$ts"
+          $ver = "${{ steps.version.outputs.FULL }}"
+          $ts  = [string][System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $content = $content -replace '"AssemblyVersion"\s*:\s*"[^"]*"',        '"AssemblyVersion": "' + $ver + '"'
+          $content = $content -replace '"TestingAssemblyVersion"\s*:\s*"[^"]*"', '"TestingAssemblyVersion": "' + $ver + '"'
+          $content = $content -replace '"LastUpdated"\s*:\s*\d+',                '"LastUpdated": ' + $ts
           [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $content, [System.Text.Encoding]::UTF8)
 
       - name: Commit updated pluginmaster.json
