@@ -12,6 +12,8 @@ namespace UndercutterFFXIV.Services
 {
     public sealed class UniversalisMarketClient
     {
+        private const int RequestTimeoutSeconds = 40;
+        private const int MaxRetryAttempts = 2;
         private readonly HttpClient http;
         private readonly object metricsLock = new();
         private readonly Queue<(bool Ok, long LatencyMs)> recentMetrics = new();
@@ -20,87 +22,144 @@ namespace UndercutterFFXIV.Services
         public UniversalisMarketClient(HttpClient http)
         {
             this.http = http;
-            this.http.Timeout = TimeSpan.FromSeconds(15);
+            this.http.Timeout = TimeSpan.FromSeconds(RequestTimeoutSeconds);
             this.http.DefaultRequestHeaders.UserAgent.ParseAdd("MarketMasterPro/1.1");
         }
 
         public async Task<MarketSnapshot?> GetMarketSnapshotAsync(string scopeName, uint itemId, CancellationToken cancellationToken)
         {
-            var url = $"https://universalis.app/api/v2/{Uri.EscapeDataString(scopeName)}/{itemId}?listings=40&entries=180";
-            var sw = Stopwatch.StartNew();
-
-            try
+            var normalizedScope = (scopeName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedScope))
             {
-                using var response = await http.GetAsync(url, cancellationToken);
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                sw.Stop();
+                AddMetric(false, 0);
+                LoggingService.LogWarning($"Universalis request skipped for item {itemId}: empty scope name");
+                return null;
+            }
 
-                if (!response.IsSuccessStatusCode)
+            var url = $"https://universalis.app/api/v2/{Uri.EscapeDataString(normalizedScope)}/{itemId}?listings=40&entries=180";
+            var sw = Stopwatch.StartNew();
+            Exception? lastException = null;
+
+            for (var attempt = 0; attempt <= MaxRetryAttempts; attempt++)
+            {
+                try
                 {
-                    AddMetric(false, sw.ElapsedMilliseconds);
-                    return null;
-                }
+                    using var response = await http.GetAsync(url, cancellationToken);
+                    var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
-                using var json = JsonDocument.Parse(content);
-                var root = json.RootElement;
-
-                var listings = new List<ListingRecord>();
-                if (root.TryGetProperty("listings", out var listingsNode) && listingsNode.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var listing in listingsNode.EnumerateArray())
+                    if (!response.IsSuccessStatusCode)
                     {
-                        var price = TryGetUInt(listing, "pricePerUnit");
-                        var seller = TryGetString(listing, "retainerName");
-                        if (price > 0)
+                        if (ShouldRetry(response.StatusCode) && attempt < MaxRetryAttempts)
                         {
-                            listings.Add(new ListingRecord
+                            await Task.Delay(GetRetryDelayMs(attempt), cancellationToken);
+                            continue;
+                        }
+
+                        sw.Stop();
+                        AddMetric(false, sw.ElapsedMilliseconds);
+                        LoggingService.LogWarning($"Universalis non-success for {normalizedScope}/{itemId}: {(int)response.StatusCode} {response.ReasonPhrase}");
+                        return null;
+                    }
+
+                    using var json = JsonDocument.Parse(content);
+                    var root = json.RootElement;
+
+                    var listings = new List<ListingRecord>();
+                    if (root.TryGetProperty("listings", out var listingsNode) && listingsNode.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var listing in listingsNode.EnumerateArray())
+                        {
+                            var price = TryGetUInt(listing, "pricePerUnit");
+                            var seller = TryGetString(listing, "retainerName");
+                            if (price > 0)
+                            {
+                                listings.Add(new ListingRecord
+                                {
+                                    PricePerUnit = price,
+                                    SellerName = seller
+                                });
+                            }
+                        }
+                    }
+
+                    var recentSales = new List<SaleRecord>();
+                    if (root.TryGetProperty("recentHistory", out var historyNode) && historyNode.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var entry in historyNode.EnumerateArray())
+                        {
+                            var price = TryGetUInt(entry, "pricePerUnit");
+                            var quantity = TryGetUInt(entry, "quantity");
+                            var timestamp = TryGetLong(entry, "timestamp");
+                            if (price == 0 || timestamp <= 0)
+                                continue;
+
+                            recentSales.Add(new SaleRecord
                             {
                                 PricePerUnit = price,
-                                SellerName = seller
+                                Quantity = quantity == 0 ? 1u : quantity,
+                                TimestampUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime
                             });
                         }
                     }
-                }
 
-                var recentSales = new List<SaleRecord>();
-                if (root.TryGetProperty("recentHistory", out var historyNode) && historyNode.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var entry in historyNode.EnumerateArray())
+                    var lowest = listings.Count == 0 ? 0u : listings.Min(l => l.PricePerUnit);
+
+                    sw.Stop();
+                    AddMetric(true, sw.ElapsedMilliseconds);
+                    return new MarketSnapshot
                     {
-                        var price = TryGetUInt(entry, "pricePerUnit");
-                        var quantity = TryGetUInt(entry, "quantity");
-                        var timestamp = TryGetLong(entry, "timestamp");
-                        if (price == 0 || timestamp <= 0)
-                            continue;
-
-                        recentSales.Add(new SaleRecord
-                        {
-                            PricePerUnit = price,
-                            Quantity = quantity == 0 ? 1u : quantity,
-                            TimestampUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime
-                        });
+                        ItemId = itemId,
+                        ScopeName = normalizedScope,
+                        LowestPrice = lowest,
+                        Listings = listings,
+                        RecentSales = recentSales
+                    };
+                }
+                catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    lastException = ex;
+                    if (attempt < MaxRetryAttempts)
+                    {
+                        await Task.Delay(GetRetryDelayMs(attempt), cancellationToken);
+                        continue;
                     }
                 }
-
-                var lowest = listings.Count == 0 ? 0u : listings.Min(l => l.PricePerUnit);
-
-                AddMetric(true, sw.ElapsedMilliseconds);
-                return new MarketSnapshot
+                catch (HttpRequestException ex)
                 {
-                    ItemId = itemId,
-                    ScopeName = scopeName,
-                    LowestPrice = lowest,
-                    Listings = listings,
-                    RecentSales = recentSales
-                };
+                    lastException = ex;
+                    if (attempt < MaxRetryAttempts)
+                    {
+                        await Task.Delay(GetRetryDelayMs(attempt), cancellationToken);
+                        continue;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sw.Stop();
+                    AddMetric(false, sw.ElapsedMilliseconds);
+                    LoggingService.LogWarning($"Universalis request failed for {normalizedScope}/{itemId}: {ex.Message}");
+                    return null;
+                }
             }
-            catch (Exception ex)
-            {
-                sw.Stop();
-                AddMetric(false, sw.ElapsedMilliseconds);
-                LoggingService.LogWarning($"Universalis request failed for {scopeName}/{itemId}: {ex.Message}");
-                return null;
-            }
+
+            sw.Stop();
+            AddMetric(false, sw.ElapsedMilliseconds);
+            LoggingService.LogWarning($"Universalis request failed for {normalizedScope}/{itemId} after {MaxRetryAttempts + 1} attempts: {lastException?.Message ?? "Unknown failure"}");
+            return null;
+        }
+
+        private static bool ShouldRetry(System.Net.HttpStatusCode statusCode)
+        {
+            var numeric = (int)statusCode;
+            return statusCode == System.Net.HttpStatusCode.RequestTimeout
+                || statusCode == System.Net.HttpStatusCode.TooManyRequests
+                || numeric >= 500;
+        }
+
+        private static int GetRetryDelayMs(int attempt)
+        {
+            // Small backoff keeps scan throughput reasonable while recovering from transient API slowdowns.
+            return 300 + (attempt * 450);
         }
 
         public ApiHealthSnapshot GetHealthSnapshot()
