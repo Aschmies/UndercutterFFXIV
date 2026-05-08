@@ -21,6 +21,7 @@ namespace UndercutterFFXIV
         // Manual helper configuration
         public uint UndercutAmount { get; set; } = 1;
         public bool EnableRetainerAutoFill { get; set; } = false;
+        public bool AutoTrackCurrentlySellingItems { get; set; } = true;
 
         // Legacy fields kept for backward compatibility with existing windows/services
         public bool PluginEnabled { get; set; } = true;

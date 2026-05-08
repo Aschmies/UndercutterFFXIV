@@ -42,8 +42,8 @@ namespace UndercutterFFXIV
             var database = new MarketMasterDatabase(PluginInterface.GetPluginConfigDirectory());
             var http = new HttpClient();
             var universalis = new UniversalisMarketClient(http);
-            scanner = new ProfitScannerService(DataManager, universalis, database, Configuration);
-            RetainerPriceService = new RetainerPriceService(GameGui);
+            RetainerPriceService = new RetainerPriceService(GameGui, DataManager);
+            scanner = new ProfitScannerService(DataManager, universalis, database, Configuration, RetainerPriceService);
 
             mainWindow = new MarketMasterWindow(this, scanner);
             windowSystem.AddWindow(mainWindow);

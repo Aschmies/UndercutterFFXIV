@@ -14,6 +14,7 @@ namespace UndercutterFFXIV.Models
         public uint ItemId { get; init; }
         public string Name { get; init; } = string.Empty;
         public DateTime AddedUtc { get; init; }
+        public bool IsAutoTracked { get; init; }
     }
 
     public sealed class SaleRecord

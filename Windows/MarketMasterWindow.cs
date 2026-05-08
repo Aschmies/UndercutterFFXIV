@@ -142,6 +142,15 @@ namespace UndercutterFFXIV.Windows
         {
             ImGui.Text("Profit Scanner");
             ImGui.TextDisabled("Cross-checks Home World min price against DC low price with tax and velocity filters.");
+            if (config.AutoTrackCurrentlySellingItems)
+            {
+                var liveTrackedCount = retainerPriceService.GetCurrentSellingItems().Count;
+                if (liveTrackedCount > 0)
+                    ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), $"Auto-tracking {liveTrackedCount} items currently listed on retainers.");
+                else
+                    ImGui.TextDisabled("Auto-track is enabled, but no live retainer listings are loaded right now.");
+                ImGui.TextDisabled("Watchlist mode also includes items currently listed on your retainers.");
+            }
             ImGui.Spacing();
 
             ImGui.SetNextItemWidth(380);
@@ -237,7 +246,11 @@ namespace UndercutterFFXIV.Windows
                     ImGui.TableNextColumn(); ImGui.TextUnformatted(watched.Name);
                     ImGui.TableNextColumn(); ImGui.Text(watched.ItemId.ToString());
                     ImGui.TableNextColumn();
-                    if (ImGui.SmallButton($"Remove##r{watched.ItemId}"))
+                        if (watched.IsAutoTracked)
+                        {
+                            ImGui.TextDisabled("Live");
+                        }
+                        else if (ImGui.SmallButton($"Remove##r{watched.ItemId}"))
                     {
                         scanner.RemoveWatchItem(watched.ItemId);
                         RefreshWatchlist();
@@ -399,6 +412,10 @@ namespace UndercutterFFXIV.Windows
             var autoFill = config.EnableRetainerAutoFill;
             if (ImGui.Checkbox("Enable retainer auto-fill button", ref autoFill))
                 config.EnableRetainerAutoFill = autoFill;
+
+            var autoTrackLiveListings = config.AutoTrackCurrentlySellingItems;
+            if (ImGui.Checkbox("Auto-track items currently selling on retainers", ref autoTrackLiveListings))
+                config.AutoTrackCurrentlySellingItems = autoTrackLiveListings;
 
             if (ImGui.Button("Save Settings"))
             {

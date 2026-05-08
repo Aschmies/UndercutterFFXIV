@@ -18,6 +18,7 @@ namespace UndercutterFFXIV.Services
         private readonly UniversalisMarketClient universalis;
         private readonly MarketMasterDatabase database;
         private readonly Configuration config;
+        private readonly RetainerPriceService retainerPriceService;
 
         private readonly object cacheLock = new();
         private List<ItemLookup>? itemCache;
@@ -31,12 +32,14 @@ namespace UndercutterFFXIV.Services
             IDataManager dataManager,
             UniversalisMarketClient universalis,
             MarketMasterDatabase database,
-            Configuration config)
+            Configuration config,
+            RetainerPriceService retainerPriceService)
         {
             this.dataManager = dataManager;
             this.universalis = universalis;
             this.database = database;
             this.config = config;
+            this.retainerPriceService = retainerPriceService;
         }
 
         public IReadOnlyList<ItemLookup> SearchItems(string query, int limit = 100)
@@ -55,7 +58,31 @@ namespace UndercutterFFXIV.Services
                 .ToList();
         }
 
-        public IReadOnlyList<WatchedItem> GetWatchlist() => database.GetWatchedItems();
+        public IReadOnlyList<WatchedItem> GetWatchlist()
+        {
+            var manualItems = database.GetWatchedItems();
+            if (!config.AutoTrackCurrentlySellingItems)
+                return manualItems;
+
+            var combined = manualItems.ToDictionary(item => item.ItemId);
+            foreach (var liveItem in retainerPriceService.GetCurrentSellingItems())
+            {
+                if (combined.ContainsKey(liveItem.ItemId))
+                    continue;
+
+                combined[liveItem.ItemId] = new WatchedItem
+                {
+                    ItemId = liveItem.ItemId,
+                    Name = liveItem.Name,
+                    AddedUtc = DateTime.UtcNow,
+                    IsAutoTracked = true
+                };
+            }
+
+            return combined.Values
+                .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
 
         public void AddWatchItem(ItemLookup item) => database.AddOrUpdateWatchedItem(item.ItemId, item.Name);
 
@@ -98,14 +125,14 @@ namespace UndercutterFFXIV.Services
             return currentScanMode switch
             {
                 ScanMode.Watchlist 
-                    => database.GetWatchedItems()
+                    => GetWatchlist()
                         .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
                         .ToList(),
                 ScanMode.VelocityThreshold
                     => GetHighVelocityItems(config.MinSaleVelocityPerDay * 2),
                 ScanMode.TopItems
                     => GetTopTradedItems(topItemsCount),
-                _ => database.GetWatchedItems()
+                _ => GetWatchlist()
                     .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
                     .ToList()
             };
