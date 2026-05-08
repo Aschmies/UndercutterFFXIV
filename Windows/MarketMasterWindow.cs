@@ -28,6 +28,13 @@ namespace UndercutterFFXIV.Windows
         private uint inventorySuggestedPrice;
         private bool scanRunning;
         private string scannerStatus = "Idle";
+        
+        // Full-market scan mode
+        private ScanMode currentScanMode = ScanMode.Watchlist;
+        private int topItemsCountUI = 200;
+        
+        // Copy feedback
+        private DateTime lastCopyTime = DateTime.MinValue;
 
         public MarketMasterWindow(MarketAssistantPlugin plugin, ProfitScannerService scanner)
             : base("Market Master Pro###MarketMasterProWindow")
@@ -148,6 +155,23 @@ namespace UndercutterFFXIV.Windows
             ImGui.TextDisabled(scannerStatus);
 
             ImGui.Spacing();
+            ImGui.Text("Scan Mode:");
+            ImGui.RadioButton("Watchlist Only", ref currentScanMode, ScanMode.Watchlist);
+            ImGui.SameLine();
+            ImGui.RadioButton("Top Items", ref currentScanMode, ScanMode.TopItems);
+            ImGui.SameLine();
+            ImGui.RadioButton("High Velocity", ref currentScanMode, ScanMode.VelocityThreshold);
+            
+            if (currentScanMode == ScanMode.TopItems)
+            {
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(120);
+                ImGui.InputInt("##topCount", ref topItemsCountUI);
+                if (topItemsCountUI < 10) topItemsCountUI = 10;
+                if (topItemsCountUI > 5000) topItemsCountUI = 5000;
+            }
+
+            ImGui.Spacing();
             ImGui.Separator();
 
             // Left panel — always close EndChild even if content throws
@@ -257,13 +281,24 @@ namespace UndercutterFFXIV.Windows
                 _ = RefreshSuggestedPriceAsync(inventorySelectedItemId);
             ImGui.SameLine();
             if (inventorySuggestedPrice > 0 && ImGui.Button("Copy Suggested Price"))
+            {
                 ImGui.SetClipboardText(inventorySuggestedPrice.ToString());
+                lastCopyTime = DateTime.Now;
+            }
             ImGui.Spacing();
-            if (inventorySuggestedPrice > 0)
+            
+            var timeSinceCopy = DateTime.Now - lastCopyTime;
+            if (timeSinceCopy.TotalSeconds < 2)
+            {
+                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "✓ Copied to clipboard!");
+            }
+            else if (inventorySuggestedPrice > 0)
                 ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f),
                     $"Suggested listing price: {inventorySuggestedPrice:N0} gil");
             else
                 ImGui.TextDisabled("No suggestion yet. Fetch floor first.");
+            
+            ImGui.TextDisabled("(Paste the price into your Retainer's listing interface)");
         }
 
         private void DrawSettingsTab()
@@ -402,6 +437,11 @@ namespace UndercutterFFXIV.Windows
         private async Task RunScanAsync()
         {
             scanRunning = true;
+            scannerStatus = "Setting up scan...";
+            
+            // Set scan mode on the service
+            scanner.SetScanMode(currentScanMode, null, topItemsCountUI);
+            
             scannerStatus = "Scanning watchlist...";
             try
             {

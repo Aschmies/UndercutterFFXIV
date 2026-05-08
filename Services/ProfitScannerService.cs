@@ -10,6 +10,8 @@ using Dalamud.Plugin.Services;
 
 namespace UndercutterFFXIV.Services
 {
+    public enum ScanMode { Watchlist, VelocityThreshold, TopItems }
+
     public sealed class ProfitScannerService
     {
         private readonly IDataManager dataManager;
@@ -20,6 +22,10 @@ namespace UndercutterFFXIV.Services
         private readonly object cacheLock = new();
         private List<ItemLookup>? itemCache;
         private List<ArbitrageOpportunity> lastResults = new();
+
+        private ScanMode currentScanMode = ScanMode.Watchlist;
+        private string? currentScanCategory;
+        private int topItemsCount = 200;
 
         public ProfitScannerService(
             IDataManager dataManager,
@@ -66,12 +72,63 @@ namespace UndercutterFFXIV.Services
         public IReadOnlyList<(DateTime DateUtc, double TotalNetProfit)> GetProfitSeries(int days) =>
             database.GetDailyProfitSeries(days);
 
+        public void SetScanMode(ScanMode mode, string? categoryName = null, int topCount = 200)
+        {
+            currentScanMode = mode;
+            currentScanCategory = categoryName;
+            topItemsCount = topCount;
+        }
+
+        public ScanMode GetCurrentScanMode() => currentScanMode;
+        public string? GetCurrentCategory() => currentScanCategory;
+        public int GetTopItemsCount() => topItemsCount;
+
+        public IReadOnlyList<string> GetItemCategories()
+        {
+            // Category scanning simplified - returns watchlist only for now
+            return new[] { "Watchlist" };
+        }
+
+        private List<ItemLookup> GetItemsForScan()
+        {
+            EnsureItemCacheLoaded();
+            if (itemCache == null || itemCache.Count == 0)
+                return new List<ItemLookup>();
+
+            return currentScanMode switch
+            {
+                ScanMode.Watchlist 
+                    => database.GetWatchedItems()
+                        .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
+                        .ToList(),
+                ScanMode.VelocityThreshold
+                    => GetHighVelocityItems(config.MinSaleVelocityPerDay * 2),
+                ScanMode.TopItems
+                    => GetTopTradedItems(topItemsCount),
+                _ => database.GetWatchedItems()
+                    .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
+                    .ToList()
+            };
+        }
+
+        private List<ItemLookup> GetHighVelocityItems(double minVelocity)
+        {
+            EnsureItemCacheLoaded();
+            return itemCache?.Take(500).ToList() ?? new List<ItemLookup>();
+        }
+
+        private List<ItemLookup> GetTopTradedItems(int count)
+        {
+            EnsureItemCacheLoaded();
+            return itemCache?.Take(Math.Min(count, itemCache.Count)).ToList() ?? new List<ItemLookup>();
+        }
+
         public async Task<IReadOnlyList<ArbitrageOpportunity>> ScanWatchlistAsync(CancellationToken cancellationToken)
         {
-            var watchlist = database.GetWatchedItems();
+            var itemsToScan = GetItemsForScan();
             var results = new List<ArbitrageOpportunity>();
 
-            if (watchlist.Count == 0)
+            if (itemsToScan.Count == 0)
             {
                 lock (cacheLock) lastResults = new List<ArbitrageOpportunity>();
                 return lastResults;
@@ -79,7 +136,7 @@ namespace UndercutterFFXIV.Services
 
             var sw = Stopwatch.StartNew();
 
-            foreach (var item in watchlist)
+            foreach (var item in itemsToScan)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
