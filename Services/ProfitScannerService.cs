@@ -15,6 +15,7 @@ namespace UndercutterFFXIV.Services
     public sealed class ProfitScannerService
     {
         private const int PartialPublishBatchSize = 5;
+        private const int MaxConcurrentItemScans = 4;
 
         private readonly IDataManager dataManager;
         private readonly UniversalisMarketClient universalis;
@@ -249,6 +250,7 @@ namespace UndercutterFFXIV.Services
             CancellationToken cancellationToken)
         {
             var results = new List<ArbitrageOpportunity>();
+            var resultsLock = new object();
 
             lock (cacheLock)
             {
@@ -275,71 +277,48 @@ namespace UndercutterFFXIV.Services
             {
                 var sw = Stopwatch.StartNew();
                 var scannedSinceLastPublish = 0;
+                var publishCounterLock = new object();
 
-                foreach (var item in itemsToScan)
+                using var throttler = new SemaphoreSlim(MaxConcurrentItemScans, MaxConcurrentItemScans);
+                var scanTasks = itemsToScan.Select(async item =>
                 {
+                    await throttler.WaitAsync(cancellationToken);
                     var publishNow = false;
                     try
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        var home = await universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
-                        var dc = await universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
-
-                        if (home == null || dc == null)
-                            continue;
-                        if (home.LowestPrice == 0 || dc.LowestPrice == 0)
-                            continue;
-
-                        var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
-                        if (velocity < config.MinSaleVelocityPerDay)
-                            continue;
-
-                        var bestDcListing = dc.Listings
-                            .OrderBy(l => l.PricePerUnit)
-                            .FirstOrDefault();
-                        var buyPrice = bestDcListing?.PricePerUnit ?? dc.LowestPrice;
-                        var buyWorld = bestDcListing?.WorldName ?? string.Empty;
-
-                        var netProfit = (home.LowestPrice * (1 - (config.MarketTaxRatePercent / 100.0))) - buyPrice;
-                        var profitPercent = buyPrice == 0 ? 0 : (netProfit / buyPrice) * 100;
-
-                        if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
-                            continue;
-
-                        var botPattern = DetectPotentialBotPattern(home.Listings);
-
-                        results.Add(new ArbitrageOpportunity
+                        var opportunity = await ScanItemForOpportunityAsync(item, cancellationToken);
+                        if (opportunity != null)
                         {
-                            ItemId = item.ItemId,
-                            ItemName = item.Name,
-                            HomeWorldMinPrice = home.LowestPrice,
-                            DataCenterLowestPrice = buyPrice,
-                            BuyFromWorld = buyWorld,
-                            NetProfitPerUnit = netProfit,
-                            ProfitPercent = profitPercent,
-                            SaleVelocityPerDay = velocity,
-                            PotentialBotSellerPattern = botPattern,
-                            SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(velocity, botPattern),
-                            ScannedUtc = DateTime.UtcNow
-                        });
+                            lock (resultsLock)
+                                results.Add(opportunity);
+                        }
                     }
                     finally
                     {
-                        scannedSinceLastPublish++;
-                        if (scannedSinceLastPublish >= PartialPublishBatchSize)
+                        lock (publishCounterLock)
                         {
-                            publishNow = true;
-                            scannedSinceLastPublish = 0;
+                            scannedSinceLastPublish++;
+                            if (scannedSinceLastPublish >= PartialPublishBatchSize)
+                            {
+                                scannedSinceLastPublish = 0;
+                                publishNow = true;
+                            }
                         }
 
                         lock (cacheLock)
                             scanProcessedItems++;
-                    }
 
-                    if (publishNow)
-                        PublishPartialResults(results);
-                }
+                        if (publishNow)
+                        {
+                            lock (resultsLock)
+                                PublishPartialResults(results);
+                        }
+
+                        throttler.Release();
+                    }
+                }).ToList();
+
+                await Task.WhenAll(scanTasks);
 
                 sw.Stop();
                 var sorted = results
@@ -359,6 +338,53 @@ namespace UndercutterFFXIV.Services
                 lock (cacheLock)
                     scanInProgress = false;
             }
+        }
+
+        private async Task<ArbitrageOpportunity?> ScanItemForOpportunityAsync(ItemLookup item, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var home = await universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
+            if (home == null || home.LowestPrice == 0)
+                return null;
+
+            // Fast-fail before DC lookup to reduce total API calls.
+            var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
+            if (velocity < config.MinSaleVelocityPerDay)
+                return null;
+
+            var dc = await universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
+            if (dc == null || dc.LowestPrice == 0)
+                return null;
+
+            var bestDcListing = dc.Listings
+                .OrderBy(l => l.PricePerUnit)
+                .FirstOrDefault();
+            var buyPrice = bestDcListing?.PricePerUnit ?? dc.LowestPrice;
+            var buyWorld = bestDcListing?.WorldName ?? string.Empty;
+
+            var netProfit = (home.LowestPrice * (1 - (config.MarketTaxRatePercent / 100.0))) - buyPrice;
+            var profitPercent = buyPrice == 0 ? 0 : (netProfit / buyPrice) * 100;
+
+            if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
+                return null;
+
+            var botPattern = DetectPotentialBotPattern(home.Listings);
+
+            return new ArbitrageOpportunity
+            {
+                ItemId = item.ItemId,
+                ItemName = item.Name,
+                HomeWorldMinPrice = home.LowestPrice,
+                DataCenterLowestPrice = buyPrice,
+                BuyFromWorld = buyWorld,
+                NetProfitPerUnit = netProfit,
+                ProfitPercent = profitPercent,
+                SaleVelocityPerDay = velocity,
+                PotentialBotSellerPattern = botPattern,
+                SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(velocity, botPattern),
+                ScannedUtc = DateTime.UtcNow
+            };
         }
 
         private void PublishPartialResults(List<ArbitrageOpportunity> inProgressResults)
