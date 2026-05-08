@@ -24,6 +24,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # Download Dalamud DLLs so Dalamud.NET.Sdk can resolve its references.
+      # The SDK reads the DALAMUD_HOME env var as the lib path.
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          $out = "${{ github.workspace }}\dalamud"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip" `
+            -OutFile "$out\dalamud.zip"
+          Expand-Archive -Path "$out\dalamud.zip" -DestinationPath $out -Force
+          Remove-Item "$out\dalamud.zip"
+          echo "DALAMUD_HOME=$out" >> $env:GITHUB_ENV
+
       # NuGet restore uses nuget.config in the repo root
       - name: Restore dependencies
         run: dotnet restore
