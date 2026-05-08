@@ -23,6 +23,9 @@ namespace UndercutterFFXIV.Services
         private readonly object cacheLock = new();
         private List<ItemLookup>? itemCache;
         private List<ArbitrageOpportunity> lastResults = new();
+        private bool scanInProgress;
+        private int scanProcessedItems;
+        private int scanTotalItems;
 
         private ScanMode currentScanMode = ScanMode.Watchlist;
         private string? currentScanCategory;
@@ -99,6 +102,12 @@ namespace UndercutterFFXIV.Services
         public IReadOnlyList<(DateTime DateUtc, double TotalNetProfit)> GetProfitSeries(int days) =>
             database.GetDailyProfitSeries(days);
 
+        public (bool IsRunning, int Processed, int Total) GetScanProgress()
+        {
+            lock (cacheLock)
+                return (scanInProgress, scanProcessedItems, scanTotalItems);
+        }
+
         public void SetScanMode(ScanMode mode, string? categoryName = null, int topCount = 200)
         {
             currentScanMode = mode;
@@ -155,65 +164,92 @@ namespace UndercutterFFXIV.Services
             var itemsToScan = GetItemsForScan();
             var results = new List<ArbitrageOpportunity>();
 
+            lock (cacheLock)
+            {
+                scanInProgress = true;
+                scanProcessedItems = 0;
+                scanTotalItems = itemsToScan.Count;
+            }
+
             if (itemsToScan.Count == 0)
             {
-                lock (cacheLock) lastResults = new List<ArbitrageOpportunity>();
+                lock (cacheLock)
+                {
+                    lastResults = new List<ArbitrageOpportunity>();
+                    scanInProgress = false;
+                }
                 return lastResults;
             }
 
-            var sw = Stopwatch.StartNew();
-
-            foreach (var item in itemsToScan)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                var sw = Stopwatch.StartNew();
 
-                var home = await universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
-                var dc = await universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
-
-                if (home == null || dc == null)
-                    continue;
-                if (home.LowestPrice == 0 || dc.LowestPrice == 0)
-                    continue;
-
-                var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
-                if (velocity < config.MinSaleVelocityPerDay)
-                    continue;
-
-                var netProfit = (home.LowestPrice * (1 - (config.MarketTaxRatePercent / 100.0))) - dc.LowestPrice;
-                var profitPercent = dc.LowestPrice == 0 ? 0 : (netProfit / dc.LowestPrice) * 100;
-
-                if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
-                    continue;
-
-                var botPattern = DetectPotentialBotPattern(home.Listings);
-
-                results.Add(new ArbitrageOpportunity
+                foreach (var item in itemsToScan)
                 {
-                    ItemId = item.ItemId,
-                    ItemName = item.Name,
-                    HomeWorldMinPrice = home.LowestPrice,
-                    DataCenterLowestPrice = dc.LowestPrice,
-                    NetProfitPerUnit = netProfit,
-                    ProfitPercent = profitPercent,
-                    SaleVelocityPerDay = velocity,
-                    PotentialBotSellerPattern = botPattern,
-                    SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(velocity, botPattern),
-                    ScannedUtc = DateTime.UtcNow
-                });
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        var home = await universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
+                        var dc = await universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
+
+                        if (home == null || dc == null)
+                            continue;
+                        if (home.LowestPrice == 0 || dc.LowestPrice == 0)
+                            continue;
+
+                        var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
+                        if (velocity < config.MinSaleVelocityPerDay)
+                            continue;
+
+                        var netProfit = (home.LowestPrice * (1 - (config.MarketTaxRatePercent / 100.0))) - dc.LowestPrice;
+                        var profitPercent = dc.LowestPrice == 0 ? 0 : (netProfit / dc.LowestPrice) * 100;
+
+                        if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
+                            continue;
+
+                        var botPattern = DetectPotentialBotPattern(home.Listings);
+
+                        results.Add(new ArbitrageOpportunity
+                        {
+                            ItemId = item.ItemId,
+                            ItemName = item.Name,
+                            HomeWorldMinPrice = home.LowestPrice,
+                            DataCenterLowestPrice = dc.LowestPrice,
+                            NetProfitPerUnit = netProfit,
+                            ProfitPercent = profitPercent,
+                            SaleVelocityPerDay = velocity,
+                            PotentialBotSellerPattern = botPattern,
+                            SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(velocity, botPattern),
+                            ScannedUtc = DateTime.UtcNow
+                        });
+                    }
+                    finally
+                    {
+                        lock (cacheLock)
+                            scanProcessedItems++;
+                    }
+                }
+
+                sw.Stop();
+                var sorted = results
+                    .OrderByDescending(r => r.NetProfitPerUnit)
+                    .ThenByDescending(r => r.SaleVelocityPerDay)
+                    .ToList();
+
+                database.SaveScanResults(config.WorldName, config.DataCenterName, sorted, sw.ElapsedMilliseconds);
+
+                lock (cacheLock)
+                    lastResults = sorted;
+
+                return sorted;
             }
-
-            sw.Stop();
-            var sorted = results
-                .OrderByDescending(r => r.NetProfitPerUnit)
-                .ThenByDescending(r => r.SaleVelocityPerDay)
-                .ToList();
-
-            database.SaveScanResults(config.WorldName, config.DataCenterName, sorted, sw.ElapsedMilliseconds);
-
-            lock (cacheLock)
-                lastResults = sorted;
-
-            return sorted;
+            finally
+            {
+                lock (cacheLock)
+                    scanInProgress = false;
+            }
         }
 
         public async Task<uint> FetchHomeFloorPriceAsync(uint itemId, CancellationToken cancellationToken)

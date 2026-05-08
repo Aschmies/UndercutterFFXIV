@@ -167,6 +167,14 @@ namespace UndercutterFFXIV.Windows
             ImGui.SameLine();
             ImGui.TextDisabled(scannerStatus);
 
+            var progress = scanner.GetScanProgress();
+            if (progress.IsRunning && progress.Total > 0)
+            {
+                var pct = progress.Processed / (float)progress.Total;
+                ImGui.Spacing();
+                ImGui.ProgressBar(pct, new Vector2(-1, 0), $"Scanning {progress.Processed}/{progress.Total} ({pct * 100f:F0}%)");
+            }
+
             ImGui.Spacing();
             ImGui.Text("Scan Mode:");
             ImGui.RadioButton("Watchlist Only", ref currentScanMode, ScanMode.Watchlist);
@@ -504,7 +512,7 @@ namespace UndercutterFFXIV.Windows
             // Set scan mode on the service
             scanner.SetScanMode(currentScanMode, null, topItemsCountUI);
             
-            scannerStatus = "Scanning watchlist...";
+            scannerStatus = "Scanning selected items...";
             try
             {
                 var results = await scanner.ScanWatchlistAsync(CancellationToken.None);
