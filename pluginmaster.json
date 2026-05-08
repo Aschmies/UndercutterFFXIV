@@ -14,7 +14,7 @@
     "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
     "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
     "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
-    "DalamudApiLevel": 9,
+    "DalamudApiLevel": 15,
     "ApplicableVersion": "any",
     "Tags": [
       "market",

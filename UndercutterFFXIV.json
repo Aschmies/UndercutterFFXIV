@@ -8,7 +8,7 @@
   "CategoryTags": ["General"],
   "InternalName": "UndercutterFFXIV",
   "ApplicableVersion": "any",
-  "DalamudApiLevel": 9,
+  "DalamudApiLevel": 15,
   "IconUrl": "",
   "RepoUrl": ""
 }
