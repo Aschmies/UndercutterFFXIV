@@ -47,6 +47,9 @@ namespace UndercutterFFXIV.Windows
 
         public override void Draw()
         {
+            // Force white text — the FFXIV Dalamud theme sets ImGuiCol.Text to a dark colour that
+            // blends into dark window/button backgrounds, making plain Text() and Button labels invisible.
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1f, 1f, 1f, 1f));
             DrawHeader();
             ImGui.Separator();
 
@@ -76,6 +79,7 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextColored(new Vector4(1f, 0.3f, 0.3f, 1f), $"Tab error: {ex.Message}");
             }
             ImGui.EndChild();
+            ImGui.PopStyleColor(); // paired with PushStyleColor(Text, white) at top of Draw()
         }
 
         private void DrawHeader()
