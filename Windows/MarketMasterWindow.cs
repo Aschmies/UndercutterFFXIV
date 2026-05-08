@@ -802,20 +802,21 @@ namespace UndercutterFFXIV.Windows
                 : opportunities.OrderBy(o => o.ProfitPercent).ToList();
 
             if (!ImGui.BeginTable(tableId, 10,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX,
                 new Vector2(0, 0)))
                 return;
 
-            ImGui.TableSetupColumn("Item");
-            ImGui.TableSetupColumn("Home Qty",   ImGuiTableColumnFlags.WidthFixed, 85);
-            ImGui.TableSetupColumn("Home Lowest",   ImGuiTableColumnFlags.WidthFixed, 100);
-            ImGui.TableSetupColumn("Buy From",   ImGuiTableColumnFlags.WidthFixed, 110);
-            ImGui.TableSetupColumn("Buy Price",  ImGuiTableColumnFlags.WidthFixed, 92);
-            ImGui.TableSetupColumn("Net",       ImGuiTableColumnFlags.WidthFixed, 92);
-            ImGui.TableSetupColumn("Profit %",  ImGuiTableColumnFlags.WidthFixed, 82);
-            ImGui.TableSetupColumn("Sold 24h",  ImGuiTableColumnFlags.WidthFixed, 90);
-            ImGui.TableSetupColumn("Velocity",  ImGuiTableColumnFlags.WidthFixed, 85);
-            ImGui.TableSetupColumn("Scanned",   ImGuiTableColumnFlags.WidthFixed, 90);
+            // Item name stretches, other columns fixed width
+            ImGui.TableSetupColumn("Item",          ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Home Qty",      ImGuiTableColumnFlags.WidthFixed, 75);
+            ImGui.TableSetupColumn("Price",         ImGuiTableColumnFlags.WidthFixed, 85);
+            ImGui.TableSetupColumn("Buy From",      ImGuiTableColumnFlags.WidthFixed, 95);
+            ImGui.TableSetupColumn("Buy @",         ImGuiTableColumnFlags.WidthFixed, 75);
+            ImGui.TableSetupColumn("Net Profit",    ImGuiTableColumnFlags.WidthFixed, 80);
+            ImGui.TableSetupColumn("Profit %",      ImGuiTableColumnFlags.WidthFixed, 75);
+            ImGui.TableSetupColumn("Sold 24h",      ImGuiTableColumnFlags.WidthFixed, 75);
+            ImGui.TableSetupColumn("Vel/Day",       ImGuiTableColumnFlags.WidthFixed, 70);
+            ImGui.TableSetupColumn("Time",          ImGuiTableColumnFlags.WidthFixed, 70);
             ImGui.TableHeadersRow();
 
             foreach (var opp in sortedOpportunities)

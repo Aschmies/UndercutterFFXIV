@@ -300,9 +300,8 @@ namespace UndercutterFFXIV.Services
 
                 scanInProgress = true;
                 scanProcessedItems = 0;
-                // Four phases: home-fetch (10%) + home-filter (30%) + DC-fetch (10%) + evaluation (50%)
-                // This creates smoother progress: 100 "ticks" where first 10 are reserved for fetch, etc.
-                scanTotalItems = 100;
+                // Track actual item count for display, but use separate smooth progress internally
+                scanTotalItems = itemsToScan.Count;
                 lastResults = new List<ArbitrageOpportunity>();
             }
 
