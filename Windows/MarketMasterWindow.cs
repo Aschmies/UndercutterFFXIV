@@ -313,21 +313,19 @@ namespace UndercutterFFXIV.Windows
         {
             ImGui.Text("Search Results");
             ImGui.Separator();
-            if (ImGui.BeginTable("##searchTable", 5,
+            if (ImGui.BeginTable("##searchTable", 4,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                 new Vector2(0, 260)))
             {
-                ImGui.TableSetupColumn("Name");
-                ImGui.TableSetupColumn("ID",     ImGuiTableColumnFlags.WidthFixed, 70);
-                ImGui.TableSetupColumn("Req Lv", ImGuiTableColumnFlags.WidthFixed, 58);
-                ImGui.TableSetupColumn("iLvl",   ImGuiTableColumnFlags.WidthFixed, 58);
-                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Name",   ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("Req Lv", ImGuiTableColumnFlags.WidthFixed, 48);
+                ImGui.TableSetupColumn("iLvl",   ImGuiTableColumnFlags.WidthFixed, 48);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 52);
                 ImGui.TableHeadersRow();
                 foreach (var item in searchResults)
                 {
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn(); ImGui.TextUnformatted(item.Name);
-                    ImGui.TableNextColumn(); ImGui.Text(item.ItemId.ToString());
                     ImGui.TableNextColumn(); ImGui.Text(item.IsGear ? item.RequiredLevel.ToString() : "-");
                     ImGui.TableNextColumn(); ImGui.Text(item.IsGear && item.ItemLevel > 0 ? item.ItemLevel.ToString() : "-");
                     ImGui.TableNextColumn();
@@ -343,19 +341,17 @@ namespace UndercutterFFXIV.Windows
             ImGui.Spacing();
             ImGui.Text("Watchlist");
             ImGui.Separator();
-            if (ImGui.BeginTable("##watchTable", 3,
+            if (ImGui.BeginTable("##watchTable", 2,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                 new Vector2(0, 220)))
             {
-                ImGui.TableSetupColumn("Name");
-                ImGui.TableSetupColumn("ID",     ImGuiTableColumnFlags.WidthFixed, 70);
-                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Name",   ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 56);
                 ImGui.TableHeadersRow();
                 foreach (var watched in cachedWatchlist)
                 {
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn(); ImGui.TextUnformatted(watched.Name);
-                    ImGui.TableNextColumn(); ImGui.Text(watched.ItemId.ToString());
                     ImGui.TableNextColumn();
                         if (watched.IsAutoTracked)
                         {
