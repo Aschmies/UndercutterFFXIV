@@ -15,11 +15,12 @@ namespace UndercutterFFXIV
         public double MarketTaxRatePercent { get; set; } = 5.0;
         public int ScannerLookbackDays { get; set; } = 7;
         public double MinSaleVelocityPerDay { get; set; } = 2.0;
+        public double GearMinVelocityPerDay { get; set; } = 1.0;
         public int MinUnitsSold24h { get; set; } = 0;
         public int MinNetProfitGil { get; set; } = 100;
         public double MinNetProfitPercent { get; set; } = 5.0;
         public int CheapItemPriceThresholdGil { get; set; } = 250;
-        public int CheapItemMinProfitableQuantity { get; set; } = 5;
+        public int CheapItemMinProfitableQuantity { get; set; } = 3;
 
         // Manual helper configuration
         public uint UndercutAmount { get; set; } = 1;

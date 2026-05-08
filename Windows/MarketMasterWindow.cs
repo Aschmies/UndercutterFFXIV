@@ -552,6 +552,8 @@ namespace UndercutterFFXIV.Windows
 
                 ImGui.EndCombo();
             }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Select your primary data center (Aether, Primal, Crystal, Dynamis, etc.)");
 
             var worlds = WorldDataCatalog.GetWorlds(config.DataCenterName);
             var selectedWorld = config.WorldName;
@@ -576,68 +578,103 @@ namespace UndercutterFFXIV.Windows
 
                 ImGui.EndCombo();
             }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Your home world where you sell items. Used for detecting your listing prices.");
 
             var tax = (float)config.MarketTaxRatePercent;
             ImGui.SetNextItemWidth(220);
             if (ImGui.SliderFloat("Tax %", ref tax, 0, 10, "%.1f%%"))
                 config.MarketTaxRatePercent = tax;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Market tax rate (typically 5%). Profit calculations subtract this from selling prices.");
 
             var velocity = (float)config.MinSaleVelocityPerDay;
             ImGui.SetNextItemWidth(220);
             if (ImGui.SliderFloat("Min sales/day", ref velocity, 0, 10, "%.1f"))
                 config.MinSaleVelocityPerDay = velocity;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Minimum items sold per day to be considered viable. Filters slow-moving items.");
+
+            var gearVelocity = (float)config.GearMinVelocityPerDay;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.SliderFloat("Gear Min sales/day", ref gearVelocity, 0, 10, "%.1f"))
+                config.GearMinVelocityPerDay = gearVelocity;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Lower velocity threshold for gear-specific scans (weapons/armor/accessories) to find more opportunities.");
 
             var minUnitsSold24h = config.MinUnitsSold24h;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Min units sold (24h)", ref minUnitsSold24h))
                 config.MinUnitsSold24h = Math.Max(0, minUnitsSold24h);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Minimum total units sold in last 24 hours. Filters unpopular items.");
 
             var minGil = config.MinNetProfitGil;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Min net profit (gil)", ref minGil))
                 config.MinNetProfitGil = Math.Max(0, minGil);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Absolute minimum profit per unit (after tax). Filters low-margin flips.");
 
             var minPct = (float)config.MinNetProfitPercent;
             ImGui.SetNextItemWidth(220);
             if (ImGui.SliderFloat("Min profit %", ref minPct, 0, 100, "%.1f%%"))
                 config.MinNetProfitPercent = minPct;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Minimum profit as percentage of buy price. Combined with min gil filter.");
 
             var cheapThreshold = config.CheapItemPriceThresholdGil;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Cheap item threshold (gil)", ref cheapThreshold))
                 config.CheapItemPriceThresholdGil = Math.Max(1, cheapThreshold);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Items at or below this price get extra scrutiny. Avoids single-unit bait listings.");
 
             var cheapMinQty = config.CheapItemMinProfitableQuantity;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Cheap item min profitable qty", ref cheapMinQty))
                 config.CheapItemMinProfitableQuantity = Math.Max(1, cheapMinQty);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("For cheap items, requires this many units available at profitable prices. Prevents bait traps.");
 
             var lookback = config.ScannerLookbackDays;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Velocity lookback days", ref lookback))
                 config.ScannerLookbackDays = Math.Clamp(lookback, 1, 30);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("How many days of history to analyze for sales velocity.");
 
             var bg = config.EnableBackgroundPolling;
             if (ImGui.Checkbox("Enable background scanner polling", ref bg))
                 config.EnableBackgroundPolling = bg;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Periodically scan your watchlist in the background while the plugin is loaded.");
 
             var poll = config.PollingBaseSeconds;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Polling interval (sec)", ref poll))
                 config.PollingBaseSeconds = Math.Max(30, poll);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Base interval between background scans (30+ seconds recommended).");
 
             var jitter = config.PollingJitterSeconds;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Polling jitter (+/- sec)", ref jitter))
                 config.PollingJitterSeconds = Math.Clamp(jitter, 0, 120);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Random variance added to polling interval to avoid API rate-limit detection.");
 
             var autoFill = config.EnableRetainerAutoFill;
             if (ImGui.Checkbox("Enable retainer auto-fill button", ref autoFill))
                 config.EnableRetainerAutoFill = autoFill;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, shows an auto-fill button in the Inventory tab to quickly price items.");
 
             var autoTrackLiveListings = config.AutoTrackCurrentlySellingItems;
             if (ImGui.Checkbox("Auto-track items currently selling on retainers", ref autoTrackLiveListings))
                 config.AutoTrackCurrentlySellingItems = autoTrackLiveListings;
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Automatically includes your actively listed retainer items in watchlist scans.");
 
             if (ImGui.Button("Save Settings"))
             {

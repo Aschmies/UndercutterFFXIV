@@ -3,17 +3,17 @@
     "Author": "Market Assistant Dev",
     "Name": "Market Master Pro",
     "Punchline": "Manual market intelligence and arbitrage scanner for FFXIV.",
-    "Description": "Analyzes market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual. Now includes real-time undercut notifications.",
-    "Changelog": "v1.1.16: Added real-time chat notifications for undercut items in your retainer listings.",
+    "Description": "Analyzes market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual. Now includes real-time undercut notifications with improved scanner speed for gear items.",
+    "Changelog": "v1.1.17: Improved scanner speed (8x parallelism), lower velocity threshold for gear scans, 5min undercut notification debounce, added mouse-over tooltips to all scanner settings.",
     "InternalName": "UndercutterFFXIV",
-    "AssemblyVersion": "1.1.16.0",
-    "TestingAssemblyVersion": "1.1.16.0",
+    "AssemblyVersion": "1.1.17.0",
+    "TestingAssemblyVersion": "1.1.17.0",
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
-    "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.16/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.16/latest.zip",
-    "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.16/latest.zip",
+    "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.17/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.17/latest.zip",
+    "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.17/latest.zip",
     "DalamudApiLevel": 15,
     "ApplicableVersion": "any",
     "Tags": [
@@ -23,7 +23,7 @@
       "gil",
       "universalis"
     ],
-    "LastUpdated": 1778270698,
+    "LastUpdated": 1778271010,
     "DownloadCount": 0
   }
 ]

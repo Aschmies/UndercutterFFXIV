@@ -111,9 +111,9 @@ namespace UndercutterFFXIV.Services
 
             var history = undercutHistory[itemId];
 
-            // Don't notify if we just notified about this item in the last minute
+            // Don't notify if we just notified about this item in the last 5 minutes
             var timeSinceLastNotification = DateTime.UtcNow - history.LastNotificationTime;
-            if (timeSinceLastNotification.TotalSeconds < 60)
+            if (timeSinceLastNotification.TotalSeconds < 300)
                 return false;
 
             // Notify if price changed significantly (more than 5 gil difference)

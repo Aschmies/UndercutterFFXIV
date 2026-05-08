@@ -15,7 +15,7 @@ namespace UndercutterFFXIV.Services
     public sealed class ProfitScannerService
     {
         private const int PartialPublishBatchSize = 5;
-        private const int MaxConcurrentItemScans = 4;
+        private const int MaxConcurrentItemScans = 8;
 
         private readonly IDataManager dataManager;
         private readonly UniversalisMarketClient universalis;
@@ -322,7 +322,7 @@ namespace UndercutterFFXIV.Services
                     var publishNow = false;
                     try
                     {
-                        var opportunity = await ScanItemForOpportunityAsync(item, cancellationToken);
+                        var opportunity = await ScanItemForOpportunityAsync(item, currentScanMode, cancellationToken);
                         if (opportunity != null)
                         {
                             lock (resultsLock)
@@ -376,7 +376,7 @@ namespace UndercutterFFXIV.Services
             }
         }
 
-        private async Task<ArbitrageOpportunity?> ScanItemForOpportunityAsync(ItemLookup item, CancellationToken cancellationToken)
+        private async Task<ArbitrageOpportunity?> ScanItemForOpportunityAsync(ItemLookup item, ScanMode scanMode, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -395,7 +395,13 @@ namespace UndercutterFFXIV.Services
 
             // Fast-fail before DC lookup to reduce total API calls.
             var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
-            if (velocity < config.MinSaleVelocityPerDay)
+            
+            // Use lower velocity threshold for gear items
+            var minVelocity = (scanMode == ScanMode.WeaponsOnly || scanMode == ScanMode.ArmorOnly || scanMode == ScanMode.AccessoriesOnly || scanMode == ScanMode.GearOnly)
+                ? config.GearMinVelocityPerDay
+                : config.MinSaleVelocityPerDay;
+            
+            if (velocity < minVelocity)
                 return null;
 
             var (salesCount24h, unitsSold24h) = CalculateRecentSales24h(home.RecentSales);
