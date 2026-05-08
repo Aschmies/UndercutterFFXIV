@@ -22,20 +22,32 @@ namespace UndercutterFFXIV.Services
 
         public IReadOnlyList<ItemLookup> GetCurrentSellingItems()
         {
+            return GetCurrentSellingListings()
+                .GroupBy(entry => entry.ItemId)
+                .Select(group => new ItemLookup
+                {
+                    ItemId = group.Key,
+                    Name = group.First().Name
+                })
+                .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        public IReadOnlyList<RetainerSaleListing> GetCurrentSellingListings()
+        {
             var inventoryManager = InventoryManager.Instance();
             if (inventoryManager == null)
-                return Array.Empty<ItemLookup>();
+                return Array.Empty<RetainerSaleListing>();
 
             var container = inventoryManager->GetInventoryContainer(InventoryType.RetainerMarket);
             if (container == null || !container->IsLoaded || container->Size <= 0)
-                return Array.Empty<ItemLookup>();
+                return Array.Empty<RetainerSaleListing>();
 
             var itemSheet = dataManager.GetExcelSheet<Item>();
             if (itemSheet == null)
-                return Array.Empty<ItemLookup>();
+                return Array.Empty<RetainerSaleListing>();
 
-            var results = new List<ItemLookup>();
-            var seen = new HashSet<uint>();
+            var results = new List<RetainerSaleListing>();
 
             for (var index = 0; index < container->Size; index++)
             {
@@ -44,7 +56,7 @@ namespace UndercutterFFXIV.Services
                     continue;
 
                 var itemId = slot->GetBaseItemId();
-                if (itemId == 0 || !seen.Add(itemId))
+                if (itemId == 0)
                     continue;
 
                 var row = itemSheet.GetRow(itemId);
@@ -52,15 +64,21 @@ namespace UndercutterFFXIV.Services
                 if (string.IsNullOrWhiteSpace(name))
                     continue;
 
-                results.Add(new ItemLookup
+                var rawPrice = inventoryManager->GetRetainerMarketPrice((short)index);
+                var currentPrice = rawPrice > uint.MaxValue ? uint.MaxValue : (uint)rawPrice;
+
+                results.Add(new RetainerSaleListing
                 {
+                    SlotIndex = index,
                     ItemId = itemId,
-                    Name = name
+                    Name = name,
+                    CurrentPrice = currentPrice
                 });
             }
 
             return results
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.SlotIndex)
                 .ToList();
         }
 

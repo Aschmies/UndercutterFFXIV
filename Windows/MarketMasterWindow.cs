@@ -25,11 +25,12 @@ namespace UndercutterFFXIV.Windows
         private List<ItemLookup> searchResults = new();
         private List<ArbitrageOpportunity> latestResults = new();
         private List<WatchedItem> cachedWatchlist = new();
-        private uint inventorySelectedItemId;
-        private uint inventorySuggestedPrice;
+        private List<InventoryGridRow> inventoryRows = new();
         private bool scanRunning;
         private CancellationTokenSource? currentScanCancellation;
         private string scannerStatus = "Idle";
+        private bool inventoryGridRefreshInProgress;
+        private bool inventoryGridInitialized;
         
         // Full-market scan mode
         private ScanMode currentScanMode = ScanMode.TopItems;
@@ -39,6 +40,16 @@ namespace UndercutterFFXIV.Windows
         private DateTime lastCopyTime = DateTime.MinValue;
         private DateTime lastAutoFillTime = DateTime.MinValue;
         private string inventoryStatus = string.Empty;
+
+        private sealed class InventoryGridRow
+        {
+            public int SlotIndex { get; init; }
+            public uint ItemId { get; init; }
+            public string ItemName { get; init; } = string.Empty;
+            public uint CurrentSellPrice { get; init; }
+            public uint UndercutPrice { get; init; }
+            public bool IsUndercut { get; init; }
+        }
 
         public MarketMasterWindow(MarketAssistantPlugin plugin, ProfitScannerService scanner)
             : base("Market Master Pro###MarketMasterProWindow")
@@ -53,8 +64,16 @@ namespace UndercutterFFXIV.Windows
 
         public void OpenScanner()
         {
+            OnOpen();
             selectedTab = MainTab.Scanner;
             IsOpen = true;
+        }
+
+        public override void OnOpen()
+        {
+            RefreshWatchlist();
+            latestResults = scanner.GetLastResults().ToList();
+            _ = RefreshInventoryGridAsync();
         }
 
         public override void Draw()
@@ -136,7 +155,7 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextDisabled("Run a scan from the Scanner tab to populate opportunities.");
                 return;
             }
-            DrawOpportunityTable(latestResults, "##dashOppTable", 7);
+            DrawOpportunityTable(latestResults, "##dashOppTable");
         }
 
         private void DrawScannerTab()
@@ -285,30 +304,16 @@ namespace UndercutterFFXIV.Windows
             if (latestResults.Count == 0)
                 ImGui.TextDisabled("No opportunities yet. Add items to the watchlist and click Run Scan.");
             else
-                DrawOpportunityTable(latestResults, "##scannerOppTable", 9);
+                DrawOpportunityTable(latestResults, "##scannerOppTable");
         }
 
         private void DrawInventoryTab()
         {
-            ImGui.Text("Manual Price Helper");
-            ImGui.TextDisabled("Fetch the current Home World floor and copy a suggested undercut price.");
-            if (cachedWatchlist.Count == 0)
-            {
-                ImGui.Spacing();
-                ImGui.TextDisabled("Add items to the watchlist in the Scanner tab first.");
-                return;
-            }
-            var labels = cachedWatchlist.Select(w => $"{w.Name} ({w.ItemId})").ToArray();
-            var selectedIndex = 0;
-            if (inventorySelectedItemId != 0)
-            {
-                var idx = cachedWatchlist.FindIndex(w => w.ItemId == inventorySelectedItemId);
-                if (idx >= 0) selectedIndex = idx;
-            }
-            if (ImGui.Combo("Tracked item", ref selectedIndex, labels, labels.Length))
-                inventorySelectedItemId = cachedWatchlist[selectedIndex].ItemId;
-            else if (inventorySelectedItemId == 0 && cachedWatchlist.Count > 0)
-                inventorySelectedItemId = cachedWatchlist[0].ItemId;
+            if (!inventoryGridInitialized && !inventoryGridRefreshInProgress)
+                _ = RefreshInventoryGridAsync();
+
+            ImGui.Text("Retainer Listings");
+            ImGui.TextDisabled("Live rows for items currently selling. Suggested undercut is based on Home World floor.");
 
             var retainerWindowDetected = config.EnableRetainerAutoFill && retainerPriceService.IsRetainerSellWindowOpen();
 
@@ -324,28 +329,71 @@ namespace UndercutterFFXIV.Windows
             }
 
             ImGui.Spacing();
-            if (ImGui.Button("Fetch Current Home Floor"))
-                _ = RefreshSuggestedPriceAsync(inventorySelectedItemId);
+            if (ImGui.Button("Refresh Inventory Grid") && !inventoryGridRefreshInProgress)
+                _ = RefreshInventoryGridAsync();
             ImGui.SameLine();
-            if (inventorySuggestedPrice > 0 && ImGui.Button("Copy Suggested Price"))
+            if (inventoryGridRefreshInProgress)
+                ImGui.TextDisabled("Refreshing...");
+
+            ImGui.Spacing();
+            if (inventoryRows.Count == 0)
             {
-                ImGui.SetClipboardText(inventorySuggestedPrice.ToString());
-                lastCopyTime = DateTime.Now;
-                inventoryStatus = "Copied suggested price to clipboard";
+                ImGui.TextDisabled("No active retainer market listings detected. Open your retainer market inventory and refresh.");
+            }
+            else if (ImGui.BeginTable("##inventoryGrid", 6,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                new Vector2(0, 360)))
+            {
+                ImGui.TableSetupColumn("Item Name");
+                ImGui.TableSetupColumn("Current Sell Price", ImGuiTableColumnFlags.WidthFixed, 130);
+                ImGui.TableSetupColumn("Undercut Price", ImGuiTableColumnFlags.WidthFixed, 120);
+                ImGui.TableSetupColumn("Person undercutting me?", ImGuiTableColumnFlags.WidthFixed, 170);
+                ImGui.TableSetupColumn("Copy new price", ImGuiTableColumnFlags.WidthFixed, 110);
+                ImGui.TableSetupColumn("Auto fill?", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableHeadersRow();
+
+                foreach (var row in inventoryRows)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(row.ItemName);
+
+                    ImGui.TableNextColumn();
+                    ImGui.Text(row.CurrentSellPrice.ToString("N0"));
+
+                    ImGui.TableNextColumn();
+                    ImGui.Text(row.UndercutPrice.ToString("N0"));
+
+                    ImGui.TableNextColumn();
+                    if (row.IsUndercut)
+                        ImGui.TextColored(new Vector4(0.95f, 0.4f, 0.4f, 1f), "Yes");
+                    else
+                        ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "No");
+
+                    ImGui.TableNextColumn();
+                    ImGui.BeginDisabled(row.UndercutPrice == 0);
+                    if (ImGui.SmallButton($"Copy##copy{row.SlotIndex}_{row.ItemId}"))
+                    {
+                        ImGui.SetClipboardText(row.UndercutPrice.ToString());
+                        lastCopyTime = DateTime.Now;
+                        inventoryStatus = $"Copied {row.UndercutPrice:N0} for {row.ItemName}";
+                    }
+                    ImGui.EndDisabled();
+
+                    ImGui.TableNextColumn();
+                    ImGui.BeginDisabled(!(config.EnableRetainerAutoFill && retainerWindowDetected && row.UndercutPrice > 0));
+                    if (ImGui.SmallButton($"Fill##fill{row.SlotIndex}_{row.ItemId}"))
+                    {
+                        if (retainerPriceService.TryAutoFillPrice(row.UndercutPrice, out var status))
+                            lastAutoFillTime = DateTime.Now;
+                        inventoryStatus = status;
+                    }
+                    ImGui.EndDisabled();
+                }
+
+                ImGui.EndTable();
             }
 
-            if (config.EnableRetainerAutoFill)
-            {
-                ImGui.SameLine();
-                ImGui.BeginDisabled(!(inventorySuggestedPrice > 0 && retainerWindowDetected));
-                if (ImGui.Button("Auto-Fill Retainer Price"))
-                {
-                    if (retainerPriceService.TryAutoFillPrice(inventorySuggestedPrice, out var status))
-                        lastAutoFillTime = DateTime.Now;
-                    inventoryStatus = status;
-                }
-                ImGui.EndDisabled();
-            }
             ImGui.Spacing();
             
             var timeSinceCopy = DateTime.Now - lastCopyTime;
@@ -358,11 +406,8 @@ namespace UndercutterFFXIV.Windows
             {
                 ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "✓ Auto-filled retainer price!");
             }
-            else if (inventorySuggestedPrice > 0)
-                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f),
-                    $"Suggested listing price: {inventorySuggestedPrice:N0} gil");
             else
-                ImGui.TextDisabled("No suggestion yet. Fetch floor first.");
+                ImGui.TextDisabled("Use Copy or Fill on any row to apply a new price.");
 
             if (!string.IsNullOrWhiteSpace(inventoryStatus))
                 ImGui.TextDisabled(inventoryStatus);
@@ -370,6 +415,57 @@ namespace UndercutterFFXIV.Windows
             ImGui.TextDisabled("(Paste the price into your Retainer's listing interface)");
             if (config.EnableRetainerAutoFill && !retainerWindowDetected)
                 ImGui.TextDisabled("Open the Retainer sell price window to enable auto-fill.");
+        }
+
+        private async Task RefreshInventoryGridAsync()
+        {
+            if (inventoryGridRefreshInProgress)
+                return;
+
+            inventoryGridRefreshInProgress = true;
+            inventoryStatus = "Refreshing inventory listings...";
+            try
+            {
+                var listings = retainerPriceService.GetCurrentSellingListings();
+                var rows = new List<InventoryGridRow>(listings.Count);
+
+                foreach (var listing in listings)
+                {
+                    var floor = await scanner.FetchHomeFloorPriceAsync(listing.ItemId, CancellationToken.None);
+                    var suggested = floor > 0
+                        ? (floor > config.UndercutAmount ? floor - config.UndercutAmount : floor)
+                        : listing.CurrentPrice;
+
+                    rows.Add(new InventoryGridRow
+                    {
+                        SlotIndex = listing.SlotIndex,
+                        ItemId = listing.ItemId,
+                        ItemName = listing.Name,
+                        CurrentSellPrice = listing.CurrentPrice,
+                        UndercutPrice = suggested,
+                        IsUndercut = floor > 0 && floor < listing.CurrentPrice
+                    });
+                }
+
+                inventoryRows = rows
+                    .OrderByDescending(row => row.IsUndercut)
+                    .ThenBy(row => row.ItemName, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(row => row.SlotIndex)
+                    .ToList();
+
+                inventoryGridInitialized = true;
+                inventoryStatus = inventoryRows.Count == 0
+                    ? "No active retainer listings found"
+                    : $"Loaded {inventoryRows.Count} retainer listings";
+            }
+            catch (Exception ex)
+            {
+                inventoryStatus = $"Inventory refresh failed: {ex.Message}";
+            }
+            finally
+            {
+                inventoryGridRefreshInProgress = false;
+            }
         }
 
         private void DrawSettingsTab()
@@ -442,26 +538,20 @@ namespace UndercutterFFXIV.Windows
             }
         }
 
-        private void DrawOpportunityTable(List<ArbitrageOpportunity> opportunities,
-            string tableId, int visibleColumns)
+        private void DrawOpportunityTable(List<ArbitrageOpportunity> opportunities, string tableId)
         {
-            var columnCount = Math.Max(visibleColumns, 7);
-            if (!ImGui.BeginTable(tableId, columnCount,
+            if (!ImGui.BeginTable(tableId, 7,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                 new Vector2(0, 0)))
                 return;
 
             ImGui.TableSetupColumn("Item");
-            ImGui.TableSetupColumn("Home Min",  ImGuiTableColumnFlags.WidthFixed, 92);
-            ImGui.TableSetupColumn("DC Low",    ImGuiTableColumnFlags.WidthFixed, 92);
+            ImGui.TableSetupColumn("Home Min",   ImGuiTableColumnFlags.WidthFixed, 92);
+            ImGui.TableSetupColumn("Buy From",   ImGuiTableColumnFlags.WidthFixed, 110);
+            ImGui.TableSetupColumn("Buy Price",  ImGuiTableColumnFlags.WidthFixed, 92);
             ImGui.TableSetupColumn("Net",       ImGuiTableColumnFlags.WidthFixed, 92);
             ImGui.TableSetupColumn("Profit %",  ImGuiTableColumnFlags.WidthFixed, 82);
-            ImGui.TableSetupColumn("Sales/day", ImGuiTableColumnFlags.WidthFixed, 82);
-            ImGui.TableSetupColumn("Safe Qty",  ImGuiTableColumnFlags.WidthFixed, 72);
-            if (visibleColumns >= 8)
-                ImGui.TableSetupColumn("Bot Flag", ImGuiTableColumnFlags.WidthFixed, 72);
-            if (visibleColumns >= 9)
-                ImGui.TableSetupColumn("Scanned",  ImGuiTableColumnFlags.WidthFixed, 90);
+            ImGui.TableSetupColumn("Scanned",   ImGuiTableColumnFlags.WidthFixed, 90);
             ImGui.TableHeadersRow();
 
             foreach (var opp in opportunities)
@@ -469,6 +559,7 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(opp.ItemName);
                 ImGui.TableNextColumn(); ImGui.Text(opp.HomeWorldMinPrice.ToString("N0"));
+                ImGui.TableNextColumn(); ImGui.Text(string.IsNullOrWhiteSpace(opp.BuyFromWorld) ? config.DataCenterName : opp.BuyFromWorld);
                 ImGui.TableNextColumn(); ImGui.Text(opp.DataCenterLowestPrice.ToString("N0"));
 
                 ImGui.TableNextColumn();
@@ -478,30 +569,7 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextColored(netColor, opp.NetProfitPerUnit.ToString("N0"));
 
                 ImGui.TableNextColumn(); ImGui.Text($"{opp.ProfitPercent:F1}%");
-                ImGui.TableNextColumn(); ImGui.Text($"{opp.SaleVelocityPerDay:F1}");
-
-                ImGui.TableNextColumn();
-                var qtyColor = opp.SafeBuyQty >= 3
-                    ? new Vector4(0.4f, 1f, 0.4f, 1f)
-                    : opp.SafeBuyQty == 2
-                        ? new Vector4(0.95f, 0.85f, 0.25f, 1f)
-                        : new Vector4(0.95f, 0.5f, 0.2f, 1f);
-                ImGui.TextColored(qtyColor, opp.SafeBuyQty.ToString());
-
-                if (visibleColumns >= 8)
-                {
-                    ImGui.TableNextColumn();
-                    if (opp.PotentialBotSellerPattern)
-                        ImGui.TextColored(new Vector4(0.95f, 0.5f, 0.2f, 1f), "Yes");
-                    else
-                        ImGui.TextDisabled("No");
-                }
-
-                if (visibleColumns >= 9)
-                {
-                    ImGui.TableNextColumn();
-                    ImGui.Text(opp.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
-                }
+                ImGui.TableNextColumn(); ImGui.Text(opp.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
             }
 
             ImGui.EndTable();
@@ -543,28 +611,6 @@ namespace UndercutterFFXIV.Windows
                 scanRunning = false;
                 currentScanCancellation?.Dispose();
                 currentScanCancellation = null;
-            }
-        }
-
-        private async Task RefreshSuggestedPriceAsync(uint itemId)
-        {
-            try
-            {
-                var floor = await scanner.FetchHomeFloorPriceAsync(itemId, CancellationToken.None);
-                if (floor == 0)
-                {
-                    scannerStatus = "Could not fetch floor price";
-                    inventorySuggestedPrice = 0;
-                    return;
-                }
-                inventorySuggestedPrice = floor > config.UndercutAmount
-                    ? floor - config.UndercutAmount
-                    : floor;
-                scannerStatus = "Floor price updated";
-            }
-            catch (Exception ex)
-            {
-                scannerStatus = $"Floor fetch failed: {ex.Message}";
             }
         }
 

@@ -14,6 +14,8 @@ namespace UndercutterFFXIV.Services
 
     public sealed class ProfitScannerService
     {
+        private const int PartialPublishBatchSize = 5;
+
         private readonly IDataManager dataManager;
         private readonly UniversalisMarketClient universalis;
         private readonly MarketMasterDatabase database;
@@ -128,6 +130,11 @@ namespace UndercutterFFXIV.Services
 
         private List<ItemLookup> GetItemsForScan()
         {
+            return GetItemsForMode(currentScanMode, topItemsCount);
+        }
+
+        private List<ItemLookup> GetItemsForMode(ScanMode mode, int topCount)
+        {
             EnsureItemCacheLoaded();
             if (itemCache == null || itemCache.Count == 0)
                 return new List<ItemLookup>();
@@ -136,14 +143,14 @@ namespace UndercutterFFXIV.Services
                 .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
                 .ToList();
 
-            return currentScanMode switch
+            return mode switch
             {
                 ScanMode.Watchlist
                     => watchlistItems,
                 ScanMode.VelocityThreshold
                     => MergeScanCandidates(watchlistItems, GetHighVelocityItems(config.MinSaleVelocityPerDay * 2)),
                 ScanMode.TopItems
-                    => MergeScanCandidates(watchlistItems, GetTopTradedItems(topItemsCount)),
+                    => MergeScanCandidates(watchlistItems, GetTopTradedItems(topCount)),
                 _ => watchlistItems
             };
         }
@@ -229,14 +236,29 @@ namespace UndercutterFFXIV.Services
 
         public async Task<IReadOnlyList<ArbitrageOpportunity>> ScanWatchlistAsync(CancellationToken cancellationToken)
         {
-            var itemsToScan = GetItemsForScan();
+            return await ScanAsync(GetItemsForScan(), cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<ArbitrageOpportunity>> ScanWatchlistOnlyAsync(CancellationToken cancellationToken)
+        {
+            return await ScanAsync(GetItemsForMode(ScanMode.Watchlist, topItemsCount), cancellationToken);
+        }
+
+        private async Task<IReadOnlyList<ArbitrageOpportunity>> ScanAsync(
+            List<ItemLookup> itemsToScan,
+            CancellationToken cancellationToken)
+        {
             var results = new List<ArbitrageOpportunity>();
 
             lock (cacheLock)
             {
+                if (scanInProgress)
+                    return lastResults.ToList();
+
                 scanInProgress = true;
                 scanProcessedItems = 0;
                 scanTotalItems = itemsToScan.Count;
+                lastResults = new List<ArbitrageOpportunity>();
             }
 
             if (itemsToScan.Count == 0)
@@ -252,9 +274,11 @@ namespace UndercutterFFXIV.Services
             try
             {
                 var sw = Stopwatch.StartNew();
+                var scannedSinceLastPublish = 0;
 
                 foreach (var item in itemsToScan)
                 {
+                    var publishNow = false;
                     try
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -271,8 +295,14 @@ namespace UndercutterFFXIV.Services
                         if (velocity < config.MinSaleVelocityPerDay)
                             continue;
 
-                        var netProfit = (home.LowestPrice * (1 - (config.MarketTaxRatePercent / 100.0))) - dc.LowestPrice;
-                        var profitPercent = dc.LowestPrice == 0 ? 0 : (netProfit / dc.LowestPrice) * 100;
+                        var bestDcListing = dc.Listings
+                            .OrderBy(l => l.PricePerUnit)
+                            .FirstOrDefault();
+                        var buyPrice = bestDcListing?.PricePerUnit ?? dc.LowestPrice;
+                        var buyWorld = bestDcListing?.WorldName ?? string.Empty;
+
+                        var netProfit = (home.LowestPrice * (1 - (config.MarketTaxRatePercent / 100.0))) - buyPrice;
+                        var profitPercent = buyPrice == 0 ? 0 : (netProfit / buyPrice) * 100;
 
                         if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
                             continue;
@@ -284,7 +314,8 @@ namespace UndercutterFFXIV.Services
                             ItemId = item.ItemId,
                             ItemName = item.Name,
                             HomeWorldMinPrice = home.LowestPrice,
-                            DataCenterLowestPrice = dc.LowestPrice,
+                            DataCenterLowestPrice = buyPrice,
+                            BuyFromWorld = buyWorld,
                             NetProfitPerUnit = netProfit,
                             ProfitPercent = profitPercent,
                             SaleVelocityPerDay = velocity,
@@ -295,9 +326,19 @@ namespace UndercutterFFXIV.Services
                     }
                     finally
                     {
+                        scannedSinceLastPublish++;
+                        if (scannedSinceLastPublish >= PartialPublishBatchSize)
+                        {
+                            publishNow = true;
+                            scannedSinceLastPublish = 0;
+                        }
+
                         lock (cacheLock)
                             scanProcessedItems++;
                     }
+
+                    if (publishNow)
+                        PublishPartialResults(results);
                 }
 
                 sw.Stop();
@@ -318,6 +359,17 @@ namespace UndercutterFFXIV.Services
                 lock (cacheLock)
                     scanInProgress = false;
             }
+        }
+
+        private void PublishPartialResults(List<ArbitrageOpportunity> inProgressResults)
+        {
+            var partial = inProgressResults
+                .OrderByDescending(r => r.NetProfitPerUnit)
+                .ThenByDescending(r => r.SaleVelocityPerDay)
+                .ToList();
+
+            lock (cacheLock)
+                lastResults = partial;
         }
 
         public async Task<uint> FetchHomeFloorPriceAsync(uint itemId, CancellationToken cancellationToken)

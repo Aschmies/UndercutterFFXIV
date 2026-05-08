@@ -17,6 +17,14 @@ namespace UndercutterFFXIV.Models
         public bool IsAutoTracked { get; init; }
     }
 
+    public sealed class RetainerSaleListing
+    {
+        public int SlotIndex { get; init; }
+        public uint ItemId { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public uint CurrentPrice { get; init; }
+    }
+
     public sealed class SaleRecord
     {
         public DateTime TimestampUtc { get; init; }
@@ -28,6 +36,7 @@ namespace UndercutterFFXIV.Models
     {
         public uint PricePerUnit { get; init; }
         public string SellerName { get; init; } = string.Empty;
+        public string WorldName { get; init; } = string.Empty;
     }
 
     public sealed class MarketSnapshot
@@ -45,6 +54,7 @@ namespace UndercutterFFXIV.Models
         public string ItemName { get; init; } = string.Empty;
         public uint HomeWorldMinPrice { get; init; }
         public uint DataCenterLowestPrice { get; init; }
+        public string BuyFromWorld { get; init; } = string.Empty;
         public double NetProfitPerUnit { get; init; }
         public double ProfitPercent { get; init; }
         public double SaleVelocityPerDay { get; init; }

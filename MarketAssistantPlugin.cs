@@ -110,7 +110,7 @@ namespace UndercutterFFXIV
                         }
                     }
 
-                    await scanner.ScanWatchlistAsync(CancellationToken.None);
+                    await scanner.ScanWatchlistOnlyAsync(CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -127,6 +127,7 @@ namespace UndercutterFFXIV
 
         public void ToggleMainUi()
         {
+            mainWindow.OnOpen();
             mainWindow.IsOpen = true;
         }
 
@@ -155,7 +156,8 @@ namespace UndercutterFFXIV
 
             if (normalized == "scan" || normalized == "sync")
             {
-                _ = scanner.ScanWatchlistAsync(CancellationToken.None);
+                _ = scanner.ScanWatchlistOnlyAsync(CancellationToken.None);
+                mainWindow.OnOpen();
                 mainWindow.IsOpen = true;
                 return;
             }
@@ -166,6 +168,7 @@ namespace UndercutterFFXIV
                 return;
             }
 
+            mainWindow.OnOpen();
             mainWindow.IsOpen = true;
         }
     }

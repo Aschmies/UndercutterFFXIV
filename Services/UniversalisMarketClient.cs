@@ -71,12 +71,14 @@ namespace UndercutterFFXIV.Services
                         {
                             var price = TryGetUInt(listing, "pricePerUnit");
                             var seller = TryGetString(listing, "retainerName");
+                            var world = TryGetString(listing, "worldName");
                             if (price > 0)
                             {
                                 listings.Add(new ListingRecord
                                 {
                                     PricePerUnit = price,
-                                    SellerName = seller
+                                    SellerName = seller,
+                                    WorldName = world
                                 });
                             }
                         }
@@ -132,6 +134,11 @@ namespace UndercutterFFXIV.Services
                         await Task.Delay(GetRetryDelayMs(attempt), cancellationToken);
                         continue;
                     }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // User cancelled scan: bubble up immediately so UI can stop without waiting for remaining items.
+                    throw;
                 }
                 catch (Exception ex)
                 {
