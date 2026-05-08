@@ -439,7 +439,10 @@ namespace UndercutterFFXIV.Windows
 
         private void DrawTabButton(MainTab tab, string label)
         {
-            if (selectedTab == tab)
+            // Capture push state BEFORE the button call — clicking the button mutates selectedTab,
+            // which would cause the Pop check to fire even when nothing was pushed, crashing the game.
+            var pushed = selectedTab == tab;
+            if (pushed)
             {
                 ImGui.PushStyleColor(ImGuiCol.Button,        new Vector4(0.25f, 0.4f, 0.8f, 0.7f));
                 ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.25f, 0.4f, 0.8f, 0.8f));
@@ -447,7 +450,7 @@ namespace UndercutterFFXIV.Windows
             }
             if (ImGui.Button(label, new Vector2(-1, 36)))
                 selectedTab = tab;
-            if (selectedTab == tab)
+            if (pushed)
                 ImGui.PopStyleColor(3);
         }
 
