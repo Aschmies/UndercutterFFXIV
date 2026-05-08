@@ -277,6 +277,10 @@ namespace UndercutterFFXIV.Windows
             ImGui.RadioButton("Accessories", ref currentScanMode, ScanMode.AccessoriesOnly);
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Scans jewelry/accessory opportunities only.");
+            ImGui.SameLine();
+            ImGui.RadioButton("Consumables", ref currentScanMode, ScanMode.ConsumablesOnly);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans consumable items only (potions, food, materials, etc.).");
             
             if (currentScanMode == ScanMode.TopItems)
             {

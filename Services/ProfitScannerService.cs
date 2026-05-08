@@ -10,7 +10,7 @@ using Dalamud.Plugin.Services;
 
 namespace UndercutterFFXIV.Services
 {
-    public enum ScanMode { Watchlist, VelocityThreshold, TopItems, GearOnly, WeaponsOnly, ArmorOnly, AccessoriesOnly }
+    public enum ScanMode { Watchlist, VelocityThreshold, TopItems, GearOnly, WeaponsOnly, ArmorOnly, AccessoriesOnly, ConsumablesOnly }
 
     public sealed class ProfitScannerService
     {
@@ -29,6 +29,7 @@ namespace UndercutterFFXIV.Services
         private List<ItemLookup>? weaponItemCache;
         private List<ItemLookup>? armorItemCache;
         private List<ItemLookup>? accessoryItemCache;
+        private List<ItemLookup>? consumableItemCache;
         private List<ArbitrageOpportunity> lastResults = new();
         private ScanTimingSnapshot lastScanTiming = new();
         private bool scanInProgress;
@@ -169,6 +170,8 @@ namespace UndercutterFFXIV.Services
                     => GetArmorItems(),
                 ScanMode.AccessoriesOnly
                     => GetAccessoryItems(),
+                ScanMode.ConsumablesOnly
+                    => GetConsumableItems(),
                 _ => watchlistItems
             };
         }
@@ -195,6 +198,12 @@ namespace UndercutterFFXIV.Services
         {
             EnsureItemCacheLoaded();
             return accessoryItemCache?.ToList() ?? new List<ItemLookup>();
+        }
+
+        private List<ItemLookup> GetConsumableItems()
+        {
+            EnsureItemCacheLoaded();
+            return consumableItemCache?.ToList() ?? new List<ItemLookup>();
         }
 
         private List<ItemLookup> GetHighVelocityItems(double minVelocity)
@@ -684,6 +693,7 @@ namespace UndercutterFFXIV.Services
                 var weapons = new List<ItemLookup>(8000);
                 var armor = new List<ItemLookup>(8000);
                 var accessories = new List<ItemLookup>(5000);
+                var consumables = new List<ItemLookup>(8000);
                 var sheet = dataManager.GetExcelSheet<Item>();
                 if (sheet != null)
                 {
@@ -741,6 +751,11 @@ namespace UndercutterFFXIV.Services
                                 else if (equipmentType == EquipmentType.Accessory)
                                     accessories.Add(item);
                             }
+                            else
+                            {
+                                // Not gear = consumable (potions, food, materials, etc.)
+                                consumables.Add(item);
+                            }
                         }
                     }
                 }
@@ -761,12 +776,16 @@ namespace UndercutterFFXIV.Services
                 accessoryItemCache = accessories
                     .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                consumableItemCache = consumables
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
                 LoggingService.LogInfo($"Loaded {loaded.Count} items into search cache");
                 LoggingService.LogInfo($"Prepared {marketableItemCache.Count} marketable scan candidates");
                 LoggingService.LogInfo($"Prepared {gearItemCache.Count} gear scan candidates");
                 LoggingService.LogInfo($"Prepared {weaponItemCache.Count} weapon scan candidates");
                 LoggingService.LogInfo($"Prepared {armorItemCache.Count} armor scan candidates");
                 LoggingService.LogInfo($"Prepared {accessoryItemCache.Count} accessory scan candidates");
+                LoggingService.LogInfo($"Prepared {consumableItemCache.Count} consumable scan candidates");
             }
         }
 
