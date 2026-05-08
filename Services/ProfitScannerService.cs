@@ -300,8 +300,9 @@ namespace UndercutterFFXIV.Services
 
                 scanInProgress = true;
                 scanProcessedItems = 0;
-                // Two major passes (home-filter + DC-evaluation) so progress remains meaningful throughout.
-                scanTotalItems = itemsToScan.Count * 2;
+                // Four phases: home-fetch (10%) + home-filter (30%) + DC-fetch (10%) + evaluation (50%)
+                // This creates smoother progress: 100 "ticks" where first 10 are reserved for fetch, etc.
+                scanTotalItems = 100;
                 lastResults = new List<ArbitrageOpportunity>();
             }
 
@@ -332,8 +333,14 @@ namespace UndercutterFFXIV.Services
                 var homeSnapshots = await universalis.GetMarketSnapshotsAsync(config.WorldName, itemIds, cancellationToken);
                 homeFetchSw.Stop();
 
+                // Mark fetch completion at 10%
+                lock (cacheLock)
+                    scanProcessedItems = 10;
+
                 var homeFilterSw = Stopwatch.StartNew();
                 var homeCandidatesByItemId = new Dictionary<uint, HomeSnapshotCandidate>();
+                var itemsProcessedInHomeFilter = 0;
+                var homeFilterIncrementEvery = Math.Max(1, itemsToScan.Count / 30); // Distribute remaining 30% across filter
 
                 foreach (var item in itemsToScan)
                 {
@@ -351,11 +358,22 @@ namespace UndercutterFFXIV.Services
                     }
                     finally
                     {
-                        lock (cacheLock)
-                            scanProcessedItems++;
+                        itemsProcessedInHomeFilter++;
+                        if (itemsProcessedInHomeFilter % homeFilterIncrementEvery == 0)
+                        {
+                            lock (cacheLock)
+                            {
+                                var estimatedProgress = 10 + (int)((itemsProcessedInHomeFilter / (double)itemsToScan.Count) * 30);
+                                scanProcessedItems = Math.Min(40, estimatedProgress);
+                            }
+                        }
                     }
                 }
                 homeFilterSw.Stop();
+
+                // Mark filter completion at 40%
+                lock (cacheLock)
+                    scanProcessedItems = 40;
 
                 // Phase 2: batch-fetch DC snapshots only for home-eligible candidates.
                 var candidateIds = homeCandidatesByItemId.Keys.ToList();
@@ -365,7 +383,13 @@ namespace UndercutterFFXIV.Services
                     : await universalis.GetMarketSnapshotsAsync(config.DataCenterName, candidateIds, cancellationToken);
                 dcFetchSw.Stop();
 
+                // Mark DC fetch completion at 50%
+                lock (cacheLock)
+                    scanProcessedItems = 50;
+
                 var evaluationSw = Stopwatch.StartNew();
+                var itemsProcessedInEval = 0;
+                var evalIncrementEvery = Math.Max(1, itemsToScan.Count / 50); // Distribute remaining 50% across eval
 
                 foreach (var item in itemsToScan)
                 {
@@ -399,8 +423,15 @@ namespace UndercutterFFXIV.Services
                             }
                         }
 
-                        lock (cacheLock)
-                            scanProcessedItems++;
+                        itemsProcessedInEval++;
+                        if (itemsProcessedInEval % evalIncrementEvery == 0)
+                        {
+                            lock (cacheLock)
+                            {
+                                var estimatedProgress = 50 + (int)((itemsProcessedInEval / (double)itemsToScan.Count) * 50);
+                                scanProcessedItems = Math.Min(100, estimatedProgress);
+                            }
+                        }
 
                         if (publishNow)
                         {
@@ -422,6 +453,7 @@ namespace UndercutterFFXIV.Services
                 lock (cacheLock)
                 {
                     lastResults = sorted;
+                    scanProcessedItems = 100; // Mark as complete
                     lastScanTiming = new ScanTimingSnapshot
                     {
                         HomeFetchMs = homeFetchSw.ElapsedMilliseconds,
