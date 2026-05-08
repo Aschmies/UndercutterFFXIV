@@ -70,6 +70,7 @@ namespace UndercutterFFXIV.Services
                         foreach (var listing in listingsNode.EnumerateArray())
                         {
                             var price = TryGetUInt(listing, "pricePerUnit");
+                            var quantity = TryGetUInt(listing, "quantity");
                             var seller = TryGetString(listing, "retainerName");
                             var world = TryGetString(listing, "worldName");
                             if (price > 0)
@@ -77,6 +78,7 @@ namespace UndercutterFFXIV.Services
                                 listings.Add(new ListingRecord
                                 {
                                     PricePerUnit = price,
+                                    Quantity = quantity == 0 ? 1u : quantity,
                                     SellerName = seller,
                                     WorldName = world
                                 });

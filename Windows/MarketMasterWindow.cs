@@ -226,6 +226,22 @@ namespace UndercutterFFXIV.Windows
             ImGui.RadioButton("High Velocity", ref currentScanMode, ScanMode.VelocityThreshold);
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Scans watched items plus a broader market-focused sample.");
+            ImGui.SameLine();
+            ImGui.RadioButton("Gear Only", ref currentScanMode, ScanMode.GearOnly);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans equippable gear only (weapons, armor, and accessories).");
+            ImGui.SameLine();
+            ImGui.RadioButton("Weapons", ref currentScanMode, ScanMode.WeaponsOnly);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans weapon opportunities only.");
+            ImGui.SameLine();
+            ImGui.RadioButton("Armor", ref currentScanMode, ScanMode.ArmorOnly);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans armor opportunities only.");
+            ImGui.SameLine();
+            ImGui.RadioButton("Accessories", ref currentScanMode, ScanMode.AccessoriesOnly);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans jewelry/accessory opportunities only.");
             
             if (currentScanMode == ScanMode.TopItems)
             {
@@ -459,7 +475,7 @@ namespace UndercutterFFXIV.Windows
                     {
                         var lowestListedPrice = await scanner.FetchHomeFloorPriceAsync(listing.ItemId, CancellationToken.None);
                         var suggested = lowestListedPrice > 0
-                            ? (lowestListedPrice > config.UndercutAmount ? lowestListedPrice - config.UndercutAmount : lowestListedPrice)
+                            ? Math.Max(1, lowestListedPrice - 1)
                             : listing.CurrentPrice;
 
                         return new InventoryGridRow
@@ -506,15 +522,60 @@ namespace UndercutterFFXIV.Windows
             ImGui.Text("Scanner Settings");
             ImGui.Separator();
 
-            var world = config.WorldName;
-            ImGui.SetNextItemWidth(260);
-            if (ImGui.InputText("Home World", ref world, 64))
-                config.WorldName = world;
+            var dataCenters = WorldDataCatalog.GetDataCenters();
+            var selectedDataCenter = config.DataCenterName;
+            if (!dataCenters.Contains(selectedDataCenter, StringComparer.OrdinalIgnoreCase) && dataCenters.Count > 0)
+            {
+                selectedDataCenter = dataCenters[0];
+                config.DataCenterName = selectedDataCenter;
+            }
 
-            var dc = config.DataCenterName;
             ImGui.SetNextItemWidth(260);
-            if (ImGui.InputText("Data Centre", ref dc, 64))
-                config.DataCenterName = dc;
+            if (ImGui.BeginCombo("Data Centre", selectedDataCenter))
+            {
+                foreach (var dataCenter in dataCenters)
+                {
+                    var isSelected = string.Equals(selectedDataCenter, dataCenter, StringComparison.OrdinalIgnoreCase);
+                    if (ImGui.Selectable(dataCenter, isSelected))
+                    {
+                        selectedDataCenter = dataCenter;
+                        config.DataCenterName = dataCenter;
+
+                        var validWorlds = WorldDataCatalog.GetWorlds(dataCenter);
+                        if (!WorldDataCatalog.IsWorldInDataCenter(dataCenter, config.WorldName) && validWorlds.Count > 0)
+                            config.WorldName = validWorlds[0];
+                    }
+
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+
+                ImGui.EndCombo();
+            }
+
+            var worlds = WorldDataCatalog.GetWorlds(config.DataCenterName);
+            var selectedWorld = config.WorldName;
+            if (!WorldDataCatalog.IsWorldInDataCenter(config.DataCenterName, selectedWorld) && worlds.Count > 0)
+            {
+                selectedWorld = worlds[0];
+                config.WorldName = selectedWorld;
+            }
+
+            ImGui.SetNextItemWidth(260);
+            if (ImGui.BeginCombo("Home World", selectedWorld))
+            {
+                foreach (var world in worlds)
+                {
+                    var isSelected = string.Equals(selectedWorld, world, StringComparison.OrdinalIgnoreCase);
+                    if (ImGui.Selectable(world, isSelected))
+                        config.WorldName = world;
+
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+
+                ImGui.EndCombo();
+            }
 
             var tax = (float)config.MarketTaxRatePercent;
             ImGui.SetNextItemWidth(220);
@@ -526,6 +587,11 @@ namespace UndercutterFFXIV.Windows
             if (ImGui.SliderFloat("Min sales/day", ref velocity, 0, 10, "%.1f"))
                 config.MinSaleVelocityPerDay = velocity;
 
+            var minUnitsSold24h = config.MinUnitsSold24h;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.InputInt("Min units sold (24h)", ref minUnitsSold24h))
+                config.MinUnitsSold24h = Math.Max(0, minUnitsSold24h);
+
             var minGil = config.MinNetProfitGil;
             ImGui.SetNextItemWidth(220);
             if (ImGui.InputInt("Min net profit (gil)", ref minGil))
@@ -535,6 +601,16 @@ namespace UndercutterFFXIV.Windows
             ImGui.SetNextItemWidth(220);
             if (ImGui.SliderFloat("Min profit %", ref minPct, 0, 100, "%.1f%%"))
                 config.MinNetProfitPercent = minPct;
+
+            var cheapThreshold = config.CheapItemPriceThresholdGil;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.InputInt("Cheap item threshold (gil)", ref cheapThreshold))
+                config.CheapItemPriceThresholdGil = Math.Max(1, cheapThreshold);
+
+            var cheapMinQty = config.CheapItemMinProfitableQuantity;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.InputInt("Cheap item min profitable qty", ref cheapMinQty))
+                config.CheapItemMinProfitableQuantity = Math.Max(1, cheapMinQty);
 
             var lookback = config.ScannerLookbackDays;
             ImGui.SetNextItemWidth(220);
@@ -573,7 +649,7 @@ namespace UndercutterFFXIV.Windows
 
         private void DrawOpportunityTable(List<ArbitrageOpportunity> opportunities, string tableId)
         {
-            if (!ImGui.BeginTable(tableId, 7,
+            if (!ImGui.BeginTable(tableId, 8,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                 new Vector2(0, 0)))
                 return;
@@ -584,6 +660,7 @@ namespace UndercutterFFXIV.Windows
             ImGui.TableSetupColumn("Buy Price",  ImGuiTableColumnFlags.WidthFixed, 92);
             ImGui.TableSetupColumn("Net",       ImGuiTableColumnFlags.WidthFixed, 92);
             ImGui.TableSetupColumn("Profit %",  ImGuiTableColumnFlags.WidthFixed, 82);
+            ImGui.TableSetupColumn("Sold 24h",  ImGuiTableColumnFlags.WidthFixed, 90);
             ImGui.TableSetupColumn("Scanned",   ImGuiTableColumnFlags.WidthFixed, 90);
             ImGui.TableHeadersRow();
 
@@ -602,6 +679,7 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextColored(netColor, opp.NetProfitPerUnit.ToString("N0"));
 
                 ImGui.TableNextColumn(); ImGui.Text($"{opp.ProfitPercent:F1}%");
+                ImGui.TableNextColumn(); ImGui.Text(opp.UnitsSold24h.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.Text(opp.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
             }
 

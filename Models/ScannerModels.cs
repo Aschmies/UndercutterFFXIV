@@ -35,6 +35,7 @@ namespace UndercutterFFXIV.Models
     public sealed class ListingRecord
     {
         public uint PricePerUnit { get; init; }
+        public uint Quantity { get; init; }
         public string SellerName { get; init; } = string.Empty;
         public string WorldName { get; init; } = string.Empty;
     }
@@ -58,6 +59,8 @@ namespace UndercutterFFXIV.Models
         public double NetProfitPerUnit { get; init; }
         public double ProfitPercent { get; init; }
         public double SaleVelocityPerDay { get; init; }
+        public int SalesCount24h { get; init; }
+        public int UnitsSold24h { get; init; }
         public bool PotentialBotSellerPattern { get; init; }
         public int SafeBuyQty { get; init; }
         public DateTime ScannedUtc { get; init; }

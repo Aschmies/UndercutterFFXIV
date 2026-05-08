@@ -10,7 +10,7 @@ using Dalamud.Plugin.Services;
 
 namespace UndercutterFFXIV.Services
 {
-    public enum ScanMode { Watchlist, VelocityThreshold, TopItems }
+    public enum ScanMode { Watchlist, VelocityThreshold, TopItems, GearOnly, WeaponsOnly, ArmorOnly, AccessoriesOnly }
 
     public sealed class ProfitScannerService
     {
@@ -26,6 +26,10 @@ namespace UndercutterFFXIV.Services
         private readonly object cacheLock = new();
         private List<ItemLookup>? itemCache;
         private List<ItemLookup>? marketableItemCache;
+        private List<ItemLookup>? gearItemCache;
+        private List<ItemLookup>? weaponItemCache;
+        private List<ItemLookup>? armorItemCache;
+        private List<ItemLookup>? accessoryItemCache;
         private List<ArbitrageOpportunity> lastResults = new();
         private bool scanInProgress;
         private int scanProcessedItems;
@@ -152,8 +156,40 @@ namespace UndercutterFFXIV.Services
                     => MergeScanCandidates(watchlistItems, GetHighVelocityItems(config.MinSaleVelocityPerDay * 2)),
                 ScanMode.TopItems
                     => MergeScanCandidates(watchlistItems, GetTopTradedItems(topCount)),
+                ScanMode.GearOnly
+                    => GetGearItems(),
+                ScanMode.WeaponsOnly
+                    => GetWeaponItems(),
+                ScanMode.ArmorOnly
+                    => GetArmorItems(),
+                ScanMode.AccessoriesOnly
+                    => GetAccessoryItems(),
                 _ => watchlistItems
             };
+        }
+
+        private List<ItemLookup> GetGearItems()
+        {
+            EnsureItemCacheLoaded();
+            return gearItemCache?.ToList() ?? new List<ItemLookup>();
+        }
+
+        private List<ItemLookup> GetWeaponItems()
+        {
+            EnsureItemCacheLoaded();
+            return weaponItemCache?.ToList() ?? new List<ItemLookup>();
+        }
+
+        private List<ItemLookup> GetArmorItems()
+        {
+            EnsureItemCacheLoaded();
+            return armorItemCache?.ToList() ?? new List<ItemLookup>();
+        }
+
+        private List<ItemLookup> GetAccessoryItems()
+        {
+            EnsureItemCacheLoaded();
+            return accessoryItemCache?.ToList() ?? new List<ItemLookup>();
         }
 
         private List<ItemLookup> GetHighVelocityItems(double minVelocity)
@@ -345,7 +381,16 @@ namespace UndercutterFFXIV.Services
             cancellationToken.ThrowIfCancellationRequested();
 
             var home = await universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
-            if (home == null || home.LowestPrice == 0)
+            if (home == null)
+                return null;
+
+            // Always use the actual lowest active listing on Home World as the sell-side reference.
+            var homeLowestListingPrice = home.Listings
+                .Where(l => l.PricePerUnit > 0)
+                .Select(l => l.PricePerUnit)
+                .DefaultIfEmpty(home.LowestPrice)
+                .Min();
+            if (homeLowestListingPrice == 0)
                 return null;
 
             // Fast-fail before DC lookup to reduce total API calls.
@@ -353,17 +398,30 @@ namespace UndercutterFFXIV.Services
             if (velocity < config.MinSaleVelocityPerDay)
                 return null;
 
+            var (salesCount24h, unitsSold24h) = CalculateRecentSales24h(home.RecentSales);
+            if (unitsSold24h < Math.Max(0, config.MinUnitsSold24h))
+                return null;
+
             var dc = await universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
             if (dc == null || dc.LowestPrice == 0)
                 return null;
 
-            var bestDcListing = dc.Listings
+            var sortedDcListings = dc.Listings
+                .Where(l => l.PricePerUnit > 0)
                 .OrderBy(l => l.PricePerUnit)
-                .FirstOrDefault();
-            var buyPrice = bestDcListing?.PricePerUnit ?? dc.LowestPrice;
-            var buyWorld = bestDcListing?.WorldName ?? string.Empty;
+                .ToList();
+            if (sortedDcListings.Count == 0)
+                return null;
 
-            var netProfit = (home.LowestPrice * (1 - (config.MarketTaxRatePercent / 100.0))) - buyPrice;
+            var netSellPerUnit = homeLowestListingPrice * (1 - (config.MarketTaxRatePercent / 100.0));
+            var buySelection = SelectBuyReference(sortedDcListings, netSellPerUnit);
+            if (buySelection == null)
+                return null;
+
+            var buyPrice = buySelection.EffectiveBuyPricePerUnit;
+            var buyWorld = buySelection.BuyWorld;
+
+            var netProfit = netSellPerUnit - buyPrice;
             var profitPercent = buyPrice == 0 ? 0 : (netProfit / buyPrice) * 100;
 
             if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
@@ -375,16 +433,95 @@ namespace UndercutterFFXIV.Services
             {
                 ItemId = item.ItemId,
                 ItemName = item.Name,
-                HomeWorldMinPrice = home.LowestPrice,
-                DataCenterLowestPrice = buyPrice,
+                HomeWorldMinPrice = homeLowestListingPrice,
+                DataCenterLowestPrice = (uint)Math.Max(0, Math.Round(buyPrice)),
                 BuyFromWorld = buyWorld,
                 NetProfitPerUnit = netProfit,
                 ProfitPercent = profitPercent,
                 SaleVelocityPerDay = velocity,
+                SalesCount24h = salesCount24h,
+                UnitsSold24h = unitsSold24h,
                 PotentialBotSellerPattern = botPattern,
                 SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(velocity, botPattern),
                 ScannedUtc = DateTime.UtcNow
             };
+        }
+
+        private BuySelection? SelectBuyReference(IReadOnlyList<ListingRecord> sortedDcListings, double netSellPerUnit)
+        {
+            var cheapest = sortedDcListings[0];
+            var cheapestPrice = cheapest.PricePerUnit;
+
+            var cheapThreshold = Math.Max(1, config.CheapItemPriceThresholdGil);
+            var minCheapQty = Math.Max(1, config.CheapItemMinProfitableQuantity);
+            var isCheapItem = cheapestPrice <= cheapThreshold;
+
+            if (!isCheapItem)
+            {
+                return new BuySelection
+                {
+                    EffectiveBuyPricePerUnit = cheapestPrice,
+                    BuyWorld = cheapest.WorldName
+                };
+            }
+
+            // For cheap items, avoid one-off bait listings by requiring enough profitable units
+            // and using the blended buy price for that quantity.
+            var maxProfitableBuyPrice = CalculateMaxProfitableBuyPrice(netSellPerUnit);
+            if (maxProfitableBuyPrice <= 0)
+                return null;
+
+            var profitableListings = sortedDcListings
+                .Where(l => l.PricePerUnit <= maxProfitableBuyPrice)
+                .ToList();
+            if (profitableListings.Count == 0)
+                return null;
+
+            var profitableUnits = profitableListings.Sum(l => (int)Math.Max(1u, l.Quantity));
+            if (profitableUnits < minCheapQty)
+                return null;
+
+            var targetUnits = minCheapQty;
+            var consumedUnits = 0;
+            double totalCost = 0;
+            var buyWorld = profitableListings[0].WorldName;
+
+            foreach (var listing in profitableListings)
+            {
+                if (consumedUnits >= targetUnits)
+                    break;
+
+                var availableUnits = (int)Math.Max(1u, listing.Quantity);
+                var takeUnits = Math.Min(availableUnits, targetUnits - consumedUnits);
+                totalCost += takeUnits * listing.PricePerUnit;
+                consumedUnits += takeUnits;
+            }
+
+            if (consumedUnits < targetUnits)
+                return null;
+
+            return new BuySelection
+            {
+                EffectiveBuyPricePerUnit = totalCost / consumedUnits,
+                BuyWorld = buyWorld
+            };
+        }
+
+        private double CalculateMaxProfitableBuyPrice(double netSellPerUnit)
+        {
+            if (netSellPerUnit <= 0)
+                return 0;
+
+            var maxByGil = netSellPerUnit - Math.Max(0, config.MinNetProfitGil);
+            var denominator = 1.0 + (Math.Max(0, config.MinNetProfitPercent) / 100.0);
+            var maxByPercent = denominator <= 0 ? 0 : netSellPerUnit / denominator;
+            return Math.Floor(Math.Min(maxByGil, maxByPercent));
+        }
+
+        private sealed class BuySelection
+        {
+            public double EffectiveBuyPricePerUnit { get; init; }
+            public string BuyWorld { get; init; } = string.Empty;
         }
 
         private void PublishPartialResults(List<ArbitrageOpportunity> inProgressResults)
@@ -413,6 +550,10 @@ namespace UndercutterFFXIV.Services
 
                 var loaded = new List<ItemLookup>(32000);
                 var marketable = new List<ItemLookup>(24000);
+                var gear = new List<ItemLookup>(12000);
+                var weapons = new List<ItemLookup>(8000);
+                var armor = new List<ItemLookup>(8000);
+                var accessories = new List<ItemLookup>(5000);
                 var sheet = dataManager.GetExcelSheet<Item>();
                 if (sheet != null)
                 {
@@ -434,7 +575,22 @@ namespace UndercutterFFXIV.Services
                         loaded.Add(item);
 
                         if (!row.IsUntradable)
+                        {
                             marketable.Add(item);
+
+                            if (IsGearItem(row))
+                            {
+                                gear.Add(item);
+
+                                var equipmentType = ClassifyEquipmentType(row.EquipSlotCategory.RowId);
+                                if (equipmentType == EquipmentType.Weapon)
+                                    weapons.Add(item);
+                                else if (equipmentType == EquipmentType.Armor)
+                                    armor.Add(item);
+                                else if (equipmentType == EquipmentType.Accessory)
+                                    accessories.Add(item);
+                            }
+                        }
                     }
                 }
 
@@ -442,9 +598,52 @@ namespace UndercutterFFXIV.Services
                 marketableItemCache = marketable
                     .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                gearItemCache = gear
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                weaponItemCache = weapons
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                armorItemCache = armor
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                accessoryItemCache = accessories
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
                 LoggingService.LogInfo($"Loaded {loaded.Count} items into search cache");
                 LoggingService.LogInfo($"Prepared {marketableItemCache.Count} marketable scan candidates");
+                LoggingService.LogInfo($"Prepared {gearItemCache.Count} gear scan candidates");
+                LoggingService.LogInfo($"Prepared {weaponItemCache.Count} weapon scan candidates");
+                LoggingService.LogInfo($"Prepared {armorItemCache.Count} armor scan candidates");
+                LoggingService.LogInfo($"Prepared {accessoryItemCache.Count} accessory scan candidates");
             }
+        }
+
+        private static bool IsGearItem(Item item)
+        {
+            // EquipSlotCategory > 0 captures equippable items (weapons, armor, accessories).
+            return item.EquipSlotCategory.RowId > 0;
+        }
+
+        private enum EquipmentType
+        {
+            Unknown,
+            Weapon,
+            Armor,
+            Accessory
+        }
+
+        private static EquipmentType ClassifyEquipmentType(uint equipSlotCategoryId)
+        {
+            // Equip slot category IDs are stable enough for broad scanner segmentation:
+            // 1-2 and 13-14: weapon/offhand sets, 3-8: armor slots, 9-12: accessories.
+            return equipSlotCategoryId switch
+            {
+                1 or 2 or 13 or 14 => EquipmentType.Weapon,
+                >= 3 and <= 8 => EquipmentType.Armor,
+                >= 9 and <= 12 => EquipmentType.Accessory,
+                _ => EquipmentType.Unknown
+            };
         }
 
         private static double CalculateSaleVelocity(IReadOnlyList<SaleRecord> sales, int lookbackDays)
@@ -458,6 +657,20 @@ namespace UndercutterFFXIV.Services
                 return 0;
 
             return relevant.Count / (double)Math.Max(1, lookbackDays);
+        }
+
+        private static (int SalesCount, int UnitsSold) CalculateRecentSales24h(IReadOnlyList<SaleRecord> sales)
+        {
+            if (sales.Count == 0)
+                return (0, 0);
+
+            var cutoff = DateTime.UtcNow.AddHours(-24);
+            var relevant = sales.Where(s => s.TimestampUtc >= cutoff).ToList();
+            if (relevant.Count == 0)
+                return (0, 0);
+
+            var units = relevant.Sum(s => (int)Math.Max(1u, s.Quantity));
+            return (relevant.Count, units);
         }
 
         private static bool DetectPotentialBotPattern(IReadOnlyList<ListingRecord> listings)
