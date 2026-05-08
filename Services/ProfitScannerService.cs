@@ -101,6 +101,8 @@ namespace UndercutterFFXIV.Services
                 if (netProfit < config.MinNetProfitGil || profitPercent < config.MinNetProfitPercent)
                     continue;
 
+                var botPattern = DetectPotentialBotPattern(home.Listings);
+
                 results.Add(new ArbitrageOpportunity
                 {
                     ItemId = item.ItemId,
@@ -110,7 +112,8 @@ namespace UndercutterFFXIV.Services
                     NetProfitPerUnit = netProfit,
                     ProfitPercent = profitPercent,
                     SaleVelocityPerDay = velocity,
-                    PotentialBotSellerPattern = DetectPotentialBotPattern(home.Listings),
+                    PotentialBotSellerPattern = botPattern,
+                    SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(velocity, botPattern),
                     ScannedUtc = DateTime.UtcNow
                 });
             }

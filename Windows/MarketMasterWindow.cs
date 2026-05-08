@@ -131,7 +131,7 @@ namespace UndercutterFFXIV.Windows
                 return;
             }
 
-            DrawOpportunityTable(latestResults, "##dashOppTable", 6);
+            DrawOpportunityTable(latestResults, "##dashOppTable", 7);
         }
 
         private void DrawScannerTab()
@@ -223,7 +223,7 @@ namespace UndercutterFFXIV.Windows
                 if (latestResults.Count == 0)
                     ImGui.TextDisabled("No opportunities yet.");
                 else
-                    DrawOpportunityTable(latestResults, "##scannerOppTable", 8);
+                    DrawOpportunityTable(latestResults, "##scannerOppTable", 9);
             }
             ImGui.EndChild();
         }
@@ -333,7 +333,9 @@ namespace UndercutterFFXIV.Windows
 
         private void DrawOpportunityTable(List<ArbitrageOpportunity> opportunities, string tableId, int visibleColumns)
         {
-            if (!ImGui.BeginTable(tableId, visibleColumns, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY, new Vector2(0, 0)))
+            // Column count includes the always-visible Safe Qty column; visibleColumns drives optional extras
+        var columnCount = Math.Max(visibleColumns, 7);
+        if (!ImGui.BeginTable(tableId, columnCount, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY, new Vector2(0, 0)))
                 return;
 
             ImGui.TableSetupColumn("Item");
@@ -342,9 +344,10 @@ namespace UndercutterFFXIV.Windows
             ImGui.TableSetupColumn("Net", ImGuiTableColumnFlags.WidthFixed, 92);
             ImGui.TableSetupColumn("Profit %", ImGuiTableColumnFlags.WidthFixed, 82);
             ImGui.TableSetupColumn("Sales/day", ImGuiTableColumnFlags.WidthFixed, 82);
-            if (visibleColumns >= 7)
-                ImGui.TableSetupColumn("Bot Flag", ImGuiTableColumnFlags.WidthFixed, 72);
+            ImGui.TableSetupColumn("Safe Qty", ImGuiTableColumnFlags.WidthFixed, 72);
             if (visibleColumns >= 8)
+                ImGui.TableSetupColumn("Bot Flag", ImGuiTableColumnFlags.WidthFixed, 72);
+            if (visibleColumns >= 9)
                 ImGui.TableSetupColumn("Scanned", ImGuiTableColumnFlags.WidthFixed, 90);
             ImGui.TableHeadersRow();
 
@@ -372,7 +375,21 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TableNextColumn();
                 ImGui.Text($"{opportunity.SaleVelocityPerDay:F1}");
 
-                if (visibleColumns >= 7)
+                // Safe Qty — always shown (col 7+)
+                ImGui.TableNextColumn();
+                var qtyColor = opportunity.SafeBuyQty == 3
+                    ? new Vector4(0.4f, 1f, 0.4f, 1f)
+                    : opportunity.SafeBuyQty == 2
+                        ? new Vector4(0.95f, 0.85f, 0.25f, 1f)
+                        : new Vector4(0.95f, 0.5f, 0.2f, 1f);
+                ImGui.TextColored(qtyColor, opportunity.SafeBuyQty.ToString());
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(
+                        "Safe units to buy at once.\n" +
+                        "Spread across many items rather than\n" +
+                        "buying large stacks of a single item.");
+
+                if (visibleColumns >= 8)
                 {
                     ImGui.TableNextColumn();
                     if (opportunity.PotentialBotSellerPattern)
@@ -381,7 +398,7 @@ namespace UndercutterFFXIV.Windows
                         ImGui.TextDisabled("No");
                 }
 
-                if (visibleColumns >= 8)
+                if (visibleColumns >= 9)
                 {
                     ImGui.TableNextColumn();
                     ImGui.Text(opportunity.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));

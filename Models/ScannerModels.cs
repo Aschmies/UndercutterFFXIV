@@ -48,7 +48,31 @@ namespace UndercutterFFXIV.Models
         public double ProfitPercent { get; init; }
         public double SaleVelocityPerDay { get; init; }
         public bool PotentialBotSellerPattern { get; init; }
+        public int SafeBuyQty { get; init; }
         public DateTime ScannedUtc { get; init; }
+
+        /// <summary>
+        /// Suggests how many units are safe to buy without raising suspicion.
+        /// Hard cap of 3: spread risk across many different items rather than
+        /// buying large stacks of a single item.
+        /// </summary>
+        public static int ComputeSafeBuyQty(double velocityPerDay, bool potentialBotPattern)
+        {
+            // Base quantity from velocity: slow-moving items hold risk longer
+            int qty;
+            if (velocityPerDay < 0.5)
+                qty = 1;
+            else if (velocityPerDay < 2.0)
+                qty = 2;
+            else
+                qty = 3;
+
+            // Bot-heavy listings mean the market is risky; be more conservative
+            if (potentialBotPattern && qty > 1)
+                qty--;
+
+            return qty;
+        }
     }
 
     public sealed class ApiHealthSnapshot
