@@ -18,6 +18,7 @@ namespace UndercutterFFXIV
         [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
         [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
         [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
+        [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
 
         private const string CommandName = "/ma";
 
@@ -27,6 +28,7 @@ namespace UndercutterFFXIV
         private readonly WindowSystem windowSystem = new("MarketMasterPro");
         private readonly MarketMasterWindow mainWindow;
         private readonly ProfitScannerService scanner;
+        private readonly UndercutDetectionService undercutDetector;
         private readonly Random random = new();
         private readonly DateTime sessionStartedUtc = DateTime.UtcNow;
 
@@ -44,6 +46,7 @@ namespace UndercutterFFXIV
             var universalis = new UniversalisMarketClient(http);
             RetainerPriceService = new RetainerPriceService(GameGui, DataManager);
             scanner = new ProfitScannerService(DataManager, universalis, database, Configuration, RetainerPriceService);
+            undercutDetector = new UndercutDetectionService(universalis, ChatGui, Configuration, RetainerPriceService);
 
             mainWindow = new MarketMasterWindow(this, scanner);
             windowSystem.AddWindow(mainWindow);
@@ -111,6 +114,16 @@ namespace UndercutterFFXIV
                     }
 
                     await scanner.ScanWatchlistOnlyAsync(CancellationToken.None);
+
+                    // Check for undercuts on currently listed items
+                    try
+                    {
+                        await undercutDetector.CheckForUndercutsAsync(Configuration.WorldName, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        LoggingService.LogError($"Undercut detection error: {ex.Message}");
+                    }
                 }
                 catch (Exception ex)
                 {
