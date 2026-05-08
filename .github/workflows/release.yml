@@ -80,7 +80,8 @@ jobs:
           $json[0].AssemblyVersion        = "${{ steps.version.outputs.FULL }}"
           $json[0].TestingAssemblyVersion = "${{ steps.version.outputs.FULL }}"
           $json[0].LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-          $json | ConvertTo-Json -Depth 10 | Set-Content pluginmaster.json -Encoding UTF8
+          # ConvertTo-Json unwraps a 1-element array into an object — wrap it back.
+          @($json) | ConvertTo-Json -Depth 10 | Set-Content pluginmaster.json -Encoding UTF8
 
       - name: Commit updated pluginmaster.json
         shell: pwsh
