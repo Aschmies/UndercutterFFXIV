@@ -280,6 +280,19 @@ namespace UndercutterFFXIV.Windows
             else if (inventorySelectedItemId == 0 && cachedWatchlist.Count > 0)
                 inventorySelectedItemId = cachedWatchlist[0].ItemId;
 
+            var retainerWindowDetected = config.EnableRetainerAutoFill && retainerPriceService.IsRetainerSellWindowOpen();
+
+            if (config.EnableRetainerAutoFill)
+            {
+                var detectionColor = retainerWindowDetected
+                    ? new Vector4(0.4f, 1f, 0.4f, 1f)
+                    : new Vector4(0.95f, 0.75f, 0.25f, 1f);
+                var detectionText = retainerWindowDetected
+                    ? "Retainer window detected"
+                    : "Retainer window not detected";
+                ImGui.TextColored(detectionColor, detectionText);
+            }
+
             ImGui.Spacing();
             if (ImGui.Button("Fetch Current Home Floor"))
                 _ = RefreshSuggestedPriceAsync(inventorySelectedItemId);
@@ -294,8 +307,7 @@ namespace UndercutterFFXIV.Windows
             if (config.EnableRetainerAutoFill)
             {
                 ImGui.SameLine();
-                var retainerWindowDetected = inventorySuggestedPrice > 0 && retainerPriceService.IsRetainerSellWindowOpen();
-                ImGui.BeginDisabled(!retainerWindowDetected);
+                ImGui.BeginDisabled(!(inventorySuggestedPrice > 0 && retainerWindowDetected));
                 if (ImGui.Button("Auto-Fill Retainer Price"))
                 {
                     if (retainerPriceService.TryAutoFillPrice(inventorySuggestedPrice, out var status))
@@ -326,7 +338,7 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextDisabled(inventoryStatus);
             
             ImGui.TextDisabled("(Paste the price into your Retainer's listing interface)");
-            if (config.EnableRetainerAutoFill && !retainerPriceService.IsRetainerSellWindowOpen())
+            if (config.EnableRetainerAutoFill && !retainerWindowDetected)
                 ImGui.TextDisabled("Open the Retainer sell price window to enable auto-fill.");
         }
 
