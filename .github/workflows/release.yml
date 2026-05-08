@@ -96,6 +96,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pluginmaster.json
           git commit -m "chore: bump pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          # Rebase on any commits that landed on main while CI was building (e.g. a developer push)
+          git fetch origin main
+          git rebase origin/main
           # Push to main regardless of whether we're on a detached HEAD during a tag build
           git push origin HEAD:refs/heads/main
 
