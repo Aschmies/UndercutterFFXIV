@@ -4,16 +4,16 @@
     "Name": "Market Master Pro",
     "Punchline": "Manual market intelligence and arbitrage scanner for FFXIV.",
     "Description": "Analyzes market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual. Now includes real-time undercut notifications.",
-      "Changelog": "v1.1.21: Smooth progress bar with 4-phase distribution (fetch→filter→fetch→eval) for visual continuity without changing scan behavior. Includes all v1.1.20 progress tracking + level/iLvl mapping fixes.",
+      "Changelog": "v1.1.22: Added home world current quantity selling + profit % sorting (highest/lowest) to opportunities display for better market analysis. Expanded from 8 to 10 columns for clearer visibility.",
     "InternalName": "UndercutterFFXIV",
-      "AssemblyVersion": "1.1.21.0",
-      "TestingAssemblyVersion": "1.1.21.0",
+      "AssemblyVersion": "1.1.22.0",
+      "TestingAssemblyVersion": "1.1.22.0",
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
-      "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.21/latest.zip",
-      "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.21/latest.zip",
-      "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.21/latest.zip",
+      "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.22/latest.zip",
+      "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.22/latest.zip",
+      "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.22/latest.zip",
     "DalamudApiLevel": 15,
     "ApplicableVersion": "any",
     "Tags": [
@@ -23,7 +23,7 @@
       "gil",
       "universalis"
     ],
-    "LastUpdated": 1778272926,
+    "LastUpdated": 1778273055,
     "DownloadCount": 0
   }
 ]
