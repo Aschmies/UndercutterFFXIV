@@ -6,8 +6,8 @@
     "Description": "Tracks market prices via Universalis, alerts you when undercut, suggests optimal sell timing with a 4-signal algorithm, and tracks flip profitability — all without requiring you to visit the market board.",
     "Changelog": "",
     "InternalName": "UndercutterFFXIV",
-    "AssemblyVersion": "1.0.0.0",
-    "TestingAssemblyVersion": "1.0.0.0",
+    "AssemblyVersion": "1.0.1.0",
+    "TestingAssemblyVersion": "1.0.1.0",
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
@@ -22,7 +22,7 @@
       "gil",
       "universalis"
     ],
-    "LastUpdated": 1778256726,
+    "LastUpdated": 1778257627,
     "DownloadCount": 0
   }
 ]
