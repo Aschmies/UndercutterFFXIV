@@ -14,9 +14,13 @@ namespace UndercutterFFXIV.Services
     {
         private const int RequestTimeoutSeconds = 40;
         private const int MaxRetryAttempts = 2;
-        private readonly HttpClient http;
-        private readonly object metricsLock = new();
-        private readonly Queue<(bool Ok, long LatencyMs)> recentMetrics = new();
+            private const int DefaultListings = 20;
+            private const int DefaultEntries = 60;
+            private const int BulkListings = 20;
+            private const int BulkEntries = 60;
+            private readonly HttpClient http;
+            private readonly object metricsLock = new();
+            private readonly Queue<(bool Ok, long LatencyMs)> recentMetrics = new();
         private DateTime? lastSuccessUtc;
 
         public UniversalisMarketClient(HttpClient http)
@@ -36,7 +40,7 @@ namespace UndercutterFFXIV.Services
                 return null;
             }
 
-            var url = $"https://universalis.app/api/v2/{Uri.EscapeDataString(normalizedScope)}/{itemId}?listings=40&entries=180";
+            var url = $"https://universalis.app/api/v2/{Uri.EscapeDataString(normalizedScope)}/{itemId}?listings={DefaultListings}&entries={DefaultEntries}";
             var sw = Stopwatch.StartNew();
             Exception? lastException = null;
 

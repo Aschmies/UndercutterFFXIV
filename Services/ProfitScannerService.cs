@@ -15,7 +15,7 @@ namespace UndercutterFFXIV.Services
     public sealed class ProfitScannerService
     {
         private const int PartialPublishBatchSize = 5;
-        private const int MaxConcurrentItemScans = 8;
+            private const int MaxConcurrentItemScans = 16;
 
         private readonly IDataManager dataManager;
         private readonly UniversalisMarketClient universalis;
@@ -379,8 +379,15 @@ namespace UndercutterFFXIV.Services
         private async Task<ArbitrageOpportunity?> ScanItemForOpportunityAsync(ItemLookup item, ScanMode scanMode, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var home = await universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
+                // Parallelize home world and DC lookups to speed up scan
+                var homeTask = universalis.GetMarketSnapshotAsync(config.WorldName, item.ItemId, cancellationToken);
+                var dcTask = universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
+            
+                await Task.WhenAll(homeTask, dcTask);
+            
+                var home = homeTask.Result;
+                var dc = dcTask.Result;
+            
             if (home == null)
                 return null;
 
@@ -407,8 +414,6 @@ namespace UndercutterFFXIV.Services
             var (salesCount24h, unitsSold24h) = CalculateRecentSales24h(home.RecentSales);
             if (unitsSold24h < Math.Max(0, config.MinUnitsSold24h))
                 return null;
-
-            var dc = await universalis.GetMarketSnapshotAsync(config.DataCenterName, item.ItemId, cancellationToken);
             if (dc == null || dc.LowestPrice == 0)
                 return null;
 
