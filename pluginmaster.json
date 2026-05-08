@@ -4,16 +4,16 @@
     "Name": "Market Master Pro",
     "Punchline": "Manual market intelligence and arbitrage scanner for FFXIV.",
     "Description": "Analyzes market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual. Now includes real-time undercut notifications.",
-      "Changelog": "v1.1.22: Added home world current quantity selling + profit % sorting (highest/lowest) to opportunities display for better market analysis. Expanded from 8 to 10 columns for clearer visibility.",
+      "Changelog": "v1.1.23: Fixed progress display to show actual item count (e.g., 1500/2000) instead of 0/100. Improved opportunities table with resizable columns, horizontal scrolling, and dynamic Item column stretching. Column headers shortened for compact layout.",
     "InternalName": "UndercutterFFXIV",
-      "AssemblyVersion": "1.1.22.0",
-      "TestingAssemblyVersion": "1.1.22.0",
+      "AssemblyVersion": "1.1.23.0",
+      "TestingAssemblyVersion": "1.1.23.0",
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
-      "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.22/latest.zip",
-      "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.22/latest.zip",
-      "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.22/latest.zip",
+      "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.23/latest.zip",
+      "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.23/latest.zip",
+      "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.23/latest.zip",
     "DalamudApiLevel": 15,
     "ApplicableVersion": "any",
     "Tags": [
@@ -23,7 +23,7 @@
       "gil",
       "universalis"
     ],
-    "LastUpdated": 1778273142,
+    "LastUpdated": 1778273289,
     "DownloadCount": 0
   }
 ]
