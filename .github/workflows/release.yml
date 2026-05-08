@@ -1,0 +1,98 @@
+name: Build and Release
+
+# Triggers on a version tag push: git tag v1.0.1 && git push origin v1.0.1
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create releases and push pluginmaster.json
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history so we can push back the manifest update
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # NuGet restore uses nuget.config in the repo root
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build Release
+        run: dotnet build --configuration Release --no-restore
+
+      # DalamudPackager (included in Dalamud.NET.Sdk) creates a zip at:
+      #   bin\Release\net10.0-windows\UndercutterFFXIV\latest.zip
+      - name: Locate plugin zip
+        id: find_zip
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path . -Recurse -Filter "latest.zip" |
+            Where-Object { $_.FullName -notlike "*\obj\*" } |
+            Select-Object -First 1
+          if (-not $zip) { throw "Could not find latest.zip — DalamudPackager may not have run." }
+          Write-Host "Found zip: $($zip.FullName)"
+          echo "ZIP_PATH=$($zip.FullName)" >> $env:GITHUB_OUTPUT
+
+      # Strip the leading 'v' so  v1.2.3 -> 1.2.3.0
+      - name: Parse version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"          # e.g. v1.2.3
+          $ver = $tag.TrimStart('v')               # e.g. 1.2.3
+          # Dalamud wants 4-part version
+          $parts = $ver.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $full = $parts -join '.'
+          echo "SHORT=$ver"   >> $env:GITHUB_OUTPUT
+          echo "FULL=$full"   >> $env:GITHUB_OUTPUT
+
+      # Update pluginmaster.json with new version + current Unix timestamp, then
+      # commit it back to main so the raw URL always reflects the latest release.
+      - name: Update pluginmaster.json
+        shell: pwsh
+        run: |
+          $json = Get-Content pluginmaster.json -Raw | ConvertFrom-Json
+          $json[0].AssemblyVersion        = "${{ steps.version.outputs.FULL }}"
+          $json[0].TestingAssemblyVersion = "${{ steps.version.outputs.FULL }}"
+          $json[0].LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $json | ConvertTo-Json -Depth 10 | Set-Content pluginmaster.json -Encoding UTF8
+
+      - name: Commit updated pluginmaster.json
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pluginmaster.json
+          git commit -m "chore: bump pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          # Push to main regardless of whether we're on a detached HEAD during a tag build
+          git push origin HEAD:refs/heads/main
+
+      # Create a GitHub Release and attach the zip as 'latest.zip'
+      # The DownloadLinkInstall/Update URL  .../releases/latest/download/latest.zip
+      # will automatically resolve to this asset on the newest release.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            ### Market Assistant ${{ steps.version.outputs.SHORT }}
+
+            **Install:** Add the custom repo URL to Dalamud (see README), then install "Market Assistant".
+            **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
+          files: ${{ steps.find_zip.outputs.ZIP_PATH }}
+          # Rename the asset to latest.zip so the download link stays stable
+          # softprops/action-gh-release does not rename; DalamudPackager already names it latest.zip
+          fail_on_unmatched_files: true

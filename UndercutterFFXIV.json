@@ -1,0 +1,14 @@
+{
+  "Name": "Market Assistant",
+  "Author": "Market Assistant Dev",
+  "Punchline": "A ToS-compliant FFXIV market trading assistant with Universalis integration.",
+  "Description": "Track your market listings, find flip opportunities, monitor prices via Universalis, and receive sell signals for active flips. No automation — all actions are manual.",
+  "Changelog": "Initial release.",
+  "Tags": ["market", "trading", "economy", "universalis"],
+  "CategoryTags": ["General"],
+  "InternalName": "UndercutterFFXIV",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 9,
+  "IconUrl": "",
+  "RepoUrl": ""
+}
