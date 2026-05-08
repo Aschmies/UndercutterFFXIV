@@ -64,6 +64,7 @@ namespace UndercutterFFXIV.Models
         public double SaleVelocityPerDay { get; init; }
         public int SalesCount24h { get; init; }
         public int UnitsSold24h { get; init; }
+        public uint HomeWorldCurrentQtyListing { get; init; }
         public bool PotentialBotSellerPattern { get; init; }
         public int SafeBuyQty { get; init; }
         public DateTime ScannedUtc { get; init; }

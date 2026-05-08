@@ -544,6 +544,11 @@ namespace UndercutterFFXIV.Services
                 return null;
 
             var botPattern = DetectPotentialBotPattern(homeCandidate.HomeListings);
+            
+            // Calculate total quantity listed at home world's minimum price
+            var homeWorldCurrentQty = (uint)homeCandidate.HomeListings
+                .Where(l => l.PricePerUnit == homeCandidate.HomeLowestListingPrice)
+                .Sum(l => (long)Math.Max(0u, l.Quantity));
 
             return new ArbitrageOpportunity
             {
@@ -557,6 +562,7 @@ namespace UndercutterFFXIV.Services
                 SaleVelocityPerDay = homeCandidate.VelocityPerDay,
                 SalesCount24h = homeCandidate.SalesCount24h,
                 UnitsSold24h = homeCandidate.UnitsSold24h,
+                HomeWorldCurrentQtyListing = homeWorldCurrentQty,
                 PotentialBotSellerPattern = botPattern,
                 SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(homeCandidate.VelocityPerDay, botPattern),
                 ScannedUtc = DateTime.UtcNow
