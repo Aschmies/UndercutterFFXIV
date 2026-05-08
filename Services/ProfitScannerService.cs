@@ -300,7 +300,8 @@ namespace UndercutterFFXIV.Services
 
                 scanInProgress = true;
                 scanProcessedItems = 0;
-                scanTotalItems = itemsToScan.Count;
+                // Two major passes (home-filter + DC-evaluation) so progress remains meaningful throughout.
+                scanTotalItems = itemsToScan.Count * 2;
                 lastResults = new List<ArbitrageOpportunity>();
             }
 
@@ -336,15 +337,23 @@ namespace UndercutterFFXIV.Services
 
                 foreach (var item in itemsToScan)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                    if (!homeSnapshots.TryGetValue(item.ItemId, out var home))
-                        continue;
+                        if (!homeSnapshots.TryGetValue(item.ItemId, out var home))
+                            continue;
 
-                    if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, out var candidate))
-                        continue;
+                        if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, out var candidate))
+                            continue;
 
-                    homeCandidatesByItemId[item.ItemId] = candidate;
+                        homeCandidatesByItemId[item.ItemId] = candidate;
+                    }
+                    finally
+                    {
+                        lock (cacheLock)
+                            scanProcessedItems++;
+                    }
                 }
                 homeFilterSw.Stop();
 
@@ -658,6 +667,24 @@ namespace UndercutterFFXIV.Services
                             RequiredLevel = (int)row.LevelEquip,
                             ItemLevel = (int)row.LevelItem.RowId
                         };
+
+                        if (item.IsGear)
+                        {
+                            // Defensive correction in case upstream sheet mapping swaps these in a future API update.
+                            if (item.RequiredLevel > 100 && item.ItemLevel > 0 && item.ItemLevel <= 100)
+                            {
+                                var correctedRequired = item.ItemLevel;
+                                var correctedItemLevel = item.RequiredLevel;
+                                item = new ItemLookup
+                                {
+                                    ItemId = item.ItemId,
+                                    Name = item.Name,
+                                    IsGear = true,
+                                    RequiredLevel = correctedRequired,
+                                    ItemLevel = correctedItemLevel
+                                };
+                            }
+                        }
 
                         loaded.Add(item);
 
