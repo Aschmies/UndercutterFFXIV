@@ -203,7 +203,44 @@ namespace UndercutterFFXIV.Services
         private List<ItemLookup> GetConsumableItems()
         {
             EnsureItemCacheLoaded();
-            return consumableItemCache?.ToList() ?? new List<ItemLookup>();
+            if (consumableItemCache == null || consumableItemCache.Count == 0)
+                return new List<ItemLookup>();
+
+            // Limit to top 250 consumables to avoid excessive API batches (~100 requests for 9000+ items)
+            // while still covering potions, food, materials, and common crafting ingredients
+            const int consumableLimit = 250;
+            if (consumableItemCache.Count <= consumableLimit)
+                return consumableItemCache.ToList();
+
+            // Sample the consumables list across its range to get diverse items
+            var step = consumableItemCache.Count / (double)consumableLimit;
+            var sample = new List<ItemLookup>(consumableLimit);
+            var seen = new HashSet<uint>();
+
+            for (var index = 0; index < consumableLimit; index++)
+            {
+                var sourceIndex = Math.Min(consumableItemCache.Count - 1, (int)Math.Floor(index * step));
+                var item = consumableItemCache[sourceIndex];
+                if (!seen.Add(item.ItemId))
+                    continue;
+
+                sample.Add(item);
+            }
+
+            if (sample.Count < consumableLimit)
+            {
+                foreach (var item in consumableItemCache)
+                {
+                    if (!seen.Add(item.ItemId))
+                        continue;
+
+                    sample.Add(item);
+                    if (sample.Count >= consumableLimit)
+                        break;
+                }
+            }
+
+            return sample;
         }
 
         private List<ItemLookup> GetHighVelocityItems(double minVelocity)
