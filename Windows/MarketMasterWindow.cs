@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui;
+﻿using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 using System;
 using System.Collections.Generic;
@@ -13,13 +13,7 @@ namespace UndercutterFFXIV.Windows
 {
     public sealed class MarketMasterWindow : Window, IDisposable
     {
-        private enum MainTab
-        {
-            Dashboard,
-            Scanner,
-            Inventory,
-            Settings
-        }
+        private enum MainTab { Dashboard, Scanner, Inventory, Settings }
 
         private readonly MarketAssistantPlugin plugin;
         private readonly ProfitScannerService scanner;
@@ -29,6 +23,7 @@ namespace UndercutterFFXIV.Windows
         private string itemSearchQuery = string.Empty;
         private List<ItemLookup> searchResults = new();
         private List<ArbitrageOpportunity> latestResults = new();
+        private List<WatchedItem> cachedWatchlist = new();
         private uint inventorySelectedItemId;
         private uint inventorySuggestedPrice;
         private bool scanRunning;
@@ -40,7 +35,6 @@ namespace UndercutterFFXIV.Windows
             this.plugin = plugin;
             this.scanner = scanner;
             this.config = plugin.Configuration;
-
             Size = new Vector2(1120, 700);
             SizeCondition = ImGuiCond.FirstUseEver;
         }
@@ -65,21 +59,21 @@ namespace UndercutterFFXIV.Windows
 
             ImGui.SameLine();
 
+            // EndChild is called unconditionally so ImGui stack stays clean even if the tab throws
             ImGui.BeginChild("##content", new Vector2(0, -1), false);
-            switch (selectedTab)
+            try
             {
-                case MainTab.Dashboard:
-                    DrawDashboardTab();
-                    break;
-                case MainTab.Scanner:
-                    DrawScannerTab();
-                    break;
-                case MainTab.Inventory:
-                    DrawInventoryTab();
-                    break;
-                case MainTab.Settings:
-                    DrawSettingsTab();
-                    break;
+                switch (selectedTab)
+                {
+                    case MainTab.Dashboard:  DrawDashboardTab();  break;
+                    case MainTab.Scanner:    DrawScannerTab();    break;
+                    case MainTab.Inventory:  DrawInventoryTab();  break;
+                    case MainTab.Settings:   DrawSettingsTab();   break;
+                }
+            }
+            catch (Exception ex)
+            {
+                ImGui.TextColored(new Vector4(1f, 0.3f, 0.3f, 1f), $"Tab error: {ex.Message}");
             }
             ImGui.EndChild();
         }
@@ -89,17 +83,15 @@ namespace UndercutterFFXIV.Windows
             var health = scanner.GetApiHealth();
             var color = health.SafeZone switch
             {
-                "Green" => new Vector4(0.30f, 0.95f, 0.35f, 1f),
+                "Green"  => new Vector4(0.30f, 0.95f, 0.35f, 1f),
                 "Yellow" => new Vector4(0.95f, 0.85f, 0.25f, 1f),
-                _ => new Vector4(0.95f, 0.35f, 0.35f, 1f)
+                _        => new Vector4(0.95f, 0.35f, 0.35f, 1f)
             };
-
             ImGui.Text("Market Master Pro");
             ImGui.SameLine();
             ImGui.TextDisabled($"Home: {config.WorldName} | DC: {config.DataCenterName}");
             ImGui.SameLine();
             ImGui.TextColored(color, $"Safe Zone: {health.SafeZone}");
-
             ImGui.TextDisabled($"API avg latency: {health.AverageLatencyMs:F0} ms | error rate: {health.ErrorRate:P0}");
         }
 
@@ -109,8 +101,8 @@ namespace UndercutterFFXIV.Windows
             var series = scanner.GetProfitSeries(30);
             if (series.Count > 1)
             {
-                var min = series.Min(s => s.TotalNetProfit);
-                var max = series.Max(s => s.TotalNetProfit);
+                var min  = series.Min(s => s.TotalNetProfit);
+                var max  = series.Max(s => s.TotalNetProfit);
                 var last = series.Last().TotalNetProfit;
                 ImGui.Text($"30d min/max net: {min:N0} / {max:N0} gil");
                 ImGui.Text($"Latest daily net snapshot: {last:N0} gil");
@@ -119,25 +111,22 @@ namespace UndercutterFFXIV.Windows
             {
                 ImGui.TextDisabled("No historical scan data yet.");
             }
-
             ImGui.Spacing();
             ImGui.Separator();
             ImGui.Text("Latest Opportunities");
-
             latestResults = scanner.GetLastResults().Take(40).ToList();
             if (latestResults.Count == 0)
             {
                 ImGui.TextDisabled("Run a scan from the Scanner tab to populate opportunities.");
                 return;
             }
-
             DrawOpportunityTable(latestResults, "##dashOppTable", 7);
         }
 
         private void DrawScannerTab()
         {
             ImGui.Text("Profit Scanner");
-            ImGui.TextDisabled("Cross-checks Home World min price against Data Centre low price with tax and velocity filters.");
+            ImGui.TextDisabled("Cross-checks Home World min price against DC low price with tax and velocity filters.");
             ImGui.Spacing();
 
             ImGui.SetNextItemWidth(380);
@@ -145,126 +134,130 @@ namespace UndercutterFFXIV.Windows
             ImGui.SameLine();
             if (ImGui.Button("Find Items"))
                 searchResults = scanner.SearchItems(itemSearchQuery, 100).ToList();
-
             ImGui.SameLine();
             if (ImGui.Button("Run Scan") && !scanRunning)
                 _ = RunScanAsync();
-
+            ImGui.SameLine();
+            if (ImGui.Button("Refresh List"))
+                RefreshWatchlist();
             ImGui.SameLine();
             ImGui.TextDisabled(scannerStatus);
 
             ImGui.Spacing();
             ImGui.Separator();
 
-            if (ImGui.BeginChild("##scannerLeft", new Vector2(430, 0), true))
-            {
-                ImGui.Text("Search Results");
-                ImGui.Separator();
-
-                if (ImGui.BeginTable("##searchTable", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY, new Vector2(0, 260)))
-                {
-                    ImGui.TableSetupColumn("Name");
-                    ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.WidthFixed, 70);
-                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 90);
-                    ImGui.TableHeadersRow();
-
-                    foreach (var item in searchResults)
-                    {
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn();
-                        ImGui.TextUnformatted(item.Name);
-                        ImGui.TableNextColumn();
-                        ImGui.Text(item.ItemId.ToString());
-                        ImGui.TableNextColumn();
-                        if (ImGui.SmallButton($"Watch##watch{item.ItemId}"))
-                            scanner.AddWatchItem(item);
-                    }
-
-                    ImGui.EndTable();
-                }
-
-                ImGui.Spacing();
-                ImGui.Text("Watchlist");
-                ImGui.Separator();
-
-                var watchlist = scanner.GetWatchlist();
-                if (ImGui.BeginTable("##watchTable", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY, new Vector2(0, 220)))
-                {
-                    ImGui.TableSetupColumn("Name");
-                    ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.WidthFixed, 70);
-                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 90);
-                    ImGui.TableHeadersRow();
-
-                    foreach (var watched in watchlist)
-                    {
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn();
-                        ImGui.TextUnformatted(watched.Name);
-                        ImGui.TableNextColumn();
-                        ImGui.Text(watched.ItemId.ToString());
-                        ImGui.TableNextColumn();
-                        if (ImGui.SmallButton($"Remove##remove{watched.ItemId}"))
-                            scanner.RemoveWatchItem(watched.ItemId);
-                    }
-
-                    ImGui.EndTable();
-                }
-            }
+            // Left panel — always close EndChild even if content throws
+            ImGui.BeginChild("##scannerLeft", new Vector2(430, 0), true);
+            try { DrawScannerLeftPanel(); }
+            catch (Exception ex) { ImGui.TextColored(new Vector4(1f, 0.3f, 0.3f, 1f), $"Error: {ex.Message}"); }
             ImGui.EndChild();
 
             ImGui.SameLine();
 
-            if (ImGui.BeginChild("##scannerRight", new Vector2(0, 0), true))
-            {
-                ImGui.Text("Opportunities");
-                ImGui.Separator();
-
-                latestResults = scanner.GetLastResults().ToList();
-                if (latestResults.Count == 0)
-                    ImGui.TextDisabled("No opportunities yet.");
-                else
-                    DrawOpportunityTable(latestResults, "##scannerOppTable", 9);
-            }
+            // Right panel
+            ImGui.BeginChild("##scannerRight", new Vector2(0, 0), true);
+            try { DrawScannerRightPanel(); }
+            catch (Exception ex) { ImGui.TextColored(new Vector4(1f, 0.3f, 0.3f, 1f), $"Error: {ex.Message}"); }
             ImGui.EndChild();
+        }
+
+        private void DrawScannerLeftPanel()
+        {
+            ImGui.Text("Search Results");
+            ImGui.Separator();
+            if (ImGui.BeginTable("##searchTable", 3,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                new Vector2(0, 260)))
+            {
+                ImGui.TableSetupColumn("Name");
+                ImGui.TableSetupColumn("ID",     ImGuiTableColumnFlags.WidthFixed, 70);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableHeadersRow();
+                foreach (var item in searchResults)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn(); ImGui.TextUnformatted(item.Name);
+                    ImGui.TableNextColumn(); ImGui.Text(item.ItemId.ToString());
+                    ImGui.TableNextColumn();
+                    if (ImGui.SmallButton($"Watch##w{item.ItemId}"))
+                    {
+                        scanner.AddWatchItem(item);
+                        RefreshWatchlist();
+                    }
+                }
+                ImGui.EndTable();
+            }
+
+            ImGui.Spacing();
+            ImGui.Text("Watchlist");
+            ImGui.Separator();
+            if (ImGui.BeginTable("##watchTable", 3,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                new Vector2(0, 220)))
+            {
+                ImGui.TableSetupColumn("Name");
+                ImGui.TableSetupColumn("ID",     ImGuiTableColumnFlags.WidthFixed, 70);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableHeadersRow();
+                foreach (var watched in cachedWatchlist)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn(); ImGui.TextUnformatted(watched.Name);
+                    ImGui.TableNextColumn(); ImGui.Text(watched.ItemId.ToString());
+                    ImGui.TableNextColumn();
+                    if (ImGui.SmallButton($"Remove##r{watched.ItemId}"))
+                    {
+                        scanner.RemoveWatchItem(watched.ItemId);
+                        RefreshWatchlist();
+                    }
+                }
+                ImGui.EndTable();
+            }
+        }
+
+        private void DrawScannerRightPanel()
+        {
+            ImGui.Text("Opportunities");
+            ImGui.Separator();
+            latestResults = scanner.GetLastResults().ToList();
+            if (latestResults.Count == 0)
+                ImGui.TextDisabled("No opportunities yet. Add items to the watchlist and click Run Scan.");
+            else
+                DrawOpportunityTable(latestResults, "##scannerOppTable", 9);
         }
 
         private void DrawInventoryTab()
         {
             ImGui.Text("Manual Price Helper");
-            ImGui.TextDisabled("Manual-only workflow: fetch floor price and copy suggested undercut price.");
-
-            var watch = scanner.GetWatchlist();
-            if (watch.Count == 0)
+            ImGui.TextDisabled("Fetch the current Home World floor and copy a suggested undercut price.");
+            if (cachedWatchlist.Count == 0)
             {
                 ImGui.Spacing();
-                ImGui.TextDisabled("Add items to watchlist in Scanner first.");
+                ImGui.TextDisabled("Add items to the watchlist in the Scanner tab first.");
                 return;
             }
-
-            var labels = watch.Select(w => $"{w.Name} ({w.ItemId})").ToArray();
+            var labels = cachedWatchlist.Select(w => $"{w.Name} ({w.ItemId})").ToArray();
             var selectedIndex = 0;
             if (inventorySelectedItemId != 0)
             {
-                selectedIndex = watch.ToList().FindIndex(w => w.ItemId == inventorySelectedItemId);
-                if (selectedIndex < 0) selectedIndex = 0;
+                var idx = cachedWatchlist.FindIndex(w => w.ItemId == inventorySelectedItemId);
+                if (idx >= 0) selectedIndex = idx;
             }
-
             if (ImGui.Combo("Tracked item", ref selectedIndex, labels, labels.Length))
-                inventorySelectedItemId = watch[selectedIndex].ItemId;
-            else if (inventorySelectedItemId == 0)
-                inventorySelectedItemId = watch[0].ItemId;
+                inventorySelectedItemId = cachedWatchlist[selectedIndex].ItemId;
+            else if (inventorySelectedItemId == 0 && cachedWatchlist.Count > 0)
+                inventorySelectedItemId = cachedWatchlist[0].ItemId;
 
             ImGui.Spacing();
             if (ImGui.Button("Fetch Current Home Floor"))
                 _ = RefreshSuggestedPriceAsync(inventorySelectedItemId);
-
             ImGui.SameLine();
             if (inventorySuggestedPrice > 0 && ImGui.Button("Copy Suggested Price"))
                 ImGui.SetClipboardText(inventorySuggestedPrice.ToString());
-
             ImGui.Spacing();
             if (inventorySuggestedPrice > 0)
-                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), $"Suggested listing price: {inventorySuggestedPrice:N0} gil");
+                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f),
+                    $"Suggested listing price: {inventorySuggestedPrice:N0} gil");
             else
                 ImGui.TextDisabled("No suggestion yet. Fetch floor first.");
         }
@@ -331,68 +324,56 @@ namespace UndercutterFFXIV.Windows
             }
         }
 
-        private void DrawOpportunityTable(List<ArbitrageOpportunity> opportunities, string tableId, int visibleColumns)
+        private void DrawOpportunityTable(List<ArbitrageOpportunity> opportunities,
+            string tableId, int visibleColumns)
         {
-            // Column count includes the always-visible Safe Qty column; visibleColumns drives optional extras
-        var columnCount = Math.Max(visibleColumns, 7);
-        if (!ImGui.BeginTable(tableId, columnCount, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY, new Vector2(0, 0)))
+            var columnCount = Math.Max(visibleColumns, 7);
+            if (!ImGui.BeginTable(tableId, columnCount,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                new Vector2(0, 0)))
                 return;
 
             ImGui.TableSetupColumn("Item");
-            ImGui.TableSetupColumn("Home Min", ImGuiTableColumnFlags.WidthFixed, 92);
-            ImGui.TableSetupColumn("DC Low", ImGuiTableColumnFlags.WidthFixed, 92);
-            ImGui.TableSetupColumn("Net", ImGuiTableColumnFlags.WidthFixed, 92);
-            ImGui.TableSetupColumn("Profit %", ImGuiTableColumnFlags.WidthFixed, 82);
+            ImGui.TableSetupColumn("Home Min",  ImGuiTableColumnFlags.WidthFixed, 92);
+            ImGui.TableSetupColumn("DC Low",    ImGuiTableColumnFlags.WidthFixed, 92);
+            ImGui.TableSetupColumn("Net",       ImGuiTableColumnFlags.WidthFixed, 92);
+            ImGui.TableSetupColumn("Profit %",  ImGuiTableColumnFlags.WidthFixed, 82);
             ImGui.TableSetupColumn("Sales/day", ImGuiTableColumnFlags.WidthFixed, 82);
-            ImGui.TableSetupColumn("Safe Qty", ImGuiTableColumnFlags.WidthFixed, 72);
+            ImGui.TableSetupColumn("Safe Qty",  ImGuiTableColumnFlags.WidthFixed, 72);
             if (visibleColumns >= 8)
                 ImGui.TableSetupColumn("Bot Flag", ImGuiTableColumnFlags.WidthFixed, 72);
             if (visibleColumns >= 9)
-                ImGui.TableSetupColumn("Scanned", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Scanned",  ImGuiTableColumnFlags.WidthFixed, 90);
             ImGui.TableHeadersRow();
 
-            foreach (var opportunity in opportunities)
+            foreach (var opp in opportunities)
             {
                 ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                ImGui.TextUnformatted(opportunity.ItemName);
+                ImGui.TableNextColumn(); ImGui.TextUnformatted(opp.ItemName);
+                ImGui.TableNextColumn(); ImGui.Text(opp.HomeWorldMinPrice.ToString("N0"));
+                ImGui.TableNextColumn(); ImGui.Text(opp.DataCenterLowestPrice.ToString("N0"));
 
                 ImGui.TableNextColumn();
-                ImGui.Text(opportunity.HomeWorldMinPrice.ToString("N0"));
-
-                ImGui.TableNextColumn();
-                ImGui.Text(opportunity.DataCenterLowestPrice.ToString("N0"));
-
-                ImGui.TableNextColumn();
-                var netColor = opportunity.NetProfitPerUnit >= 0
+                var netColor = opp.NetProfitPerUnit >= 0
                     ? new Vector4(0.4f, 1f, 0.4f, 1f)
                     : new Vector4(1f, 0.4f, 0.4f, 1f);
-                ImGui.TextColored(netColor, opportunity.NetProfitPerUnit.ToString("N0"));
+                ImGui.TextColored(netColor, opp.NetProfitPerUnit.ToString("N0"));
+
+                ImGui.TableNextColumn(); ImGui.Text($"{opp.ProfitPercent:F1}%");
+                ImGui.TableNextColumn(); ImGui.Text($"{opp.SaleVelocityPerDay:F1}");
 
                 ImGui.TableNextColumn();
-                ImGui.Text($"{opportunity.ProfitPercent:F1}%");
-
-                ImGui.TableNextColumn();
-                ImGui.Text($"{opportunity.SaleVelocityPerDay:F1}");
-
-                // Safe Qty — always shown (col 7+)
-                ImGui.TableNextColumn();
-                var qtyColor = opportunity.SafeBuyQty == 3
+                var qtyColor = opp.SafeBuyQty >= 3
                     ? new Vector4(0.4f, 1f, 0.4f, 1f)
-                    : opportunity.SafeBuyQty == 2
+                    : opp.SafeBuyQty == 2
                         ? new Vector4(0.95f, 0.85f, 0.25f, 1f)
                         : new Vector4(0.95f, 0.5f, 0.2f, 1f);
-                ImGui.TextColored(qtyColor, opportunity.SafeBuyQty.ToString());
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip(
-                        "Safe units to buy at once.\n" +
-                        "Spread across many items rather than\n" +
-                        "buying large stacks of a single item.");
+                ImGui.TextColored(qtyColor, opp.SafeBuyQty.ToString());
 
                 if (visibleColumns >= 8)
                 {
                     ImGui.TableNextColumn();
-                    if (opportunity.PotentialBotSellerPattern)
+                    if (opp.PotentialBotSellerPattern)
                         ImGui.TextColored(new Vector4(0.95f, 0.5f, 0.2f, 1f), "Yes");
                     else
                         ImGui.TextDisabled("No");
@@ -401,11 +382,17 @@ namespace UndercutterFFXIV.Windows
                 if (visibleColumns >= 9)
                 {
                     ImGui.TableNextColumn();
-                    ImGui.Text(opportunity.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
+                    ImGui.Text(opp.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
                 }
             }
 
             ImGui.EndTable();
+        }
+
+        private void RefreshWatchlist()
+        {
+            try { cachedWatchlist = scanner.GetWatchlist().ToList(); }
+            catch { cachedWatchlist = new List<WatchedItem>(); }
         }
 
         private async Task RunScanAsync()
@@ -439,7 +426,6 @@ namespace UndercutterFFXIV.Windows
                     inventorySuggestedPrice = 0;
                     return;
                 }
-
                 inventorySuggestedPrice = floor > config.UndercutAmount
                     ? floor - config.UndercutAmount
                     : floor;
@@ -455,20 +441,16 @@ namespace UndercutterFFXIV.Windows
         {
             if (selectedTab == tab)
             {
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.25f, 0.4f, 0.8f, 0.7f));
+                ImGui.PushStyleColor(ImGuiCol.Button,        new Vector4(0.25f, 0.4f, 0.8f, 0.7f));
                 ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.25f, 0.4f, 0.8f, 0.8f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.25f, 0.4f, 0.8f, 0.9f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonActive,  new Vector4(0.25f, 0.4f, 0.8f, 0.9f));
             }
-
             if (ImGui.Button(label, new Vector2(-1, 36)))
                 selectedTab = tab;
-
             if (selectedTab == tab)
                 ImGui.PopStyleColor(3);
         }
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
     }
 }
