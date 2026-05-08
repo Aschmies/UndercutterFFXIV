@@ -13,6 +13,8 @@ namespace UndercutterFFXIV.Windows
 {
     public sealed class MarketMasterWindow : Window, IDisposable
     {
+        private const int InventoryLookupConcurrency = 6;
+
         private enum MainTab { Dashboard, Scanner, Inventory, Settings }
 
         private readonly MarketAssistantPlugin plugin;
@@ -127,6 +129,8 @@ namespace UndercutterFFXIV.Windows
             ImGui.TextDisabled($"Home: {config.WorldName} | DC: {config.DataCenterName}");
             ImGui.SameLine();
             ImGui.TextColored(color, $"Safe Zone: {health.SafeZone}");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Green/Yellow/Red health based on API latency, error rate, and recent successful requests.");
             ImGui.TextDisabled($"API avg latency: {health.AverageLatencyMs:F0} ms | error rate: {health.ErrorRate:P0}");
         }
 
@@ -181,6 +185,8 @@ namespace UndercutterFFXIV.Windows
             ImGui.SameLine();
             if (ImGui.Button("Run Scan") && !scanRunning)
                 _ = RunScanAsync();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Starts a manual scan using the selected mode and updates opportunities while it runs.");
             ImGui.SameLine();
             ImGui.BeginDisabled(!scanRunning || currentScanCancellation == null);
             if (ImGui.Button("Cancel Scan"))
@@ -188,10 +194,14 @@ namespace UndercutterFFXIV.Windows
                 scannerStatus = "Cancelling scan...";
                 currentScanCancellation?.Cancel();
             }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Stops the current manual scan.");
             ImGui.EndDisabled();
             ImGui.SameLine();
             if (ImGui.Button("Refresh List"))
                 RefreshWatchlist();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Refreshes watchlist and live retainer-tracked items.");
             ImGui.SameLine();
             ImGui.TextDisabled(scannerStatus);
 
@@ -206,10 +216,16 @@ namespace UndercutterFFXIV.Windows
             ImGui.Spacing();
             ImGui.Text("Scan Mode:");
             ImGui.RadioButton("Watchlist Only", ref currentScanMode, ScanMode.Watchlist);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans only your watched items (manual + auto-tracked live listings).");
             ImGui.SameLine();
             ImGui.RadioButton("Top Items", ref currentScanMode, ScanMode.TopItems);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans watched items plus a broad sample of marketable items.");
             ImGui.SameLine();
             ImGui.RadioButton("High Velocity", ref currentScanMode, ScanMode.VelocityThreshold);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Scans watched items plus a broader market-focused sample.");
             
             if (currentScanMode == ScanMode.TopItems)
             {
@@ -313,7 +329,7 @@ namespace UndercutterFFXIV.Windows
                 _ = RefreshInventoryGridAsync();
 
             ImGui.Text("Retainer Listings");
-            ImGui.TextDisabled("Live rows for items currently selling. Suggested undercut is based on Home World floor.");
+            ImGui.TextDisabled("Live rows for items currently selling. Suggested price is based on Home World lowest listed price.");
 
             var retainerWindowDetected = config.EnableRetainerAutoFill && retainerPriceService.IsRetainerSellWindowOpen();
 
@@ -331,6 +347,8 @@ namespace UndercutterFFXIV.Windows
             ImGui.Spacing();
             if (ImGui.Button("Refresh Inventory Grid") && !inventoryGridRefreshInProgress)
                 _ = RefreshInventoryGridAsync();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Re-reads active retainer listings and recalculates suggested prices.");
             ImGui.SameLine();
             if (inventoryGridRefreshInProgress)
                 ImGui.TextDisabled("Refreshing...");
@@ -346,7 +364,7 @@ namespace UndercutterFFXIV.Windows
             {
                 ImGui.TableSetupColumn("Item Name");
                 ImGui.TableSetupColumn("Current Sell Price", ImGuiTableColumnFlags.WidthFixed, 130);
-                ImGui.TableSetupColumn("Undercut Price", ImGuiTableColumnFlags.WidthFixed, 120);
+                ImGui.TableSetupColumn("Suggested New Price", ImGuiTableColumnFlags.WidthFixed, 135);
                 ImGui.TableSetupColumn("Person undercutting me?", ImGuiTableColumnFlags.WidthFixed, 170);
                 ImGui.TableSetupColumn("Copy new price", ImGuiTableColumnFlags.WidthFixed, 110);
                 ImGui.TableSetupColumn("Auto fill?", ImGuiTableColumnFlags.WidthFixed, 90);
@@ -378,6 +396,8 @@ namespace UndercutterFFXIV.Windows
                         lastCopyTime = DateTime.Now;
                         inventoryStatus = $"Copied {row.UndercutPrice:N0} for {row.ItemName}";
                     }
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Copies the suggested new price to your clipboard.");
                     ImGui.EndDisabled();
 
                     ImGui.TableNextColumn();
@@ -388,6 +408,8 @@ namespace UndercutterFFXIV.Windows
                             lastAutoFillTime = DateTime.Now;
                         inventoryStatus = status;
                     }
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Auto-fills the retainer sell-price input (requires retainer sell window open).");
                     ImGui.EndDisabled();
                 }
 
@@ -413,6 +435,8 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextDisabled(inventoryStatus);
             
             ImGui.TextDisabled("(Paste the price into your Retainer's listing interface)");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Copy always works. Auto-fill is optional and only activates when the in-game sell window is detected.");
             if (config.EnableRetainerAutoFill && !retainerWindowDetected)
                 ImGui.TextDisabled("Open the Retainer sell price window to enable auto-fill.");
         }
@@ -427,25 +451,34 @@ namespace UndercutterFFXIV.Windows
             try
             {
                 var listings = retainerPriceService.GetCurrentSellingListings();
-                var rows = new List<InventoryGridRow>(listings.Count);
-
-                foreach (var listing in listings)
+                using var throttler = new SemaphoreSlim(InventoryLookupConcurrency, InventoryLookupConcurrency);
+                var rowTasks = listings.Select(async listing =>
                 {
-                    var floor = await scanner.FetchHomeFloorPriceAsync(listing.ItemId, CancellationToken.None);
-                    var suggested = floor > 0
-                        ? (floor > config.UndercutAmount ? floor - config.UndercutAmount : floor)
-                        : listing.CurrentPrice;
-
-                    rows.Add(new InventoryGridRow
+                    await throttler.WaitAsync();
+                    try
                     {
-                        SlotIndex = listing.SlotIndex,
-                        ItemId = listing.ItemId,
-                        ItemName = listing.Name,
-                        CurrentSellPrice = listing.CurrentPrice,
-                        UndercutPrice = suggested,
-                        IsUndercut = floor > 0 && floor < listing.CurrentPrice
-                    });
-                }
+                        var lowestListedPrice = await scanner.FetchHomeFloorPriceAsync(listing.ItemId, CancellationToken.None);
+                        var suggested = lowestListedPrice > 0
+                            ? (lowestListedPrice > config.UndercutAmount ? lowestListedPrice - config.UndercutAmount : lowestListedPrice)
+                            : listing.CurrentPrice;
+
+                        return new InventoryGridRow
+                        {
+                            SlotIndex = listing.SlotIndex,
+                            ItemId = listing.ItemId,
+                            ItemName = listing.Name,
+                            CurrentSellPrice = listing.CurrentPrice,
+                            UndercutPrice = suggested,
+                            IsUndercut = lowestListedPrice > 0 && lowestListedPrice < listing.CurrentPrice
+                        };
+                    }
+                    finally
+                    {
+                        throttler.Release();
+                    }
+                }).ToList();
+
+                var rows = (await Task.WhenAll(rowTasks)).ToList();
 
                 inventoryRows = rows
                     .OrderByDescending(row => row.IsUndercut)
@@ -546,7 +579,7 @@ namespace UndercutterFFXIV.Windows
                 return;
 
             ImGui.TableSetupColumn("Item");
-            ImGui.TableSetupColumn("Home Min",   ImGuiTableColumnFlags.WidthFixed, 92);
+            ImGui.TableSetupColumn("Home Lowest",   ImGuiTableColumnFlags.WidthFixed, 100);
             ImGui.TableSetupColumn("Buy From",   ImGuiTableColumnFlags.WidthFixed, 110);
             ImGui.TableSetupColumn("Buy Price",  ImGuiTableColumnFlags.WidthFixed, 92);
             ImGui.TableSetupColumn("Net",       ImGuiTableColumnFlags.WidthFixed, 92);
