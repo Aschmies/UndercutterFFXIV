@@ -1,26 +1,28 @@
-{
-  "Author": "Market Assistant Dev",
-  "Name": "Market Assistant",
-  "Punchline": "A ToS-compliant FFXIV market trading assistant with Universalis integration.",
-  "Description": "Tracks market prices via Universalis, alerts you when undercut, suggests optimal sell timing with a 4-signal algorithm, and tracks flip profitability — all without requiring you to visit the market board.",
-  "Changelog": "",
-  "InternalName": "UndercutterFFXIV",
-  "AssemblyVersion": "1.0.0.0",
-  "TestingAssemblyVersion": "1.0.0.0",
-  "IsHide": false,
-  "IsTestingExclusive": false,
-  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
-  "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
-  "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
-  "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
-  "DalamudApiLevel": 9,
-  "ApplicableVersion": "any",
-  "Tags": [
-    "market",
-    "economy",
-    "gil",
-    "universalis"
-  ],
-  "LastUpdated": 1778256084,
-  "DownloadCount": 0
-}
+[
+  {
+    "Author": "Market Assistant Dev",
+    "Name": "Market Assistant",
+    "Punchline": "A ToS-compliant FFXIV market trading assistant with Universalis integration.",
+    "Description": "Tracks market prices via Universalis, alerts you when undercut, suggests optimal sell timing with a 4-signal algorithm, and tracks flip profitability — all without requiring you to visit the market board.",
+    "Changelog": "",
+    "InternalName": "UndercutterFFXIV",
+    "AssemblyVersion": "1.0.0.0",
+    "TestingAssemblyVersion": "1.0.0.0",
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+    "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
+    "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/latest/download/latest.zip",
+    "DalamudApiLevel": 9,
+    "ApplicableVersion": "any",
+    "Tags": [
+      "market",
+      "economy",
+      "gil",
+      "universalis"
+    ],
+    "LastUpdated": 1778256286,
+    "DownloadCount": 0
+  }
+]
