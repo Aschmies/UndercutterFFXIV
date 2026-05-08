@@ -76,12 +76,15 @@ jobs:
       - name: Update pluginmaster.json
         shell: pwsh
         run: |
-          $entry = Get-Content pluginmaster.json -Raw | ConvertFrom-Json | Select-Object -First 1
-          $entry.AssemblyVersion        = "${{ steps.version.outputs.FULL }}"
-          $entry.TestingAssemblyVersion = "${{ steps.version.outputs.FULL }}"
-          $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-          # Use -InputObject (not pipeline) so ConvertTo-Json sees an array, not individual elements.
-          ConvertTo-Json -InputObject @($entry) -Depth 10 | Set-Content pluginmaster.json -Encoding UTF8
+          # Regex-replace values in-place to avoid PowerShell ConvertTo-Json
+          # stripping the outer array brackets.
+          $content = Get-Content pluginmaster.json -Raw
+          $ver  = "${{ steps.version.outputs.FULL }}"
+          $ts   = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $content = $content -replace '("AssemblyVersion"\s*:\s*)"[^"]*"',        "`$1`"$ver`""
+          $content = $content -replace '("TestingAssemblyVersion"\s*:\s*)"[^"]*"', "`$1`"$ver`""
+          $content = $content -replace '("LastUpdated"\s*:\s*)\d+',                "`$1$ts"
+          [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $content, [System.Text.Encoding]::UTF8)
 
       - name: Commit updated pluginmaster.json
         shell: pwsh
