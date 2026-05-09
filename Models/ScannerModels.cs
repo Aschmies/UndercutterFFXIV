@@ -229,6 +229,8 @@ namespace UndercutterFFXIV.Models
         public double UnitBuyPrice { get; init; }
         public double AllocatedCostGil { get; init; }
         public double ProjectedNetGil { get; init; }
+        public string BuyFromWorld { get; init; } = string.Empty;
+        public double ProfitPercent { get; init; }
     }
 
     public sealed class QueueSimulationResult

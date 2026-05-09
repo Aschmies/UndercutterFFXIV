@@ -551,17 +551,21 @@ namespace UndercutterFFXIV.Windows
                     ImGui.SetTooltip("Distributes daily capital across top opportunities using confidence, velocity, trust, and profit quality.");
                 ImGui.TextDisabled($"Budget used: {capitalSimulation.TotalCostGil:N0} / {config.MaxCapitalPerDayGil:N0} | Allocated items: {capitalSimulation.ItemCount}");
 
-                if (ImGui.BeginTable("##capitalPlan", 5,
+                if (ImGui.BeginTable("##capitalPlan", 7,
                     ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                     new Vector2(0, 140)))
                 {
                     ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableSetupColumn("Priority", ImGuiTableColumnFlags.WidthFixed, 70);
-                    ImGui.TableSetupColumn("Qty", ImGuiTableColumnFlags.WidthFixed, 50);
+                    ImGui.TableSetupColumn("Buy From", ImGuiTableColumnFlags.WidthFixed, 75);
+                    ImGui.TableSetupColumn("Profit %", ImGuiTableColumnFlags.WidthFixed, 65);
+                    ImGui.TableSetupColumn("Priority", ImGuiTableColumnFlags.WidthFixed, 62);
+                    ImGui.TableSetupColumn("Qty", ImGuiTableColumnFlags.WidthFixed, 40);
                     ImGui.TableSetupColumn("Cost", ImGuiTableColumnFlags.WidthFixed, 85);
                     ImGui.TableSetupColumn("Net", ImGuiTableColumnFlags.WidthFixed, 85);
                     ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
                     ImGui.TableNextColumn(); ImGui.TableHeader("Item");
+                    ImGui.TableNextColumn(); ImGui.TableHeader("Buy From");
+                    ImGui.TableNextColumn(); ImGui.TableHeader("Profit %");
                     ImGui.TableNextColumn();
                     ImGui.TableHeader("Priority");
                     if (ImGui.IsItemHovered())
@@ -574,6 +578,8 @@ namespace UndercutterFFXIV.Windows
                     {
                         ImGui.TableNextRow();
                         ImGui.TableNextColumn(); ImGui.TextUnformatted(allocation.ItemName);
+                        ImGui.TableNextColumn(); ImGui.TextUnformatted(string.IsNullOrWhiteSpace(allocation.BuyFromWorld) ? config.DataCenterName : allocation.BuyFromWorld);
+                        ImGui.TableNextColumn(); ImGui.Text($"{allocation.ProfitPercent:F1}%");
                         ImGui.TableNextColumn();
                         ImGui.Text($"{allocation.Score:F0}");
                         if (ImGui.IsItemHovered())
