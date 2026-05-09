@@ -45,11 +45,32 @@ namespace ArmouryCleaner.Windows
 
         public void Dispose() { }
 
+        private const string NoneSentinel = "__none__";
+
         public override void Draw()
         {
+            DrawInstructions();
+            ImGui.Separator();
             DrawFilters();
             ImGui.Separator();
             DrawResults();
+        }
+
+        private static void DrawInstructions()
+        {
+            if (ImGui.TreeNode("How to use Armoury Cleaner##instructions"))
+            {
+                ImGui.TextWrapped("1. Select which jobs' gear you want to clear out using the checkboxes below. Leave all ticked to include gear for every job.");
+                ImGui.TextWrapped("2. Set the Equip Level Range to target a tier of gear — e.g. 1 to 90 to catch all levelling gear below endgame.");
+                ImGui.TextWrapped("3. Optionally enable Filter by iLvl to restrict by item level instead of (or in addition to) equip level.");
+                ImGui.TextWrapped("4. Skip High Quality keeps your HQ pieces safe. Skip Untradeable hides bound/unsellable gear.");
+                ImGui.TextWrapped("5. Click Scan Armoury. Matched items appear in the table below.");
+                ImGui.TextWrapped("6. Click Move next to individual items, or Move All to send everything to your regular inventory.");
+                ImGui.TextWrapped("7. Open your inventory in-game, right-click each item, and choose Discard.");
+                ImGui.Spacing();
+                ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "Example: to clean out all tank gear from Shadowbringers, check only Tank jobs and set level range 71–80, then Scan.");
+                ImGui.TreePop();
+            }
         }
 
         private void DrawFilters()
@@ -64,15 +85,7 @@ namespace ArmouryCleaner.Windows
             ImGui.SameLine();
             if (ImGui.SmallButton("None##selectNone"))
             {
-                Config.SelectedJobs = CombatJobs.Select(j => j.Abbr).ToList();
-                // "None" = all unchecked → invert: store the full set but all disabled means nothing passes
-                // Convention: empty = all jobs. To block all, store a sentinel that matches nothing.
-                // Simpler: store all abbrs so every job is in the "keep" list — user must check at least one.
-                // Re-think: just clear it to "all" again; "None" just means reset to a known state.
-                // Actually: SelectedJobs.Count > 0 means filter to those jobs. If user clicks None, leave as-is
-                // but visually uncheck all by setting SelectedJobs to a single nonsense value.
-                // Cleanest: never have "none match" — just set to all so it resets gracefully.
-                Config.SelectedJobs = [];
+                Config.SelectedJobs = [NoneSentinel];
                 Config.Save();
             }
 
@@ -97,7 +110,7 @@ namespace ArmouryCleaner.Windows
             // Level range
             var minLvl = Config.MinLevel;
             var maxLvl = Config.MaxLevel;
-            ImGui.SetNextItemWidth(70);
+            ImGui.SetNextItemWidth(100);
             if (ImGui.InputInt("##minlvl", ref minLvl, 1, 5))
             {
                 Config.MinLevel = Math.Clamp(minLvl, 1, 100);
@@ -106,7 +119,7 @@ namespace ArmouryCleaner.Windows
             ImGui.SameLine();
             ImGui.TextUnformatted("–");
             ImGui.SameLine();
-            ImGui.SetNextItemWidth(70);
+            ImGui.SetNextItemWidth(100);
             if (ImGui.InputInt("##maxlvl", ref maxLvl, 1, 5))
             {
                 Config.MaxLevel = Math.Clamp(maxLvl, 1, 100);
@@ -127,7 +140,7 @@ namespace ArmouryCleaner.Windows
                 ImGui.SameLine();
                 var minIlvl = Config.MinIlvl;
                 var maxIlvl = Config.MaxIlvl;
-                ImGui.SetNextItemWidth(70);
+                ImGui.SetNextItemWidth(110);
                 if (ImGui.InputInt("##minilvl", ref minIlvl, 1, 10))
                 {
                     Config.MinIlvl = Math.Clamp(minIlvl, 0, 9999);
@@ -136,7 +149,7 @@ namespace ArmouryCleaner.Windows
                 ImGui.SameLine();
                 ImGui.TextUnformatted("–");
                 ImGui.SameLine();
-                ImGui.SetNextItemWidth(70);
+                ImGui.SetNextItemWidth(110);
                 if (ImGui.InputInt("##maxilvl", ref maxIlvl, 1, 10))
                 {
                     Config.MaxIlvl = Math.Clamp(maxIlvl, 0, 9999);
@@ -266,9 +279,13 @@ namespace ArmouryCleaner.Windows
 
         private void ToggleJob(string abbr, bool nowEnabled)
         {
-            if (Config.SelectedJobs.Count == 0)
+            // If in "none" state (sentinel), clear it so we start from an empty explicit selection
+            if (Config.SelectedJobs.Count == 1 && Config.SelectedJobs[0] == NoneSentinel)
+                Config.SelectedJobs.Clear();
+
+            if (Config.SelectedJobs.Count == 0 && !nowEnabled)
             {
-                // Was "all" → deselecting this one: populate with all except abbr
+                // Was "all" state → unchecking one: populate with every job except this one
                 Config.SelectedJobs = CombatJobs.Select(j => j.Abbr).Where(a => a != abbr).ToList();
             }
             else if (nowEnabled)
@@ -279,9 +296,12 @@ namespace ArmouryCleaner.Windows
             else
             {
                 Config.SelectedJobs.Remove(abbr);
+                // Prevent empty list being read as "all" when the last job is unchecked
+                if (Config.SelectedJobs.Count == 0)
+                    Config.SelectedJobs.Add(NoneSentinel);
             }
 
-            // Collapse back to "all" if every job is now selected
+            // Collapse back to "all" (empty) if every real job is now explicitly selected
             if (Config.SelectedJobs.Count == CombatJobs.Length)
                 Config.SelectedJobs.Clear();
 
