@@ -1,6 +1,7 @@
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
@@ -40,45 +41,74 @@ namespace UndercutterFFXIV.Services
                 return Array.Empty<RetainerSaleListing>();
 
             var container = inventoryManager->GetInventoryContainer(InventoryType.RetainerMarket);
-            if (container == null || !container->IsLoaded || container->Size <= 0)
-                return Array.Empty<RetainerSaleListing>();
-
             var itemSheet = dataManager.GetExcelSheet<Item>();
             if (itemSheet == null)
                 return Array.Empty<RetainerSaleListing>();
 
-            var results = new List<RetainerSaleListing>();
-
-            for (var index = 0; index < container->Size; index++)
+            if (container != null && container->Size > 0)
             {
-                var slot = inventoryManager->GetInventorySlot(InventoryType.RetainerMarket, index);
-                if (slot == null || slot->IsEmpty())
+                var loadedResults = new List<RetainerSaleListing>();
+
+                for (var index = 0; index < container->Size; index++)
+                {
+                    var slot = inventoryManager->GetInventorySlot(InventoryType.RetainerMarket, index);
+                    if (slot == null || slot->IsEmpty())
+                        continue;
+
+                    var itemId = slot->GetBaseItemId();
+                    if (itemId == 0)
+                        continue;
+
+                    var row = itemSheet.GetRow(itemId);
+                    var name = row.Name.ToString();
+                    if (string.IsNullOrWhiteSpace(name))
+                        continue;
+
+                    var rawPrice = inventoryManager->GetRetainerMarketPrice((short)index);
+                    var currentPrice = rawPrice > uint.MaxValue ? uint.MaxValue : (uint)rawPrice;
+
+                    loadedResults.Add(new RetainerSaleListing
+                    {
+                        SlotIndex = index,
+                        ItemId = itemId,
+                        Name = name,
+                        CurrentPrice = currentPrice
+                    });
+                }
+
+                return loadedResults
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.SlotIndex)
+                    .ToList();
+            }
+
+            var cachedResults = new List<RetainerSaleListing>();
+
+            foreach (var row in itemSheet)
+            {
+                if (row.RowId == 0)
                     continue;
 
-                var itemId = slot->GetBaseItemId();
-                if (itemId == 0)
+                var count = inventoryManager->GetItemCountInContainer(row.RowId, InventoryType.RetainerMarket, false, 0);
+                if (count <= 0)
                     continue;
 
-                var row = itemSheet.GetRow(itemId);
                 var name = row.Name.ToString();
                 if (string.IsNullOrWhiteSpace(name))
                     continue;
 
-                var rawPrice = inventoryManager->GetRetainerMarketPrice((short)index);
-                var currentPrice = rawPrice > uint.MaxValue ? uint.MaxValue : (uint)rawPrice;
-
-                results.Add(new RetainerSaleListing
+                cachedResults.Add(new RetainerSaleListing
                 {
-                    SlotIndex = index,
-                    ItemId = itemId,
+                    SlotIndex = cachedResults.Count,
+                    ItemId = row.RowId,
                     Name = name,
-                    CurrentPrice = currentPrice
+                    CurrentPrice = 0
                 });
             }
 
-            return results
+            return cachedResults
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(item => item.SlotIndex)
+                .ThenBy(item => item.ItemId)
                 .ToList();
         }
 
@@ -89,16 +119,28 @@ namespace UndercutterFFXIV.Services
         }
 
         public bool TryAutoFillPrice(uint price, out string status)
+            => TryAutoSelectAdjustPriceAndFill(price, out status);
+
+        public bool TryAutoSelectAdjustPriceAndFill(uint price, out string status)
         {
             var addon = gameGui.GetAddonByName<AddonRetainerSell>("RetainerSell");
-            if (addon == null || addon->AskingPrice == null)
+            if (addon == null)
+            {
+                status = "Retainer sell window not detected";
+                return false;
+            }
+
+            if (addon->ComparePrices != null)
+                addon->ComparePrices->ReceiveEvent(AtkEventType.ButtonClick, 0, null, null);
+
+            if (addon->AskingPrice == null)
             {
                 status = "Retainer price field not detected";
                 return false;
             }
 
             addon->AskingPrice->InnerSetValue((int)price, true, true);
-            status = "Auto-filled price into retainer window";
+            status = "Selected adjust price and auto-filled retainer window";
             return true;
         }
     }

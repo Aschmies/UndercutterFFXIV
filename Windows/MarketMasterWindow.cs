@@ -516,7 +516,7 @@ namespace UndercutterFFXIV.Windows
                         inventoryStatus = status;
                     }
                     if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip("Auto-fills the retainer sell-price input (requires retainer sell window open).");
+                        ImGui.SetTooltip("Clicks Adjust Price first, then fills the retainer sell-price input (requires retainer sell window open).");
                     ImGui.EndDisabled();
                 }
 
@@ -533,7 +533,7 @@ namespace UndercutterFFXIV.Windows
             }
             else if (timeSinceAutoFill.TotalSeconds < 2)
             {
-                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "✓ Auto-filled retainer price!");
+                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "✓ Selected adjust price and filled retainer price!");
             }
             else
                 ImGui.TextDisabled("Use Copy or Fill on any row to apply a new price.");
