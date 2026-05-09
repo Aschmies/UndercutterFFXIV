@@ -556,17 +556,28 @@ namespace UndercutterFFXIV.Windows
                     new Vector2(0, 140)))
                 {
                     ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableSetupColumn("Score", ImGuiTableColumnFlags.WidthFixed, 70);
+                    ImGui.TableSetupColumn("Priority", ImGuiTableColumnFlags.WidthFixed, 70);
                     ImGui.TableSetupColumn("Qty", ImGuiTableColumnFlags.WidthFixed, 50);
                     ImGui.TableSetupColumn("Cost", ImGuiTableColumnFlags.WidthFixed, 85);
                     ImGui.TableSetupColumn("Net", ImGuiTableColumnFlags.WidthFixed, 85);
-                    ImGui.TableHeadersRow();
+                    ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+                    ImGui.TableNextColumn(); ImGui.TableHeader("Item");
+                    ImGui.TableNextColumn();
+                    ImGui.TableHeader("Priority");
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Capital allocation priority — higher = allocated first.\n\nCombines Confidence with velocity, profit margin, trust, and market regime:\n  Confidence x velocity factor (0.4-1.3x) x profit factor (0.35-1.4x)\n  x trust (1.0 OK / 0.55 Low Trust) x regime penalty.\n\nUnlike Confidence which only measures data reliability,\nPriority also weights how liquid and profitable the market is.");
+                    ImGui.TableNextColumn(); ImGui.TableHeader("Qty");
+                    ImGui.TableNextColumn(); ImGui.TableHeader("Cost");
+                    ImGui.TableNextColumn(); ImGui.TableHeader("Net");
 
                     foreach (var allocation in capitalPlan.Take(14))
                     {
                         ImGui.TableNextRow();
                         ImGui.TableNextColumn(); ImGui.TextUnformatted(allocation.ItemName);
-                        ImGui.TableNextColumn(); ImGui.Text($"{allocation.Score:F0}");
+                        ImGui.TableNextColumn();
+                        ImGui.Text($"{allocation.Score:F0}");
+                        if (ImGui.IsItemHovered())
+                            ImGui.SetTooltip($"Allocation priority: {allocation.Score:F0}\nFormula: Confidence x velocity factor x profit factor x trust x regime penalties.\nSee the Confidence column in Flip Opportunities for the data quality breakdown.");
                         ImGui.TableNextColumn(); ImGui.Text(allocation.AllocatedQty.ToString("N0"));
                         ImGui.TableNextColumn(); ImGui.Text(allocation.AllocatedCostGil.ToString("N0"));
                         ImGui.TableNextColumn();
@@ -1683,7 +1694,22 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TableSetupColumn("Rec Qty",    ImGuiTableColumnFlags.WidthFixed, 70);
                 ImGui.TableSetupColumn("Batch Net",  ImGuiTableColumnFlags.WidthFixed, 90);
                 ImGui.TableSetupColumn("Time",       ImGuiTableColumnFlags.WidthFixed, 70);
-                ImGui.TableHeadersRow();
+                ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+                ImGui.TableNextColumn(); ImGui.TableHeader("Item");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Buy From");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Buy @");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Net Profit");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Profit %");
+                ImGui.TableNextColumn();
+                ImGui.TableHeader("Confidence");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Data reliability score (0-100).\n\n  Velocity     0-40 pts  how fast the item sells per day\n  Spread       0-20 pts  how tight the gap between cheapest listings is\n  Depth        0-15 pts  how distributed supply is (not one whale)\n  Volatility   0-15 pts  how stable the price history is\n  Freshness    0-10 pts  how recent the market data is\n  Profit bonus 0-10 pts  extra weight for high-margin items\n  API penalty  0/-5/-15  deducted for Universalis health issues\n\nGreen >= 70  |  Yellow >= 45  |  Red < 45\n\nMeasures data quality only. The Priority column (Capital Allocator)\nalso weights velocity, profit, trust, and market regime.");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Trust");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Data Age");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Vel/Day");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Rec Qty");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Batch Net");
+                ImGui.TableNextColumn(); ImGui.TableHeader("Time");
 
                 foreach (var opp in displayedOpportunities)
                 {
@@ -1709,7 +1735,7 @@ namespace UndercutterFFXIV.Windows
                             : new Vector4(1f, 0.45f, 0.45f, 1f);
                     ImGui.TextColored(confidenceColor, $"{opp.ConfidenceScore:F0}");
                     if (opportunityDetailedTooltips && ImGui.IsItemHovered())
-                        ImGui.SetTooltip($"Confidence score components:\nVelocity {opp.ScoreVelocity:F1}\nSpread {opp.ScoreSpread:F1}\nDepth {opp.ScoreDepth:F1}\nVolatility {opp.ScoreVolatility:F1}\nFreshness {opp.ScoreFreshness:F1}\nAPI penalty {opp.ScoreApiPenalty:F1}");
+                        ImGui.SetTooltip($"Data reliability: {opp.ConfidenceScore:F0} / 100\n\n  Velocity     {opp.ScoreVelocity:F1} / 40  - sales per day\n  Spread       {opp.ScoreSpread:F1} / 20  - price gap tightness between cheapest listings\n  Depth        {opp.ScoreDepth:F1} / 15  - supply not concentrated in one seller\n  Volatility   {opp.ScoreVolatility:F1} / 15  - price stability\n  Freshness    {opp.ScoreFreshness:F1} / 10  - data recency\n  API penalty -{opp.ScoreApiPenalty:F1}       - Universalis health deduction");
 
                     ImGui.TableNextColumn();
                     var trustColor = opp.IsLowTrust ? new Vector4(1f, 0.55f, 0.35f, 1f) : new Vector4(0.45f, 1f, 0.45f, 1f);
@@ -1753,7 +1779,30 @@ namespace UndercutterFFXIV.Windows
             ImGui.TableSetupColumn("Route",         ImGuiTableColumnFlags.WidthFixed, 170);
             ImGui.TableSetupColumn("Feedback",      ImGuiTableColumnFlags.WidthFixed, 95);
             ImGui.TableSetupColumn("Time",          ImGuiTableColumnFlags.WidthFixed, 70);
-            ImGui.TableHeadersRow();
+            ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+            ImGui.TableNextColumn(); ImGui.TableHeader("Item");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Owned");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Home Qty");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Price");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Buy From");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Buy @");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Net Profit");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Profit %");
+            ImGui.TableNextColumn();
+            ImGui.TableHeader("Confidence");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Data reliability score (0-100).\n\n  Velocity     0-40 pts  how fast the item sells per day\n  Spread       0-20 pts  how tight the gap between cheapest listings is\n  Depth        0-15 pts  how distributed supply is (not one whale)\n  Volatility   0-15 pts  how stable the price history is\n  Freshness    0-10 pts  how recent the market data is\n  Profit bonus 0-10 pts  extra weight for high-margin items\n  API penalty  0/-5/-15  deducted for Universalis health issues\n\nGreen >= 70  |  Yellow >= 45  |  Red < 45\n\nMeasures data quality only. The Priority column (Capital Allocator)\nalso weights velocity, profit, trust, and market regime.");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Trust");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Data Age");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Regime");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Sold 24h");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Vel/Day");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Rec Qty");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Batch Net");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Travel Plan");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Route");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Feedback");
+            ImGui.TableNextColumn(); ImGui.TableHeader("Time");
 
             foreach (var opp in displayedOpportunities)
             {
@@ -1796,7 +1845,7 @@ namespace UndercutterFFXIV.Windows
                         : new Vector4(1f, 0.45f, 0.45f, 1f);
                 ImGui.TextColored(confidenceColor, $"{opp.ConfidenceScore:F0}");
                 if (opportunityDetailedTooltips && ImGui.IsItemHovered())
-                    ImGui.SetTooltip($"Confidence score components:\nVelocity {opp.ScoreVelocity:F1}\nSpread {opp.ScoreSpread:F1}\nDepth {opp.ScoreDepth:F1}\nVolatility {opp.ScoreVolatility:F1}\nFreshness {opp.ScoreFreshness:F1}\nAPI penalty {opp.ScoreApiPenalty:F1}");
+                    ImGui.SetTooltip($"Data reliability: {opp.ConfidenceScore:F0} / 100\n\n  Velocity     {opp.ScoreVelocity:F1} / 40  - sales per day\n  Spread       {opp.ScoreSpread:F1} / 20  - price gap tightness between cheapest listings\n  Depth        {opp.ScoreDepth:F1} / 15  - supply not concentrated in one seller\n  Volatility   {opp.ScoreVolatility:F1} / 15  - price stability\n  Freshness    {opp.ScoreFreshness:F1} / 10  - data recency\n  API penalty -{opp.ScoreApiPenalty:F1}       - Universalis health deduction");
                 ImGui.TableNextColumn();
                 var trustColor = opp.IsLowTrust ? new Vector4(1f, 0.55f, 0.35f, 1f) : new Vector4(0.45f, 1f, 0.45f, 1f);
                 ImGui.TextColored(trustColor, opp.IsLowTrust ? "Low" : "OK");
