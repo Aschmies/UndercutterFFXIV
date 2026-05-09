@@ -877,8 +877,8 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TableSetupColumn("Price Action", ImGuiTableColumnFlags.WidthFixed, 140);
                 ImGui.TableSetupColumn("Trust", ImGuiTableColumnFlags.WidthFixed, 130);
                 ImGui.TableSetupColumn("Copy new price", ImGuiTableColumnFlags.WidthFixed, 110);
-                ImGui.TableSetupColumn("Fill", ImGuiTableColumnFlags.WidthFixed, 55);
-                ImGui.TableSetupColumn("Auto / Queue", ImGuiTableColumnFlags.WidthFixed, 120);
+                ImGui.TableSetupColumn("Auto fill?", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Queue", ImGuiTableColumnFlags.WidthFixed, 85);
                 ImGui.TableHeadersRow();
 
                 foreach (var row in inventoryRows)
@@ -947,30 +947,11 @@ namespace UndercutterFFXIV.Windows
                         inventoryStatus = status;
                     }
                     if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip("Fills price when Adjust Price dialog is already open.");
+                        ImGui.SetTooltip("Clicks Adjust Price first, then fills the retainer sell-price input. Blocked automatically if guardrails or trust checks fail.");
                     ImGui.EndDisabled();
 
                     ImGui.TableNextColumn();
                     var queueKey = BuildRepriceKey(row.SlotIndex, row.ItemId);
-                    // Per-row Auto button: single-queues this item and immediately starts the state machine
-                    var canAuto = config.EnableRetainerAutoFill && retainerListDetected && row.UndercutPrice > 0 && row.GuardrailPass && !(config.EnableDegradedModeActionBlock && row.IsLowTrust);
-                    ImGui.BeginDisabled(!canAuto || autoQueueRunning);
-                    if (ImGui.SmallButton($"Auto##auto{row.SlotIndex}_{row.ItemId}"))
-                    {
-                        // Put only this item in the queue and start immediately
-                        repriceQueue.Clear();
-                        repriceQueueKeys.Clear();
-                        repriceQueue.Add(row);
-                        repriceQueueKeys.Add(queueKey);
-                        autoQueueRunning = true;
-                        autoQueueState = AutoQueueState.Idle;
-                        autoQueueLastAction = DateTime.MinValue;
-                        inventoryStatus = $"Auto: starting for {row.ItemName}…";
-                    }
-                    if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip("Opens Adjust Price for this item, fills the suggested price, and confirms — automatically.\nRequires the retainer Markets window to be open.");
-                    ImGui.EndDisabled();
-                    ImGui.SameLine();
                     if (repriceQueueKeys.Contains(queueKey))
                     {
                         if (ImGui.SmallButton($"Unqueue##queue{row.SlotIndex}_{row.ItemId}"))
