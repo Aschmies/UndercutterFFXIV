@@ -11,6 +11,7 @@
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+    "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
       "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.26/latest.zip",
       "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.26/latest.zip",
       "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.26/latest.zip",
@@ -23,7 +24,7 @@
       "gil",
       "universalis"
     ],
-    "LastUpdated": 1778274199,
+    "LastUpdated": 1778295365,
     "DownloadCount": 0
   }
 ]

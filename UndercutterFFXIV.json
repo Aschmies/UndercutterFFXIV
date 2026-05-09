@@ -9,6 +9,6 @@
   "InternalName": "UndercutterFFXIV",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
-  "IconUrl": "",
-  "RepoUrl": ""
+  "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
+  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV"
 }
