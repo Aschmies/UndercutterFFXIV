@@ -3,13 +3,13 @@
   "Author": "Market Assistant Dev",
   "Punchline": "Manual market intelligence and arbitrage scanner for FFXIV.",
   "Description": "Analyze market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual.",
-  "Changelog": "v1.1.43: Reverted per-row Auto button; restored original Auto fill? and Queue columns.",
+  "Changelog": "v1.1.44: Removed queue system; Fill button now enabled whenever Adjust Price window is open (no longer requires pre-detection); -1 gil undercut logic unchanged.",
   "Tags": ["market", "trading", "economy", "universalis"],
   "CategoryTags": ["General"],
   "InternalName": "UndercutterFFXIV",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
-  "AssemblyVersion": "1.1.43.0",
+  "AssemblyVersion": "1.1.44.0",
   "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
   "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV"
 }

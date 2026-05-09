@@ -32,8 +32,6 @@ namespace UndercutterFFXIV.Windows
         private List<WatchedItem> cachedWatchlist = new();
         private List<WatchlistSuggestion> cachedSuggestions = new();
         private List<InventoryGridRow> inventoryRows = new();
-        private readonly List<InventoryGridRow> repriceQueue = new();
-        private readonly HashSet<string> repriceQueueKeys = new(StringComparer.Ordinal);
         private bool scanRunning;
         private CancellationTokenSource? currentScanCancellation;
         private string scannerStatus = "Idle";
@@ -57,11 +55,6 @@ namespace UndercutterFFXIV.Windows
         private bool pendingSettingsSave;
         private string inventoryStatus = string.Empty;
 
-        // Auto-queue run state machine
-        private enum AutoQueueState { Idle, ClickingItem, Filling, Confirming }
-        private AutoQueueState autoQueueState = AutoQueueState.Idle;
-        private DateTime autoQueueLastAction = DateTime.MinValue;
-        private bool autoQueueRunning;
         private string historyStatus = string.Empty;
         private string dashboardStatus = string.Empty;
         private string exclusionStatus = string.Empty;
@@ -265,7 +258,7 @@ namespace UndercutterFFXIV.Windows
                     var reportPath = scanner.ExportSessionReport(
                         MarketAssistantPlugin.PluginInterface.GetPluginConfigDirectory(),
                         latestResults,
-                        repriceQueue.Count,
+                        0,
                         inventoryRows.Count);
                     dashboardStatus = $"Exported report: {reportPath}";
                 }
@@ -689,76 +682,7 @@ namespace UndercutterFFXIV.Windows
             ImGui.TextDisabled("Live rows for items currently selling. Suggested price is based on Home World lowest listed price.");
 
             var retainerWindowDetected = config.EnableRetainerAutoFill && retainerPriceService.IsRetainerSellWindowOpen();
-            var retainerListDetected   = config.EnableRetainerAutoFill && retainerPriceService.IsRetainerSellListOpen();
-            var retainerAnyDetected    = retainerWindowDetected || retainerListDetected;
-
-            // ── Auto-queue state machine ──────────────────────────────────────────────
-            if (autoQueueRunning && config.EnableRetainerAutoFill)
-            {
-                var elapsed = (DateTime.Now - autoQueueLastAction).TotalMilliseconds;
-                switch (autoQueueState)
-                {
-                    case AutoQueueState.Idle:
-                        if (repriceQueue.Count > 0 && retainerListDetected)
-                        {
-                            var next = repriceQueue[0];
-                            retainerPriceService.TryClickRetainerSellListItem(next.SlotIndex, out _);
-                            inventoryStatus = $"Auto: opening Adjust Price for {next.ItemName}…";
-                            autoQueueState = AutoQueueState.ClickingItem;
-                            autoQueueLastAction = DateTime.Now;
-                        }
-                        else if (repriceQueue.Count == 0)
-                        {
-                            autoQueueRunning = false;
-                            inventoryStatus = "Auto-queue complete.";
-                        }
-                        break;
-
-                    case AutoQueueState.ClickingItem:
-                        // Wait up to 1.5 s for the Adjust Price dialog to appear
-                        if (retainerWindowDetected)
-                        {
-                            autoQueueState = AutoQueueState.Filling;
-                            autoQueueLastAction = DateTime.Now;
-                        }
-                        else if (elapsed > 1500)
-                        {
-                            // Didn't open — skip this item and try next
-                            inventoryStatus = $"Auto: could not open Adjust Price, skipping {repriceQueue[0].ItemName}";
-                            repriceQueue.RemoveAt(0);
-                            autoQueueState = AutoQueueState.Idle;
-                            autoQueueLastAction = DateTime.Now;
-                        }
-                        break;
-
-                    case AutoQueueState.Filling:
-                        if (elapsed > 150) // small delay so the dialog finishes rendering
-                        {
-                            var next = repriceQueue[0];
-                            retainerPriceService.TryAutoFillPrice(next.UndercutPrice, out var fillStatus);
-                            lastAutoFillTime = DateTime.Now;
-                            inventoryStatus = $"Auto: filled {next.ItemName} → {next.UndercutPrice:N0} gil";
-                            autoQueueState = AutoQueueState.Confirming;
-                            autoQueueLastAction = DateTime.Now;
-                        }
-                        break;
-
-                    case AutoQueueState.Confirming:
-                        if (elapsed > 250) // small delay after fill before confirming
-                        {
-                            retainerPriceService.TryConfirmAdjustPrice(out _);
-                            var next = repriceQueue[0];
-                            var key = BuildRepriceKey(next.SlotIndex, next.ItemId);
-                            repriceQueue.RemoveAt(0);
-                            repriceQueueKeys.Remove(key);
-                            inventoryStatus = $"Auto: confirmed {next.ItemName}. {repriceQueue.Count} left.";
-                            autoQueueState = AutoQueueState.Idle;
-                            autoQueueLastAction = DateTime.Now;
-                        }
-                        break;
-                }
-            }
-            // ─────────────────────────────────────────────────────────────────────────
+            var retainerAnyDetected    = retainerWindowDetected;
 
             if (config.EnableRetainerAutoFill)
             {
@@ -766,10 +690,8 @@ namespace UndercutterFFXIV.Windows
                     ? new Vector4(0.4f, 1f, 0.4f, 1f)
                     : new Vector4(0.95f, 0.75f, 0.25f, 1f);
                 var detectionText = retainerWindowDetected
-                    ? "Retainer window detected"
-                    : retainerListDetected
-                        ? "Retainer window detected"
-                        : "Retainer window not detected";
+                    ? "Adjust Price window detected"
+                    : "Adjust Price window not detected";
                 ImGui.TextColored(detectionColor, detectionText);
             }
 
@@ -783,89 +705,14 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextDisabled("Refreshing...");
 
             ImGui.Spacing();
-            ImGui.TextDisabled($"Queued reprices: {repriceQueue.Count}");
-            ImGui.SameLine();
-            ImGui.BeginDisabled(repriceQueue.Count == 0 || !(config.EnableRetainerAutoFill && retainerAnyDetected));
-            if (ImGui.Button("Apply Next Queue Fill"))
-            {
-                var next = repriceQueue[0];
-                if (retainerPriceService.TryAutoFillPrice(next.UndercutPrice, out var queueStatus))
-                    lastAutoFillTime = DateTime.Now;
 
-                inventoryStatus = $"{queueStatus} [{next.ItemName}]";
-                var key = BuildRepriceKey(next.SlotIndex, next.ItemId);
-                repriceQueue.RemoveAt(0);
-                repriceQueueKeys.Remove(key);
-            }
-            ImGui.EndDisabled();
-            ImGui.SameLine();
-
-            // ── Auto-run queue button ─────────────────────────────────────────────────
-            if (autoQueueRunning)
-            {
-                if (ImGui.Button("Stop Auto"))
-                {
-                    autoQueueRunning = false;
-                    autoQueueState = AutoQueueState.Idle;
-                    inventoryStatus = "Auto-queue stopped.";
-                }
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Stops the automatic queue processing.");
-            }
-            else
-            {
-                ImGui.BeginDisabled(repriceQueue.Count == 0 || !(config.EnableRetainerAutoFill && retainerListDetected));
-                if (ImGui.Button("Run Queue Auto"))
-                {
-                    autoQueueRunning = true;
-                    autoQueueState = AutoQueueState.Idle;
-                    autoQueueLastAction = DateTime.MinValue;
-                    inventoryStatus = "Auto-queue started…";
-                }
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Automatically opens each queued item's Adjust Price dialog, fills the suggested price, and confirms — one by one.\nRequires the retainer Markets window to be open.");
-                ImGui.EndDisabled();
-            }
-            ImGui.SameLine();
-            // ─────────────────────────────────────────────────────────────────────────
-            ImGui.BeginDisabled(repriceQueue.Count == 0);
-            if (ImGui.Button("Clear Queue"))
-            {
-                repriceQueue.Clear();
-                repriceQueueKeys.Clear();
-            }
-            ImGui.EndDisabled();
-            ImGui.SameLine();
-            if (ImGui.Button("Queue All Safe Items"))
-            {
-                foreach (var row in inventoryRows)
-                {
-                    if (!row.GuardrailPass || row.UndercutPrice == 0)
-                        continue;
-
-                    if (config.EnableDegradedModeActionBlock && row.IsLowTrust)
-                        continue;
-
-                    var key = BuildRepriceKey(row.SlotIndex, row.ItemId);
-                    if (repriceQueueKeys.Contains(key))
-                        continue;
-
-                    repriceQueue.Add(row);
-                    repriceQueueKeys.Add(key);
-                }
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Queues only rows that pass repricing guardrails and trust checks.");
-
-            var queueProjected = repriceQueue.Sum(row => row.EstimatedNetPerUnit);
-            ImGui.TextDisabled($"Queue projected net/unit total: {queueProjected:N0} gil");
 
             ImGui.Spacing();
             if (inventoryRows.Count == 0)
             {
                 ImGui.TextDisabled("No active retainer market listings detected. Open your retainer market inventory and refresh.");
             }
-            else if (ImGui.BeginTable("##inventoryGrid", 10,
+            else if (ImGui.BeginTable("##inventoryGrid", 9,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                 new Vector2(0, 360)))
             {
@@ -878,7 +725,6 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TableSetupColumn("Trust", ImGuiTableColumnFlags.WidthFixed, 130);
                 ImGui.TableSetupColumn("Copy new price", ImGuiTableColumnFlags.WidthFixed, 110);
                 ImGui.TableSetupColumn("Auto fill?", ImGuiTableColumnFlags.WidthFixed, 90);
-                ImGui.TableSetupColumn("Queue", ImGuiTableColumnFlags.WidthFixed, 85);
                 ImGui.TableHeadersRow();
 
                 foreach (var row in inventoryRows)
@@ -939,7 +785,7 @@ namespace UndercutterFFXIV.Windows
                     ImGui.EndDisabled();
 
                     ImGui.TableNextColumn();
-                    ImGui.BeginDisabled(!(config.EnableRetainerAutoFill && retainerWindowDetected && row.UndercutPrice > 0 && row.GuardrailPass && !(config.EnableDegradedModeActionBlock && row.IsLowTrust)));
+                    ImGui.BeginDisabled(!(config.EnableRetainerAutoFill && row.UndercutPrice > 0 && row.GuardrailPass && !(config.EnableDegradedModeActionBlock && row.IsLowTrust)));
                     if (ImGui.SmallButton($"Fill##fill{row.SlotIndex}_{row.ItemId}"))
                     {
                         if (retainerPriceService.TryAutoFillPrice(row.UndercutPrice, out var status))
@@ -950,28 +796,6 @@ namespace UndercutterFFXIV.Windows
                         ImGui.SetTooltip("Clicks Adjust Price first, then fills the retainer sell-price input. Blocked automatically if guardrails or trust checks fail.");
                     ImGui.EndDisabled();
 
-                    ImGui.TableNextColumn();
-                    var queueKey = BuildRepriceKey(row.SlotIndex, row.ItemId);
-                    if (repriceQueueKeys.Contains(queueKey))
-                    {
-                        if (ImGui.SmallButton($"Unqueue##queue{row.SlotIndex}_{row.ItemId}"))
-                        {
-                            repriceQueue.RemoveAll(item => item.SlotIndex == row.SlotIndex && item.ItemId == row.ItemId);
-                            repriceQueueKeys.Remove(queueKey);
-                        }
-                    }
-                    else
-                    {
-                        ImGui.BeginDisabled(row.UndercutPrice == 0 || !row.GuardrailPass || (config.EnableDegradedModeActionBlock && row.IsLowTrust));
-                        if (ImGui.SmallButton($"Queue##queue{row.SlotIndex}_{row.ItemId}"))
-                        {
-                            repriceQueue.Add(row);
-                            repriceQueueKeys.Add(queueKey);
-                        }
-                        if (ImGui.IsItemHovered() && !row.GuardrailPass)
-                            ImGui.SetTooltip(row.GuardrailReason);
-                        ImGui.EndDisabled();
-                    }
                 }
 
                 ImGui.EndTable();
@@ -998,8 +822,8 @@ namespace UndercutterFFXIV.Windows
             ImGui.TextDisabled("(Paste the price into your Retainer's listing interface)");
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Copy always works. Auto-fill is optional and only activates when the in-game sell window is detected.");
-            if (config.EnableRetainerAutoFill && !retainerAnyDetected)
-                ImGui.TextDisabled("Open your retainer's Markets window to enable auto-fill and Run Queue Auto.");
+            if (config.EnableRetainerAutoFill && !retainerWindowDetected)
+                ImGui.TextDisabled("Open Adjust Price from your retainer's Markets window to enable auto-fill.");
         }
 
         private void DrawHistoryTab()
