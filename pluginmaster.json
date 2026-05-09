@@ -4,17 +4,17 @@
     "Name": "Market Master Pro",
     "Punchline": "Manual market intelligence and arbitrage scanner for FFXIV.",
     "Description": "Analyzes market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual. Now includes real-time undercut notifications.",
-      "Changelog": "v1.1.26: Removed ID columns from Search Results and Watchlist, reduced Req Lv/iLvl widths, tightened Action columns, and expanded Name to fit item names more cleanly. All v1.1.25 features retained.",
+      "Changelog": "v1.1.27: Added dynamic content-aware table autosizing for Search Results, Watchlist, and Opportunities item columns. Fixed scanner progress reporting to update consistently through batch fetch/filter/eval phases. Improved undercut chat alerts with stronger highlighted formatting.",
     "InternalName": "UndercutterFFXIV",
-      "AssemblyVersion": "1.1.26.0",
-      "TestingAssemblyVersion": "1.1.26.0",
+      "AssemblyVersion": "1.1.27.0",
+      "TestingAssemblyVersion": "1.1.27.0",
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
     "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
-      "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.26/latest.zip",
-      "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.26/latest.zip",
-      "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.26/latest.zip",
+      "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.27/latest.zip",
+      "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.27/latest.zip",
+      "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.27/latest.zip",
     "DalamudApiLevel": 15,
     "ApplicableVersion": "any",
     "Tags": [
@@ -24,7 +24,7 @@
       "gil",
       "universalis"
     ],
-    "LastUpdated": 1778295365,
+    "LastUpdated": 1778296060,
     "DownloadCount": 0
   }
 ]

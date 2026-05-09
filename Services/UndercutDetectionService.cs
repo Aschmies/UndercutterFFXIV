@@ -92,8 +92,7 @@ namespace UndercutterFFXIV.Services
 
                     if (wasUndercut && shouldNotify)
                     {
-                        var message = $"⚠️ UNDERCUT: {listing.Name} - Your: {listing.CurrentPrice} → Market: {marketData.LowestPrice} (-{priceDiff} gil)";
-                        SendChatMessage(message);
+                        SendUndercutAlertMessage(listing.Name, listing.CurrentPrice, marketData.LowestPrice, priceDiff);
                         RecordNotification(listing.ItemId, listing.Name, marketData.LowestPrice);
                     }
                 }
@@ -138,13 +137,29 @@ namespace UndercutterFFXIV.Services
         {
             try
             {
-                // Use the Echo chat type to send a system message
                 chatGui.Print(message);
                 LoggingService.LogInfo($"Chat notification: {message}");
             }
             catch (Exception ex)
             {
                 LoggingService.LogError($"Failed to send chat message: {ex.Message}");
+            }
+        }
+
+        private void SendUndercutAlertMessage(string itemName, uint yourPrice, uint marketPrice, uint priceDiff)
+        {
+            var message = $"[MARKET MASTER] [UNDERCUT ALERT] {itemName} | Your: {yourPrice:N0} | Market: {marketPrice:N0} | Delta: -{priceDiff:N0} gil";
+
+            try
+            {
+                // PrintError is highlighted in Dalamud chat, making urgent undercut alerts stand out clearly.
+                chatGui.PrintError(message);
+                LoggingService.LogInfo($"Chat undercut alert: {message}");
+            }
+            catch (Exception ex)
+            {
+                LoggingService.LogError($"Failed to send highlighted undercut chat message: {ex.Message}");
+                SendChatMessage(message);
             }
         }
     }

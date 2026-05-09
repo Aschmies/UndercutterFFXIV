@@ -35,6 +35,7 @@ namespace UndercutterFFXIV.Services
         private bool scanInProgress;
         private int scanProcessedItems;
         private int scanTotalItems;
+        private int scanProgressPercent;
 
         private ScanMode currentScanMode = ScanMode.TopItems;
         private string? currentScanCategory;
@@ -116,10 +117,10 @@ namespace UndercutterFFXIV.Services
         public IReadOnlyList<(DateTime DateUtc, double TotalNetProfit)> GetProfitSeries(int days) =>
             database.GetDailyProfitSeries(days);
 
-        public (bool IsRunning, int Processed, int Total) GetScanProgress()
+        public (bool IsRunning, int Processed, int Total, int Percent) GetScanProgress()
         {
             lock (cacheLock)
-                return (scanInProgress, scanProcessedItems, scanTotalItems);
+            return (scanInProgress, scanProcessedItems, scanTotalItems, scanProgressPercent);
         }
 
         public void SetScanMode(ScanMode mode, string? categoryName = null, int topCount = 200)
@@ -346,8 +347,8 @@ namespace UndercutterFFXIV.Services
 
                 scanInProgress = true;
                 scanProcessedItems = 0;
-                // Track actual item count for display, but use separate smooth progress internally
                 scanTotalItems = itemsToScan.Count;
+                scanProgressPercent = 0;
                 lastResults = new List<ArbitrageOpportunity>();
             }
 
@@ -375,12 +376,15 @@ namespace UndercutterFFXIV.Services
                     .ToList();
 
                 // Phase 1: batch-fetch home world snapshots for all scan items.
-                var homeSnapshots = await universalis.GetMarketSnapshotsAsync(config.WorldName, itemIds, cancellationToken);
+                var homeSnapshots = await universalis.GetMarketSnapshotsAsync(
+                    config.WorldName,
+                    itemIds,
+                    cancellationToken,
+                    (processed, total) => UpdateScanProgressByPhase(processed, total, 0, 10));
                 homeFetchSw.Stop();
 
                 // Mark fetch completion at 10%
-                lock (cacheLock)
-                    scanProcessedItems = 10;
+                UpdateScanProgressPercent(10);
 
                 var homeFilterSw = Stopwatch.StartNew();
                 var homeCandidatesByItemId = new Dictionary<uint, HomeSnapshotCandidate>();
@@ -405,32 +409,28 @@ namespace UndercutterFFXIV.Services
                     {
                         itemsProcessedInHomeFilter++;
                         if (itemsProcessedInHomeFilter % homeFilterIncrementEvery == 0)
-                        {
-                            lock (cacheLock)
-                            {
-                                var estimatedProgress = 10 + (int)((itemsProcessedInHomeFilter / (double)itemsToScan.Count) * 30);
-                                scanProcessedItems = Math.Min(40, estimatedProgress);
-                            }
-                        }
+                            UpdateScanProgressByPhase(itemsProcessedInHomeFilter, itemsToScan.Count, 10, 40);
                     }
                 }
                 homeFilterSw.Stop();
 
                 // Mark filter completion at 40%
-                lock (cacheLock)
-                    scanProcessedItems = 40;
+                UpdateScanProgressPercent(40);
 
                 // Phase 2: batch-fetch DC snapshots only for home-eligible candidates.
                 var candidateIds = homeCandidatesByItemId.Keys.ToList();
                 var dcFetchSw = Stopwatch.StartNew();
                 var dcSnapshots = candidateIds.Count == 0
                     ? new Dictionary<uint, MarketSnapshot>()
-                    : await universalis.GetMarketSnapshotsAsync(config.DataCenterName, candidateIds, cancellationToken);
+                    : await universalis.GetMarketSnapshotsAsync(
+                        config.DataCenterName,
+                        candidateIds,
+                        cancellationToken,
+                        (processed, total) => UpdateScanProgressByPhase(processed, total, 40, 50));
                 dcFetchSw.Stop();
 
                 // Mark DC fetch completion at 50%
-                lock (cacheLock)
-                    scanProcessedItems = 50;
+                UpdateScanProgressPercent(50);
 
                 var evaluationSw = Stopwatch.StartNew();
                 var itemsProcessedInEval = 0;
@@ -470,13 +470,7 @@ namespace UndercutterFFXIV.Services
 
                         itemsProcessedInEval++;
                         if (itemsProcessedInEval % evalIncrementEvery == 0)
-                        {
-                            lock (cacheLock)
-                            {
-                                var estimatedProgress = 50 + (int)((itemsProcessedInEval / (double)itemsToScan.Count) * 50);
-                                scanProcessedItems = Math.Min(100, estimatedProgress);
-                            }
-                        }
+                            UpdateScanProgressByPhase(itemsProcessedInEval, itemsToScan.Count, 50, 100);
 
                         if (publishNow)
                         {
@@ -498,7 +492,8 @@ namespace UndercutterFFXIV.Services
                 lock (cacheLock)
                 {
                     lastResults = sorted;
-                    scanProcessedItems = 100; // Mark as complete
+                    scanProgressPercent = 100;
+                    scanProcessedItems = scanTotalItems;
                     lastScanTiming = new ScanTimingSnapshot
                     {
                         HomeFetchMs = homeFetchSw.ElapsedMilliseconds,
@@ -516,6 +511,44 @@ namespace UndercutterFFXIV.Services
             {
                 lock (cacheLock)
                     scanInProgress = false;
+            }
+        }
+
+        private void UpdateScanProgressByPhase(int phaseProcessed, int phaseTotal, int phaseStartPercent, int phaseEndPercent)
+        {
+            if (phaseTotal <= 0)
+            {
+                UpdateScanProgressPercent(phaseEndPercent);
+                return;
+            }
+
+            var boundedProcessed = Math.Min(Math.Max(phaseProcessed, 0), phaseTotal);
+            var phaseRatio = boundedProcessed / (double)phaseTotal;
+            var phasePercent = phaseStartPercent + (int)Math.Round((phaseEndPercent - phaseStartPercent) * phaseRatio);
+            UpdateScanProgressPercent(phasePercent);
+        }
+
+        private void UpdateScanProgressPercent(int percent)
+        {
+            lock (cacheLock)
+            {
+                var boundedPercent = Math.Min(Math.Max(percent, 0), 100);
+                scanProgressPercent = Math.Max(scanProgressPercent, boundedPercent);
+
+                if (scanTotalItems <= 0)
+                {
+                    scanProcessedItems = 0;
+                    return;
+                }
+
+                if (scanProgressPercent >= 100)
+                {
+                    scanProcessedItems = scanTotalItems;
+                    return;
+                }
+
+                var estimated = (int)Math.Ceiling((scanProgressPercent / 100.0) * scanTotalItems);
+                scanProcessedItems = Math.Min(scanTotalItems, Math.Max(scanProcessedItems, Math.Max(0, estimated)));
             }
         }
 

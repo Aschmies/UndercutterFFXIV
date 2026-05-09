@@ -31,14 +31,15 @@ namespace UndercutterFFXIV.Services
 
         public async Task<MarketSnapshot?> GetMarketSnapshotAsync(string scopeName, uint itemId, CancellationToken cancellationToken)
         {
-            var snapshots = await GetMarketSnapshotsAsync(scopeName, new[] { itemId }, cancellationToken);
+            var snapshots = await GetMarketSnapshotsAsync(scopeName, new[] { itemId }, cancellationToken, null);
             return snapshots.TryGetValue(itemId, out var snapshot) ? snapshot : null;
         }
 
         public async Task<Dictionary<uint, MarketSnapshot>> GetMarketSnapshotsAsync(
             string scopeName,
             IReadOnlyList<uint> itemIds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            Action<int, int>? progressCallback = null)
         {
             var normalizedScope = (scopeName ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(normalizedScope))
@@ -57,6 +58,7 @@ namespace UndercutterFFXIV.Services
                 .ToList();
 
             var allSnapshots = new Dictionary<uint, MarketSnapshot>(uniqueItemIds.Count);
+            var processedItems = 0;
             for (var index = 0; index < uniqueItemIds.Count; index += BatchSize)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -68,6 +70,9 @@ namespace UndercutterFFXIV.Services
 
                 foreach (var kvp in chunkSnapshots)
                     allSnapshots[kvp.Key] = kvp.Value;
+
+                processedItems += chunk.Count;
+                progressCallback?.Invoke(Math.Min(processedItems, uniqueItemIds.Count), uniqueItemIds.Count);
             }
 
             return allSnapshots;

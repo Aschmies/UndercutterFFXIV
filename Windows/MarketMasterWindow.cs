@@ -58,6 +58,30 @@ namespace UndercutterFFXIV.Windows
         private enum SortDirection { Ascending, Descending }
         private SortDirection opportunitySortDirection = SortDirection.Descending;
 
+        private static float CalculateColumnWidth(
+            IEnumerable<string> values,
+            string header,
+            float minWidth,
+            float maxWidth,
+            int sampleLimit = 120)
+        {
+            var width = ImGui.CalcTextSize(header).X + 24f;
+            var sampled = 0;
+
+            foreach (var value in values)
+            {
+                if (sampled++ >= sampleLimit)
+                    break;
+
+                var text = string.IsNullOrEmpty(value) ? "-" : value;
+                var textWidth = ImGui.CalcTextSize(text).X + 24f;
+                if (textWidth > width)
+                    width = textWidth;
+            }
+
+            return Math.Clamp(width, minWidth, maxWidth);
+        }
+
         public MarketMasterWindow(MarketAssistantPlugin plugin, ProfitScannerService scanner)
             : base("Market Master Pro###MarketMasterProWindow")
         {
@@ -235,7 +259,7 @@ namespace UndercutterFFXIV.Windows
             var progress = scanner.GetScanProgress();
             if (progress.IsRunning && progress.Total > 0)
             {
-                var pct = progress.Processed / (float)progress.Total;
+                var pct = Math.Clamp(progress.Percent / 100f, 0f, 1f);
                 ImGui.Spacing();
                 ImGui.ProgressBar(pct, new Vector2(-1, 0), $"Scanning {progress.Processed}/{progress.Total} ({pct * 100f:F0}%)");
             }
@@ -295,7 +319,7 @@ namespace UndercutterFFXIV.Windows
             ImGui.Separator();
 
             // Left panel — always close EndChild even if content throws
-            ImGui.BeginChild("##scannerLeft", new Vector2(430, 0), true);
+            ImGui.BeginChild("##scannerLeft", new Vector2(470, 0), true);
             try { DrawScannerLeftPanel(); }
             catch (Exception ex) { ImGui.TextColored(new Vector4(1f, 0.3f, 0.3f, 1f), $"Error: {ex.Message}"); }
             ImGui.EndChild();
@@ -311,16 +335,28 @@ namespace UndercutterFFXIV.Windows
 
         private void DrawScannerLeftPanel()
         {
+            var leftPanelWidth = Math.Max(220f, ImGui.GetContentRegionAvail().X);
+            var searchNameWidth = CalculateColumnWidth(
+                searchResults.Select(item => item.Name),
+                "Name",
+                160f,
+                Math.Max(220f, leftPanelWidth * 1.35f));
+            var watchNameWidth = CalculateColumnWidth(
+                cachedWatchlist.Select(item => item.Name),
+                "Name",
+                170f,
+                Math.Max(230f, leftPanelWidth * 1.4f));
+
             ImGui.Text("Search Results");
             ImGui.Separator();
             if (ImGui.BeginTable("##searchTable", 4,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit,
                 new Vector2(0, 260)))
             {
-                ImGui.TableSetupColumn("Name",   ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("Req Lv", ImGuiTableColumnFlags.WidthFixed, 48);
-                ImGui.TableSetupColumn("iLvl",   ImGuiTableColumnFlags.WidthFixed, 48);
-                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 52);
+                ImGui.TableSetupColumn("Name",   ImGuiTableColumnFlags.WidthFixed, searchNameWidth);
+                ImGui.TableSetupColumn("Req Lv", ImGuiTableColumnFlags.WidthFixed, 44);
+                ImGui.TableSetupColumn("iLvl",   ImGuiTableColumnFlags.WidthFixed, 44);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 50);
                 ImGui.TableHeadersRow();
                 foreach (var item in searchResults)
                 {
@@ -342,11 +378,11 @@ namespace UndercutterFFXIV.Windows
             ImGui.Text("Watchlist");
             ImGui.Separator();
             if (ImGui.BeginTable("##watchTable", 2,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit,
                 new Vector2(0, 220)))
             {
-                ImGui.TableSetupColumn("Name",   ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 56);
+                ImGui.TableSetupColumn("Name",   ImGuiTableColumnFlags.WidthFixed, watchNameWidth);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 50);
                 ImGui.TableHeadersRow();
                 foreach (var watched in cachedWatchlist)
                 {
@@ -801,16 +837,28 @@ namespace UndercutterFFXIV.Windows
                 ? opportunities.OrderByDescending(o => o.ProfitPercent).ToList()
                 : opportunities.OrderBy(o => o.ProfitPercent).ToList();
 
+            var tableWidth = Math.Max(360f, ImGui.GetContentRegionAvail().X);
+            var itemWidth = CalculateColumnWidth(
+                sortedOpportunities.Select(o => o.ItemName),
+                "Item",
+                190f,
+                Math.Max(320f, tableWidth * 1.55f));
+            var buyFromWidth = CalculateColumnWidth(
+                sortedOpportunities.Select(o => string.IsNullOrWhiteSpace(o.BuyFromWorld) ? config.DataCenterName : o.BuyFromWorld),
+                "Buy From",
+                85f,
+                170f,
+                80);
+
             if (!ImGui.BeginTable(tableId, 10,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit,
                 new Vector2(0, 0)))
                 return;
 
-            // Item name stretches, other columns fixed width
-            ImGui.TableSetupColumn("Item",          ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Item",          ImGuiTableColumnFlags.WidthFixed, itemWidth);
             ImGui.TableSetupColumn("Home Qty",      ImGuiTableColumnFlags.WidthFixed, 75);
             ImGui.TableSetupColumn("Price",         ImGuiTableColumnFlags.WidthFixed, 85);
-            ImGui.TableSetupColumn("Buy From",      ImGuiTableColumnFlags.WidthFixed, 95);
+            ImGui.TableSetupColumn("Buy From",      ImGuiTableColumnFlags.WidthFixed, buyFromWidth);
             ImGui.TableSetupColumn("Buy @",         ImGuiTableColumnFlags.WidthFixed, 75);
             ImGui.TableSetupColumn("Net Profit",    ImGuiTableColumnFlags.WidthFixed, 80);
             ImGui.TableSetupColumn("Profit %",      ImGuiTableColumnFlags.WidthFixed, 75);
