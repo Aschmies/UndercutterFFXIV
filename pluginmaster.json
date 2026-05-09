@@ -11,9 +11,9 @@
   "IsTestingExclusive": false,
   "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
   "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
-  "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.28/latest.zip",
-  "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.28/latest.zip",
-  "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/v1.1.28/latest.zip",
+  "DownloadLinkInstall": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/latest.zip",
+  "DownloadLinkUpdate": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/latest.zip",
+  "DownloadLinkTesting": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/latest.zip",
   "DalamudApiLevel": 15,
   "ApplicableVersion": "any",
   "Tags": [
