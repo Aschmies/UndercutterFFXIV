@@ -58,3 +58,7 @@ dalamud.json
 # Logs
 logs/
 *.log
+
+latest.zip
+*.zip
+

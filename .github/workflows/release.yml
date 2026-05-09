@@ -50,10 +50,9 @@ jobs:
         id: find_zip
         shell: pwsh
         run: |
-          $zip = Get-ChildItem -Path . -Recurse -Filter "latest.zip" |
-            Where-Object { $_.FullName -notlike "*\obj\*" } |
+          $zip = Get-ChildItem -Path "bin\Release" -Recurse -Filter "latest.zip" |
             Select-Object -First 1
-          if (-not $zip) { throw "Could not find latest.zip — DalamudPackager may not have run." }
+          if (-not $zip) { throw "Could not find latest.zip under bin\Release — DalamudPackager may not have run." }
           Write-Host "Found zip: $($zip.FullName)"
           echo "ZIP_PATH=$($zip.FullName)" >> $env:GITHUB_OUTPUT
 
