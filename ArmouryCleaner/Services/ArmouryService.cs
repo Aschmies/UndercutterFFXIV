@@ -136,6 +136,44 @@ namespace ArmouryCleaner.Services
             return (false, "No free inventory slot found.");
         }
 
+        public (bool Success, string Message) MoveAndDiscard(ArmouryItem item)
+        {
+            var mgr = InventoryManager.Instance();
+            if (mgr == null)
+                return (false, "InventoryManager unavailable.");
+
+            // Find a free bag slot
+            foreach (var bagType in PlayerBags)
+            {
+                var bag = mgr->GetInventoryContainer(bagType);
+                if (bag == null) continue;
+
+                for (var slot = 0; slot < bag->Size; slot++)
+                {
+                    var bagSlot = bag->GetInventorySlot(slot);
+                    if (bagSlot == null || bagSlot->ItemId != 0) continue;
+
+                    // Move from armoury to bag
+                    var moveResult = mgr->MoveItemSlot(item.ContainerType, (ushort)item.Slot, bagType, (ushort)slot, true);
+                    if (moveResult != 0)
+                        return (false, $"Move failed (code {moveResult}).");
+
+                    // Immediately discard from the bag slot
+                    var discardResult = mgr->DiscardItem(bagType, (ushort)slot);
+                    if (discardResult == 0)
+                    {
+                        log.Debug($"[ArmouryCleaner] Discarded '{item.Name}' via {bagType}[{slot}].");
+                        return (true, $"Discarded '{item.Name}'.");
+                    }
+
+                    log.Warning($"[ArmouryCleaner] Move succeeded but discard failed (code {discardResult}) for '{item.Name}' — item is now in {bagType}[{slot}].");
+                    return (false, $"Moved to inventory but discard failed — remove it manually.");
+                }
+            }
+
+            return (false, "No free inventory slot found.");
+        }
+
         private static string[] GetClassJobs(Item item)
         {
             var cat = item.ClassJobCategory.Value;
