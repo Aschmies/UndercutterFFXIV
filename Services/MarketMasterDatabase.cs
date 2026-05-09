@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
 using UndercutterFFXIV.Models;
 
 namespace UndercutterFFXIV.Services
@@ -488,6 +489,57 @@ WHERE item_id = $itemId AND traded_utc >= $cutoff";
             }
         }
 
+        public void SaveLatestOpportunities(IReadOnlyList<ArbitrageOpportunity> opportunities)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                var payload = JsonSerializer.Serialize(opportunities ?? Array.Empty<ArbitrageOpportunity>());
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+INSERT INTO latest_opportunities(id, saved_utc, payload_json)
+VALUES(1, $savedUtc, $payload)
+ON CONFLICT(id) DO UPDATE SET
+    saved_utc = excluded.saved_utc,
+    payload_json = excluded.payload_json";
+                cmd.Parameters.AddWithValue("$savedUtc", DateTime.UtcNow.ToString("O"));
+                cmd.Parameters.AddWithValue("$payload", payload);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public IReadOnlyList<ArbitrageOpportunity> GetLatestOpportunities()
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+SELECT payload_json
+FROM latest_opportunities
+WHERE id = 1";
+
+                var payload = cmd.ExecuteScalar() as string;
+                if (string.IsNullOrWhiteSpace(payload))
+                    return Array.Empty<ArbitrageOpportunity>();
+
+                try
+                {
+                    var rows = JsonSerializer.Deserialize<List<ArbitrageOpportunity>>(payload);
+                    return rows ?? new List<ArbitrageOpportunity>();
+                }
+                catch
+                {
+                    return Array.Empty<ArbitrageOpportunity>();
+                }
+            }
+        }
+
         private void InitializeSchema()
         {
             lock (dbLock)
@@ -567,6 +619,12 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
     accepted INTEGER NOT NULL,
     projected_net_gil REAL NOT NULL,
     action_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS latest_opportunities (
+    id INTEGER PRIMARY KEY,
+    saved_utc TEXT NOT NULL,
+    payload_json TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_opportunities_run ON opportunities(run_id);

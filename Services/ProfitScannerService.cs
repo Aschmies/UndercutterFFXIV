@@ -56,6 +56,9 @@ namespace UndercutterFFXIV.Services
             this.database = database;
             this.config = config;
             this.retainerPriceService = retainerPriceService;
+
+            lock (cacheLock)
+                lastResults = database.GetLatestOpportunities().ToList();
         }
 
         public IReadOnlyList<ItemLookup> SearchItems(string query, int limit = 100)
@@ -793,17 +796,15 @@ namespace UndercutterFFXIV.Services
                 scanProcessedItems = 0;
                 scanTotalItems = itemsToScan.Count;
                 scanProgressPercent = 0;
-                lastResults = new List<ArbitrageOpportunity>();
             }
 
             if (itemsToScan.Count == 0)
             {
                 lock (cacheLock)
                 {
-                    lastResults = new List<ArbitrageOpportunity>();
                     scanInProgress = false;
                 }
-                return lastResults;
+                return GetLastResults();
             }
 
             try
@@ -934,6 +935,7 @@ namespace UndercutterFFXIV.Services
                     .ToList();
 
                 database.SaveScanResults(config.WorldName, config.DataCenterName, sorted, sw.ElapsedMilliseconds);
+                database.SaveLatestOpportunities(sorted);
 
                 lock (cacheLock)
                 {
