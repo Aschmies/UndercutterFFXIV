@@ -3,13 +3,13 @@
   "Author": "Market Assistant Dev",
   "Punchline": "Manual market intelligence and arbitrage scanner for FFXIV.",
   "Description": "Analyze market opportunities with Universalis data, watchlists, velocity filters, and manual undercut helpers. All actions are manual.",
-  "Changelog": "v1.1.39: Capital Allocator now shows Buy From server and Profit % columns.",
+  "Changelog": "v1.1.40: Capital Allocator now shows Buy @, Sell @, Est. Return columns with detailed per-row tooltips showing exact buy cost, sell revenue, and profit breakdown.",
   "Tags": ["market", "trading", "economy", "universalis"],
   "CategoryTags": ["General"],
   "InternalName": "UndercutterFFXIV",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
-  "AssemblyVersion": "1.1.39.0",
+  "AssemblyVersion": "1.1.40.0",
   "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
   "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV"
 }
