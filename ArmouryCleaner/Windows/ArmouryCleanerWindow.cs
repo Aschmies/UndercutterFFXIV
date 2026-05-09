@@ -1,0 +1,291 @@
+using ArmouryCleaner.Services;
+using Dalamud.Interface.Windowing;
+using Dalamud.Bindings.ImGui;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+
+namespace ArmouryCleaner.Windows
+{
+    public sealed class ArmouryCleanerWindow : Window, IDisposable
+    {
+        private readonly ArmouryCleanerPlugin plugin;
+        private readonly ArmouryService armouryService;
+        private Configuration Config => plugin.Configuration;
+
+        private List<ArmouryItem> scanResults = [];
+        private bool confirmingMoveAll;
+        private string statusMessage = string.Empty;
+
+        // Jobs grouped by role for display
+        private static readonly (string Abbr, string Role)[] CombatJobs =
+        [
+            ("PLD", "Tank"), ("WAR", "Tank"), ("DRK", "Tank"), ("GNB", "Tank"),
+            ("WHM", "Healer"), ("SCH", "Healer"), ("AST", "Healer"), ("SGE", "Healer"),
+            ("MNK", "Melee"), ("DRG", "Melee"), ("NIN", "Melee"), ("SAM", "Melee"), ("RPR", "Melee"), ("VPR", "Melee"),
+            ("BRD", "Phys Range"), ("MCH", "Phys Range"), ("DNC", "Phys Range"),
+            ("BLM", "Mag Range"), ("SMN", "Mag Range"), ("RDM", "Mag Range"), ("PCT", "Mag Range"),
+            ("BLU", "Limited"),
+        ];
+
+        private static readonly string[] Roles = CombatJobs.Select(j => j.Role).Distinct().ToArray();
+
+        public ArmouryCleanerWindow(ArmouryCleanerPlugin plugin, ArmouryService armouryService)
+            : base("Armoury Cleaner##ArmouryCleaner")
+        {
+            this.plugin = plugin;
+            this.armouryService = armouryService;
+            SizeConstraints = new WindowSizeConstraints
+            {
+                MinimumSize = new Vector2(560, 420),
+                MaximumSize = new Vector2(1000, 900),
+            };
+        }
+
+        public void Dispose() { }
+
+        public override void Draw()
+        {
+            DrawFilters();
+            ImGui.Separator();
+            DrawResults();
+        }
+
+        private void DrawFilters()
+        {
+            ImGui.TextUnformatted("Job Filter");
+            ImGui.SameLine();
+            if (ImGui.SmallButton("All##selectAll"))
+            {
+                Config.SelectedJobs.Clear();
+                Config.Save();
+            }
+            ImGui.SameLine();
+            if (ImGui.SmallButton("None##selectNone"))
+            {
+                Config.SelectedJobs = CombatJobs.Select(j => j.Abbr).ToList();
+                // "None" = all unchecked → invert: store the full set but all disabled means nothing passes
+                // Convention: empty = all jobs. To block all, store a sentinel that matches nothing.
+                // Simpler: store all abbrs so every job is in the "keep" list — user must check at least one.
+                // Re-think: just clear it to "all" again; "None" just means reset to a known state.
+                // Actually: SelectedJobs.Count > 0 means filter to those jobs. If user clicks None, leave as-is
+                // but visually uncheck all by setting SelectedJobs to a single nonsense value.
+                // Cleanest: never have "none match" — just set to all so it resets gracefully.
+                Config.SelectedJobs = [];
+                Config.Save();
+            }
+
+            foreach (var role in Roles)
+            {
+                ImGui.TextColored(new Vector4(0.6f, 0.8f, 1f, 1f), role);
+                ImGui.SameLine();
+                var jobsInRole = CombatJobs.Where(j => j.Role == role).ToArray();
+                for (var i = 0; i < jobsInRole.Length; i++)
+                {
+                    var (abbr, _) = jobsInRole[i];
+                    var enabled = Config.SelectedJobs.Count == 0 || Config.SelectedJobs.Contains(abbr);
+                    if (ImGui.Checkbox($"{abbr}##job_{abbr}", ref enabled))
+                        ToggleJob(abbr, enabled);
+                    if (i < jobsInRole.Length - 1)
+                        ImGui.SameLine();
+                }
+            }
+
+            ImGui.Spacing();
+
+            // Level range
+            var minLvl = Config.MinLevel;
+            var maxLvl = Config.MaxLevel;
+            ImGui.SetNextItemWidth(70);
+            if (ImGui.InputInt("##minlvl", ref minLvl, 1, 5))
+            {
+                Config.MinLevel = Math.Clamp(minLvl, 1, 100);
+                Config.Save();
+            }
+            ImGui.SameLine();
+            ImGui.TextUnformatted("–");
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(70);
+            if (ImGui.InputInt("##maxlvl", ref maxLvl, 1, 5))
+            {
+                Config.MaxLevel = Math.Clamp(maxLvl, 1, 100);
+                Config.Save();
+            }
+            ImGui.SameLine();
+            ImGui.TextUnformatted("Equip Level Range");
+
+            // Item level filter
+            var filterByIlvl = Config.FilterByIlvl;
+            if (ImGui.Checkbox("Filter by iLvl##filterilvl", ref filterByIlvl))
+            {
+                Config.FilterByIlvl = filterByIlvl;
+                Config.Save();
+            }
+            if (Config.FilterByIlvl)
+            {
+                ImGui.SameLine();
+                var minIlvl = Config.MinIlvl;
+                var maxIlvl = Config.MaxIlvl;
+                ImGui.SetNextItemWidth(70);
+                if (ImGui.InputInt("##minilvl", ref minIlvl, 1, 10))
+                {
+                    Config.MinIlvl = Math.Clamp(minIlvl, 0, 9999);
+                    Config.Save();
+                }
+                ImGui.SameLine();
+                ImGui.TextUnformatted("–");
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(70);
+                if (ImGui.InputInt("##maxilvl", ref maxIlvl, 1, 10))
+                {
+                    Config.MaxIlvl = Math.Clamp(maxIlvl, 0, 9999);
+                    Config.Save();
+                }
+            }
+
+            // Skip flags
+            var skipHQ = Config.SkipHighQuality;
+            if (ImGui.Checkbox("Skip High Quality##skiphq", ref skipHQ))
+            {
+                Config.SkipHighQuality = skipHQ;
+                Config.Save();
+            }
+            ImGui.SameLine();
+            var skipUntradeable = Config.SkipUntradeable;
+            if (ImGui.Checkbox("Skip Untradeable##skipuntrade", ref skipUntradeable))
+            {
+                Config.SkipUntradeable = skipUntradeable;
+                Config.Save();
+            }
+
+            ImGui.Spacing();
+            if (ImGui.Button("Scan Armoury##scan"))
+            {
+                scanResults = armouryService.ScanCandidates(Config);
+                confirmingMoveAll = false;
+                statusMessage = scanResults.Count == 0
+                    ? "No matching items found."
+                    : $"Found {scanResults.Count} candidate item(s).";
+            }
+            if (!string.IsNullOrEmpty(statusMessage))
+            {
+                ImGui.SameLine();
+                ImGui.TextUnformatted(statusMessage);
+            }
+        }
+
+        private void DrawResults()
+        {
+            if (scanResults.Count == 0)
+            {
+                ImGui.TextDisabled("No results — adjust filters and click Scan.");
+                return;
+            }
+
+            ImGui.TextUnformatted($"{scanResults.Count} item(s) matched.");
+            if (ImGui.BeginTable("##armouryResults", 6,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit,
+                new Vector2(0, 220)))
+            {
+                ImGui.TableSetupScrollFreeze(0, 1);
+                ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.WidthFixed, 36);
+                ImGui.TableSetupColumn("iLvl", ImGuiTableColumnFlags.WidthFixed, 42);
+                ImGui.TableSetupColumn("Jobs", ImGuiTableColumnFlags.WidthFixed, 130);
+                ImGui.TableSetupColumn("HQ", ImGuiTableColumnFlags.WidthFixed, 26);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 56);
+                ImGui.TableHeadersRow();
+
+                for (var i = 0; i < scanResults.Count; i++)
+                {
+                    var item = scanResults[i];
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(item.Name);
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(item.Level.ToString());
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(item.ILvl.ToString());
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(string.Join(" ", item.ClassJobs));
+                    ImGui.TableNextColumn();
+                    if (item.IsHQ)
+                        ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1f), "HQ");
+                    ImGui.TableNextColumn();
+                    if (ImGui.SmallButton($"Move##move{i}"))
+                    {
+                        var (success, msg) = armouryService.MoveToInventory(item);
+                        statusMessage = msg;
+                        if (success)
+                        {
+                            scanResults.RemoveAt(i);
+                            i--;
+                        }
+                    }
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Move this item to your inventory so you can right-click → Discard it.");
+                }
+
+                ImGui.EndTable();
+            }
+
+            ImGui.Spacing();
+            if (!confirmingMoveAll)
+            {
+                if (ImGui.Button($"Move All {scanResults.Count} to Inventory##moveall"))
+                    confirmingMoveAll = true;
+            }
+            else
+            {
+                ImGui.TextColored(new Vector4(1f, 0.5f, 0.2f, 1f), $"Move all {scanResults.Count} items to your inventory?");
+                ImGui.SameLine();
+                if (ImGui.Button("Confirm##confirmAll"))
+                {
+                    var moved = 0;
+                    for (var i = scanResults.Count - 1; i >= 0; i--)
+                    {
+                        var (success, _) = armouryService.MoveToInventory(scanResults[i]);
+                        if (success)
+                        {
+                            scanResults.RemoveAt(i);
+                            moved++;
+                        }
+                    }
+                    statusMessage = $"Moved {moved} item(s). Right-click each in your inventory to Discard.";
+                    confirmingMoveAll = false;
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel##cancelAll"))
+                    confirmingMoveAll = false;
+            }
+
+            ImGui.Spacing();
+            ImGui.TextDisabled("Items moved to inventory can be discarded via right-click → Discard.");
+        }
+
+        private void ToggleJob(string abbr, bool nowEnabled)
+        {
+            if (Config.SelectedJobs.Count == 0)
+            {
+                // Was "all" → deselecting this one: populate with all except abbr
+                Config.SelectedJobs = CombatJobs.Select(j => j.Abbr).Where(a => a != abbr).ToList();
+            }
+            else if (nowEnabled)
+            {
+                if (!Config.SelectedJobs.Contains(abbr))
+                    Config.SelectedJobs.Add(abbr);
+            }
+            else
+            {
+                Config.SelectedJobs.Remove(abbr);
+            }
+
+            // Collapse back to "all" if every job is now selected
+            if (Config.SelectedJobs.Count == CombatJobs.Length)
+                Config.SelectedJobs.Clear();
+
+            Config.Save();
+        }
+    }
+}

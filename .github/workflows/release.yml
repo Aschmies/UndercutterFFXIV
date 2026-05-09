@@ -5,12 +5,14 @@ on:
   push:
     tags:
       - 'v*'
+      - 'ac-v*'
 
 permissions:
   contents: write   # needed to create releases and push pluginmaster.json
 
 jobs:
   build-and-release:
+    if: "!startsWith(github.ref_name, 'ac-v')"
     runs-on: windows-latest
 
     steps:
@@ -75,26 +77,21 @@ jobs:
       - name: Update pluginmaster.json
         shell: pwsh
         run: |
-          # Regex-replace values in-place to avoid PowerShell ConvertTo-Json
-          # stripping the outer array brackets.
-          $content = Get-Content pluginmaster.json -Raw
-          $ver = "${{ steps.version.outputs.FULL }}"
-          $tag = "${{ github.ref_name }}"
-          $ts  = [string][System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-          $dlUrl = '"https://github.com/Aschmies/UndercutterFFXIV/releases/download/' + $tag + '/UndercutterFFXIV-' + $tag + '.zip"'
-          $rAV  = '"AssemblyVersion": "' + $ver + '"'
-          $rTAV = '"TestingAssemblyVersion": "' + $ver + '"'
-          $rLU  = '"LastUpdated": ' + $ts
-          $rDLI = '"DownloadLinkInstall": ' + $dlUrl
-          $rDLU = '"DownloadLinkUpdate": ' + $dlUrl
-          $rDLT = '"DownloadLinkTesting": ' + $dlUrl
-          $content = $content -replace '"AssemblyVersion"\s*:\s*"[^"]*"',        $rAV
-          $content = $content -replace '"TestingAssemblyVersion"\s*:\s*"[^"]*"', $rTAV
-          $content = $content -replace '"LastUpdated"\s*:\s*\d+',                $rLU
-          $content = $content -replace '"DownloadLinkInstall"\s*:\s*"[^"]*"',   $rDLI
-          $content = $content -replace '"DownloadLinkUpdate"\s*:\s*"[^"]*"',    $rDLU
-          $content = $content -replace '"DownloadLinkTesting"\s*:\s*"[^"]*"',   $rDLT
-          [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $content, [System.Text.Encoding]::UTF8)
+          # Use JSON parsing and target only the UndercutterFFXIV entry so the
+          # ArmouryCleaner entry is left untouched.
+          $arr   = Get-Content pluginmaster.json -Raw | ConvertFrom-Json
+          $entry = $arr | Where-Object { $_.InternalName -eq "UndercutterFFXIV" }
+          $ver   = "${{ steps.version.outputs.FULL }}"
+          $tag   = "${{ github.ref_name }}"
+          $dlUrl = "https://github.com/Aschmies/UndercutterFFXIV/releases/download/$tag/UndercutterFFXIV-$tag.zip"
+          $entry.AssemblyVersion        = $ver
+          $entry.TestingAssemblyVersion = $ver
+          $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $entry.DownloadLinkInstall    = $dlUrl
+          $entry.DownloadLinkUpdate     = $dlUrl
+          $entry.DownloadLinkTesting    = $dlUrl
+          $json = ConvertTo-Json -InputObject $arr -Depth 10
+          [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $json, [System.Text.Encoding]::UTF8)
 
       - name: Commit updated pluginmaster.json
         shell: pwsh
@@ -130,6 +127,111 @@ jobs:
             ### Market Assistant ${{ steps.version.outputs.SHORT }}
 
             **Install:** Add the custom repo URL to Dalamud (see README), then install "Market Assistant".
+            **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
+          files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
+          fail_on_unmatched_files: true
+
+  build-and-release-armoury:
+    if: startsWith(github.ref_name, 'ac-v')
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          $out = "${{ github.workspace }}\dalamud"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip" `
+            -OutFile "$out\dalamud.zip"
+          Expand-Archive -Path "$out\dalamud.zip" -DestinationPath $out -Force
+          Remove-Item "$out\dalamud.zip"
+          echo "DALAMUD_HOME=$out" >> $env:GITHUB_ENV
+
+      - name: Restore dependencies
+        run: dotnet restore ArmouryCleaner\ArmouryCleaner.csproj
+
+      - name: Build Release
+        run: dotnet build ArmouryCleaner\ArmouryCleaner.csproj --configuration Release --no-restore
+
+      - name: Locate plugin zip
+        id: find_zip
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path "ArmouryCleaner\bin\Release" -Recurse -Filter "latest.zip" |
+            Select-Object -First 1
+          if (-not $zip) { throw "Could not find latest.zip under ArmouryCleaner\bin\Release" }
+          Write-Host "Found zip: $($zip.FullName)"
+          echo "ZIP_PATH=$($zip.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Parse version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"      # e.g. ac-v1.0.0
+          $ver = $tag -replace '^ac-v', ''     # e.g. 1.0.0
+          $parts = $ver.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $full = $parts -join '.'
+          echo "SHORT=$ver"   >> $env:GITHUB_OUTPUT
+          echo "FULL=$full"   >> $env:GITHUB_OUTPUT
+
+      - name: Update pluginmaster.json
+        shell: pwsh
+        run: |
+          $arr   = Get-Content pluginmaster.json -Raw | ConvertFrom-Json
+          $entry = $arr | Where-Object { $_.InternalName -eq "ArmouryCleaner" }
+          $ver   = "${{ steps.version.outputs.FULL }}"
+          $tag   = "${{ github.ref_name }}"
+          $dlUrl = "https://github.com/Aschmies/UndercutterFFXIV/releases/download/$tag/ArmouryCleaner-$tag.zip"
+          $entry.AssemblyVersion        = $ver
+          $entry.TestingAssemblyVersion = $ver
+          $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $entry.DownloadLinkInstall    = $dlUrl
+          $entry.DownloadLinkUpdate     = $dlUrl
+          $entry.DownloadLinkTesting    = $dlUrl
+          $json = ConvertTo-Json -InputObject $arr -Depth 10
+          [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $json, [System.Text.Encoding]::UTF8)
+
+      - name: Commit updated pluginmaster.json
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pluginmaster.json
+          git commit -m "chore: bump ArmouryCleaner pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:refs/heads/main
+
+      - name: Rename zip for release
+        id: rename_zip
+        shell: pwsh
+        run: |
+          $src  = "${{ steps.find_zip.outputs.ZIP_PATH }}"
+          $dest = Join-Path (Split-Path $src) "ArmouryCleaner-${{ github.ref_name }}.zip"
+          Rename-Item $src $dest
+          Write-Host "Renamed to: $dest"
+          echo "RELEASE_ZIP=$dest" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            ### Armoury Cleaner ${{ steps.version.outputs.SHORT }}
+
+            **Install:** Add the custom repo URL to Dalamud (see README), then install "Armoury Cleaner".
             **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
           files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
           fail_on_unmatched_files: true

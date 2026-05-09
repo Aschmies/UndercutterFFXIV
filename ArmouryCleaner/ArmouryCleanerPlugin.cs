@@ -31,7 +31,7 @@ namespace ArmouryCleaner
             Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
             Configuration.Initialize(PluginInterface);
 
-            armouryService = new ArmouryService(DataManager, ClientState, Log);
+            armouryService = new ArmouryService(DataManager, Log);
             mainWindow = new ArmouryCleanerWindow(this, armouryService);
             windowSystem.AddWindow(mainWindow);
 

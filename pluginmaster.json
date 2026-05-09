@@ -31,5 +31,38 @@
   ],
   "LastUpdated": 1778342872,
   "DownloadCount": 0
+},
+{
+  "Author": "Market Assistant Dev",
+  "Name": "Armoury Cleaner",
+  "Punchline": "Filter and move unwanted gear out of your armoury chest.",
+  "Description": "Define filters by job, minimum/maximum equip level, and item level. Armoury Cleaner scans each gear slot and moves only items that match all active filters into your inventory so you can discard them.",
+  "Changelog": "v1.0.0: Initial release — job, level, and item-level filters with per-slot preview and confirm-before-move safety step.",
+  "InternalName": "ArmouryCleaner",
+  "AssemblyVersion": "1.0.0.0",
+  "TestingAssemblyVersion": "1.0.0.0",
+  "IsHide": false,
+  "IsTestingExclusive": false,
+  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+  "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
+  "DownloadLinkInstall": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/ac-v1.0.0/ArmouryCleaner-ac-v1.0.0.zip",
+  "DownloadLinkUpdate": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/ac-v1.0.0/ArmouryCleaner-ac-v1.0.0.zip",
+  "DownloadLinkTesting": "https://github.com/Aschmies/UndercutterFFXIV/releases/download/ac-v1.0.0/ArmouryCleaner-ac-v1.0.0.zip",
+  "DalamudApiLevel": 15,
+  "ApplicableVersion": "any",
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "SupportsProfiles": false,
+  "AcceptsFeedback": true,
+  "Tags": [
+    "inventory",
+    "armoury",
+    "gear",
+    "cleanup"
+  ],
+  "LastUpdated": 1778323675,
+  "DownloadCount": 0
 }]
 
