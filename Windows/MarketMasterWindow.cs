@@ -26,6 +26,9 @@ namespace UndercutterFFXIV.Windows
         private string itemSearchQuery = string.Empty;
         private List<ItemLookup> searchResults = new();
         private List<ArbitrageOpportunity> latestResults = new();
+        private List<CapitalAllocationPlanItem> capitalPlan = new();
+        private QueueSimulationResult capitalSimulation = new();
+        private List<OpportunityRejectionReason> exclusionReasons = new();
         private List<WatchedItem> cachedWatchlist = new();
         private List<WatchlistSuggestion> cachedSuggestions = new();
         private List<InventoryGridRow> inventoryRows = new();
@@ -36,6 +39,7 @@ namespace UndercutterFFXIV.Windows
         private string scannerStatus = "Idle";
         private bool inventoryGridRefreshInProgress;
         private bool inventoryGridInitialized;
+        private bool exclusionRefreshInProgress;
         
         // Full-market scan mode
         private ScanMode currentScanMode = ScanMode.TopItems;
@@ -49,6 +53,7 @@ namespace UndercutterFFXIV.Windows
         private string inventoryStatus = string.Empty;
         private string historyStatus = string.Empty;
         private string dashboardStatus = string.Empty;
+        private string exclusionStatus = string.Empty;
         private int historyDaysFilter = 30;
         private int historyItemIdInput;
         private string historyItemNameInput = string.Empty;
@@ -136,6 +141,8 @@ namespace UndercutterFFXIV.Windows
             RefreshWatchlist();
             cachedSuggestions = scanner.GetWatchlistSuggestions(8).ToList();
             latestResults = scanner.GetLastResults().ToList();
+            RefreshCapitalPlan();
+            _ = RefreshExclusionInspectorAsync();
             _ = RefreshInventoryGridAsync();
         }
 
@@ -532,6 +539,48 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextDisabled("No opportunities yet. Add items to the watchlist and click Run Scan.");
             else
             {
+                RefreshCapitalPlan();
+
+                ImGui.Text("Capital Allocator");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Distributes daily capital across top opportunities using confidence, velocity, trust, and profit quality.");
+                ImGui.TextDisabled($"Budget used: {capitalSimulation.TotalCostGil:N0} / {config.MaxCapitalPerDayGil:N0} | Allocated items: {capitalSimulation.ItemCount}");
+
+                if (ImGui.BeginTable("##capitalPlan", 5,
+                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                    new Vector2(0, 140)))
+                {
+                    ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
+                    ImGui.TableSetupColumn("Score", ImGuiTableColumnFlags.WidthFixed, 70);
+                    ImGui.TableSetupColumn("Qty", ImGuiTableColumnFlags.WidthFixed, 50);
+                    ImGui.TableSetupColumn("Cost", ImGuiTableColumnFlags.WidthFixed, 85);
+                    ImGui.TableSetupColumn("Net", ImGuiTableColumnFlags.WidthFixed, 85);
+                    ImGui.TableHeadersRow();
+
+                    foreach (var allocation in capitalPlan.Take(14))
+                    {
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); ImGui.TextUnformatted(allocation.ItemName);
+                        ImGui.TableNextColumn(); ImGui.Text($"{allocation.Score:F0}");
+                        ImGui.TableNextColumn(); ImGui.Text(allocation.AllocatedQty.ToString("N0"));
+                        ImGui.TableNextColumn(); ImGui.Text(allocation.AllocatedCostGil.ToString("N0"));
+                        ImGui.TableNextColumn();
+                        var netColor = allocation.ProjectedNetGil >= 0
+                            ? new Vector4(0.4f, 1f, 0.4f, 1f)
+                            : new Vector4(1f, 0.45f, 0.45f, 1f);
+                        ImGui.TextColored(netColor, allocation.ProjectedNetGil.ToString("N0"));
+                    }
+
+                    ImGui.EndTable();
+                }
+
+                ImGui.Text("Queue Simulator");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Pre-flight outcome estimate for the allocated execution queue with best/base/worst scenarios.");
+                ImGui.TextDisabled($"Best {capitalSimulation.BestCaseNetGil:N0} | Base {capitalSimulation.BaseCaseNetGil:N0} | Worst {capitalSimulation.WorstCaseNetGil:N0}");
+                ImGui.TextDisabled($"Expected value {capitalSimulation.ExpectedValueNetGil:N0} | Estimated liquidity delay {capitalSimulation.EstimatedLiquidityDelayHours:F1}h");
+
+                ImGui.Spacing();
                 var plans = scanner.GetTravelBatchPlans(latestResults, 3);
                 if (plans.Count > 0)
                 {
@@ -540,6 +589,36 @@ namespace UndercutterFFXIV.Windows
                         ImGui.BulletText($"{config.WorldName} -> {plan.World} -> {config.WorldName}: est net {plan.ProjectedNetGil:N0} across {plan.ItemCount} items");
                     ImGui.Spacing();
                 }
+
+                ImGui.Text("Why Not Included?");
+                ImGui.SameLine();
+                if (ImGui.Button("Refresh Inspector##exclusions") && !exclusionRefreshInProgress)
+                    _ = RefreshExclusionInspectorAsync();
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Explains why watchlist items were filtered from current opportunities.");
+                ImGui.TextDisabled(exclusionStatus);
+                if (exclusionReasons.Count > 0)
+                {
+                    if (ImGui.BeginTable("##exclusionTable", 2,
+                        ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
+                        new Vector2(0, 120)))
+                    {
+                        ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
+                        ImGui.TableSetupColumn("Reason", ImGuiTableColumnFlags.WidthStretch);
+                        ImGui.TableHeadersRow();
+
+                        foreach (var exclusion in exclusionReasons.Take(20))
+                        {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn(); ImGui.TextUnformatted(exclusion.ItemName);
+                            ImGui.TableNextColumn(); ImGui.TextUnformatted(exclusion.Reason);
+                        }
+
+                        ImGui.EndTable();
+                    }
+                }
+
+                ImGui.Spacing();
                 DrawOpportunityTable(latestResults, "##scannerOppTable");
             }
         }
@@ -1683,6 +1762,36 @@ namespace UndercutterFFXIV.Windows
             catch { cachedWatchlist = new List<WatchedItem>(); }
         }
 
+        private void RefreshCapitalPlan()
+        {
+            capitalPlan = scanner.GetCapitalAllocationPlan(latestResults, 20).ToList();
+            capitalSimulation = scanner.SimulateOpportunityQueue(capitalPlan);
+        }
+
+        private async Task RefreshExclusionInspectorAsync()
+        {
+            if (exclusionRefreshInProgress)
+                return;
+
+            exclusionRefreshInProgress = true;
+            exclusionStatus = "Analyzing excluded watchlist items...";
+            try
+            {
+                exclusionReasons = (await scanner.ExplainWatchlistExclusionsAsync(CancellationToken.None)).ToList();
+                exclusionStatus = exclusionReasons.Count == 0
+                    ? "No exclusions detected"
+                    : $"{exclusionReasons.Count} excluded watchlist items analyzed";
+            }
+            catch (Exception ex)
+            {
+                exclusionStatus = $"Exclusion analysis failed: {ex.Message}";
+            }
+            finally
+            {
+                exclusionRefreshInProgress = false;
+            }
+        }
+
         private async Task RunScanAsync()
         {
             scanRunning = true;
@@ -1698,6 +1807,8 @@ namespace UndercutterFFXIV.Windows
             {
                 var results = await scanner.ScanWatchlistAsync(currentScanCancellation.Token);
                 latestResults = results.ToList();
+                RefreshCapitalPlan();
+                _ = RefreshExclusionInspectorAsync();
                 scannerStatus = $"Scan complete: {latestResults.Count} opportunities";
             }
             catch (OperationCanceledException)

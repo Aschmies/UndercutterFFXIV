@@ -219,4 +219,33 @@ namespace UndercutterFFXIV.Models
         public int RejectedCount { get; init; }
         public double AcceptanceRatePercent { get; init; }
     }
+
+    public sealed class CapitalAllocationPlanItem
+    {
+        public uint ItemId { get; init; }
+        public string ItemName { get; init; } = string.Empty;
+        public double Score { get; init; }
+        public int AllocatedQty { get; init; }
+        public double UnitBuyPrice { get; init; }
+        public double AllocatedCostGil { get; init; }
+        public double ProjectedNetGil { get; init; }
+    }
+
+    public sealed class QueueSimulationResult
+    {
+        public int ItemCount { get; init; }
+        public double TotalCostGil { get; init; }
+        public double BestCaseNetGil { get; init; }
+        public double BaseCaseNetGil { get; init; }
+        public double WorstCaseNetGil { get; init; }
+        public double ExpectedValueNetGil { get; init; }
+        public double EstimatedLiquidityDelayHours { get; init; }
+    }
+
+    public sealed class OpportunityRejectionReason
+    {
+        public uint ItemId { get; init; }
+        public string ItemName { get; init; } = string.Empty;
+        public string Reason { get; init; } = string.Empty;
+    }
 }

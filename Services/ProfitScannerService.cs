@@ -195,6 +195,111 @@ namespace UndercutterFFXIV.Services
                 .ToList();
         }
 
+        public IReadOnlyList<CapitalAllocationPlanItem> GetCapitalAllocationPlan(IReadOnlyList<ArbitrageOpportunity> opportunities, int limit = 20)
+        {
+            var budgetRemaining = Math.Max(1, config.MaxCapitalPerDayGil);
+            var perItemCap = Math.Max(1, config.MaxCapitalPerItemGil);
+            var plan = new List<CapitalAllocationPlanItem>();
+
+            foreach (var opportunity in opportunities
+                .OrderByDescending(ComputeAllocationScore)
+                .ThenByDescending(opp => opp.ProjectedBatchNetGil)
+                .Take(Math.Max(1, limit)))
+            {
+                if (budgetRemaining <= 0)
+                    break;
+
+                var unitPrice = Math.Max(1.0, opportunity.DataCenterLowestPrice);
+                var maxByItemCap = Math.Max(1, (int)Math.Floor(perItemCap / unitPrice));
+                var maxByRemaining = Math.Max(1, (int)Math.Floor(budgetRemaining / unitPrice));
+                var qty = Math.Min(opportunity.RecommendedBuyQty, Math.Min(maxByItemCap, maxByRemaining));
+                if (qty <= 0)
+                    continue;
+
+                var allocatedCost = qty * unitPrice;
+                budgetRemaining -= (int)Math.Round(allocatedCost);
+
+                plan.Add(new CapitalAllocationPlanItem
+                {
+                    ItemId = opportunity.ItemId,
+                    ItemName = opportunity.ItemName,
+                    Score = ComputeAllocationScore(opportunity),
+                    AllocatedQty = qty,
+                    UnitBuyPrice = unitPrice,
+                    AllocatedCostGil = allocatedCost,
+                    ProjectedNetGil = qty * opportunity.NetProfitPerUnit
+                });
+            }
+
+            return plan;
+        }
+
+        public QueueSimulationResult SimulateOpportunityQueue(IReadOnlyList<CapitalAllocationPlanItem> plan)
+        {
+            if (plan.Count == 0)
+                return new QueueSimulationResult();
+
+            var totalCost = plan.Sum(item => item.AllocatedCostGil);
+            var baseNet = plan.Sum(item => item.ProjectedNetGil);
+
+            // Best/worst cases model spread and fill uncertainty while keeping a conservative downside floor.
+            var bestNet = baseNet * 1.35;
+            var worstNet = (baseNet * 0.45) - (totalCost * 0.03);
+            var expectedValue = plan.Sum(item =>
+            {
+                var confidenceWeight = Math.Clamp(item.Score / 100.0, 0.20, 0.90);
+                var downside = item.ProjectedNetGil * 0.45;
+                return (item.ProjectedNetGil * confidenceWeight) + (downside * (1 - confidenceWeight));
+            });
+
+            var delayHours = Math.Max(0.5, (plan.Count * 0.6) + (plan.Sum(item => item.AllocatedQty) / 12.0));
+
+            return new QueueSimulationResult
+            {
+                ItemCount = plan.Count,
+                TotalCostGil = totalCost,
+                BestCaseNetGil = bestNet,
+                BaseCaseNetGil = baseNet,
+                WorstCaseNetGil = worstNet,
+                ExpectedValueNetGil = expectedValue,
+                EstimatedLiquidityDelayHours = delayHours
+            };
+        }
+
+        public async Task<IReadOnlyList<OpportunityRejectionReason>> ExplainWatchlistExclusionsAsync(CancellationToken cancellationToken)
+        {
+            var watched = GetWatchlist().ToList();
+            if (watched.Count == 0)
+                return Array.Empty<OpportunityRejectionReason>();
+
+            var ids = watched.Select(item => item.ItemId).Where(id => id > 0).Distinct().ToList();
+            var homeSnapshots = await universalis.GetMarketSnapshotsAsync(config.WorldName, ids, cancellationToken);
+            var dcSnapshots = await universalis.GetMarketSnapshotsAsync(config.DataCenterName, ids, cancellationToken);
+            var health = universalis.GetHealthSnapshot();
+
+            var exclusions = new List<OpportunityRejectionReason>();
+            foreach (var item in watched)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var reason = EvaluateExclusionReason(item, homeSnapshots, dcSnapshots, health);
+                if (string.IsNullOrWhiteSpace(reason))
+                    continue;
+
+                exclusions.Add(new OpportunityRejectionReason
+                {
+                    ItemId = item.ItemId,
+                    ItemName = item.Name,
+                    Reason = reason
+                });
+            }
+
+            return exclusions
+                .OrderBy(entry => entry.ItemName, StringComparer.OrdinalIgnoreCase)
+                .Take(60)
+                .ToList();
+        }
+
         public IReadOnlyList<WatchlistSuggestion> GetWatchlistSuggestions(int limit = 8)
         {
             EnsureItemCacheLoaded();
@@ -1509,6 +1614,65 @@ namespace UndercutterFFXIV.Services
                 .Any(g => g.Count() >= 3);
 
             return suspiciousGroup;
+        }
+
+        private static double ComputeAllocationScore(ArbitrageOpportunity opportunity)
+        {
+            var trustPenalty = opportunity.IsLowTrust ? 0.55 : 1.0;
+            var regimePenalty = opportunity.RiskRegime == "Patch Spike" ? 0.80 : opportunity.RiskRegime == "High Volatility" ? 0.88 : 1.0;
+            var velocityWeight = Math.Clamp(opportunity.SaleVelocityPerDay / 4.0, 0.4, 1.3);
+            var profitWeight = Math.Clamp(opportunity.ProfitPercent / 20.0, 0.35, 1.4);
+            return opportunity.ConfidenceScore * velocityWeight * profitWeight * trustPenalty * regimePenalty;
+        }
+
+        private string EvaluateExclusionReason(
+            WatchedItem watched,
+            IReadOnlyDictionary<uint, MarketSnapshot> homeSnapshots,
+            IReadOnlyDictionary<uint, MarketSnapshot> dcSnapshots,
+            ApiHealthSnapshot health)
+        {
+            if (!homeSnapshots.TryGetValue(watched.ItemId, out var home))
+                return "No home-world market data returned";
+
+            if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, out var candidate))
+            {
+                var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
+                if (velocity < config.MinSaleVelocityPerDay)
+                    return $"Filtered: velocity {velocity:F2}/day below threshold {config.MinSaleVelocityPerDay:F2}";
+
+                var (_, units24h) = CalculateRecentSales24h(home.RecentSales);
+                if (units24h < config.MinUnitsSold24h)
+                    return $"Filtered: units sold {units24h} below threshold {config.MinUnitsSold24h}";
+
+                if (home.LowestPrice == 0)
+                    return "Filtered: no active home listings";
+
+                return "Filtered by home-world quality rules";
+            }
+
+            if (!dcSnapshots.TryGetValue(watched.ItemId, out var dc))
+                return "No data-center market data returned";
+
+            if (dc.LowestPrice == 0 || dc.Listings.Count == 0)
+                return "Filtered: no buy-side listings in data center";
+
+            var netSellPerUnit = candidate.HomeLowestListingPrice * (1 - (config.MarketTaxRatePercent / 100.0));
+            var buySelection = SelectBuyReference(dc.Listings.Where(l => l.PricePerUnit > 0).OrderBy(l => l.PricePerUnit).ToList(), netSellPerUnit);
+            if (buySelection == null)
+                return "Filtered: cheap-listing depth trap or no profitable buy depth";
+
+            var buyPrice = buySelection.EffectiveBuyPricePerUnit;
+            var netProfit = netSellPerUnit - buyPrice;
+            var profitPercent = buyPrice <= 0 ? 0 : (netProfit / buyPrice) * 100.0;
+            if (netProfit < config.MinNetProfitGil)
+                return $"Filtered: net/unit {netProfit:N0} below gil minimum {config.MinNetProfitGil:N0}";
+            if (profitPercent < config.MinNetProfitPercent)
+                return $"Filtered: margin {profitPercent:F1}% below minimum {config.MinNetProfitPercent:F1}%";
+
+            if (config.EnableDegradedModeActionBlock && health.SafeZone != "Green")
+                return $"Deferred: API safe zone is {health.SafeZone}";
+
+            return string.Empty;
         }
     }
 }
