@@ -11,6 +11,7 @@ namespace UndercutterFFXIV.Models
         public bool IsGear { get; init; }
         public int RequiredLevel { get; init; }
         public int ItemLevel { get; init; }
+        public bool IsWatchlistItem { get; init; }
     }
 
     public sealed class WatchedItem

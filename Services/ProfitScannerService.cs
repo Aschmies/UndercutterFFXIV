@@ -602,7 +602,7 @@ namespace UndercutterFFXIV.Services
                 return new List<ItemLookup>();
 
             var watchlistItems = GetWatchlist()
-                .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name })
+                .Select(w => new ItemLookup { ItemId = w.ItemId, Name = w.Name, IsWatchlistItem = true })
                 .ToList();
 
             return mode switch
@@ -848,7 +848,7 @@ namespace UndercutterFFXIV.Services
                         if (!homeSnapshots.TryGetValue(item.ItemId, out var home))
                             continue;
 
-                        if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, out var candidate))
+                        if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, item.IsWatchlistItem, out var candidate))
                             continue;
 
                         homeCandidatesByItemId[item.ItemId] = candidate;
@@ -1006,6 +1006,7 @@ namespace UndercutterFFXIV.Services
         private bool TryBuildHomeSnapshotCandidate(
             MarketSnapshot home,
             ScanMode scanMode,
+            bool isWatchlistItem,
             out HomeSnapshotCandidate candidate)
         {
             candidate = new HomeSnapshotCandidate();
@@ -1020,16 +1021,22 @@ namespace UndercutterFFXIV.Services
                 return false;
 
             var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
-            var minVelocity = (scanMode == ScanMode.WeaponsOnly || scanMode == ScanMode.ArmorOnly || scanMode == ScanMode.AccessoriesOnly || scanMode == ScanMode.GearOnly)
-                ? config.GearMinVelocityPerDay
-                : config.MinSaleVelocityPerDay;
-
-            if (velocity < minVelocity)
-                return false;
 
             var (salesCount24h, unitsSold24h) = CalculateRecentSales24h(home.RecentSales);
-            if (unitsSold24h < Math.Max(0, config.MinUnitsSold24h))
-                return false;
+
+            // Watchlist items bypass velocity and units-sold filters — the user explicitly chose to track them.
+            if (!isWatchlistItem)
+            {
+                var minVelocity = (scanMode == ScanMode.WeaponsOnly || scanMode == ScanMode.ArmorOnly || scanMode == ScanMode.AccessoriesOnly || scanMode == ScanMode.GearOnly)
+                    ? config.GearMinVelocityPerDay
+                    : config.MinSaleVelocityPerDay;
+
+                if (velocity < minVelocity)
+                    return false;
+
+                if (unitsSold24h < Math.Max(0, config.MinUnitsSold24h))
+                    return false;
+            }
 
             candidate = new HomeSnapshotCandidate
             {
@@ -1639,7 +1646,7 @@ namespace UndercutterFFXIV.Services
             if (!homeSnapshots.TryGetValue(watched.ItemId, out var home))
                 return "No home-world market data returned";
 
-            if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, out var candidate))
+            if (!TryBuildHomeSnapshotCandidate(home, currentScanMode, false, out var candidate))
             {
                 var velocity = CalculateSaleVelocity(home.RecentSales, config.ScannerLookbackDays);
                 if (velocity < config.MinSaleVelocityPerDay)
