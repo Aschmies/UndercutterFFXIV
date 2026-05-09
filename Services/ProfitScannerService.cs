@@ -2,6 +2,8 @@ using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -121,6 +123,43 @@ namespace UndercutterFFXIV.Services
         public IReadOnlyList<TradeHistoryEntry> GetTradeHistory(int days = 30)
             => database.GetTradeHistory(days);
 
+        public void ApplyScanProfile(string profile)
+        {
+            var normalized = (profile ?? string.Empty).Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "quick":
+                    config.ActiveScanProfile = "Quick";
+                    config.MinSaleVelocityPerDay = 2.5;
+                    config.MinNetProfitGil = 120;
+                    config.MinNetProfitPercent = 4;
+                    config.MinUnitsSold24h = 3;
+                    break;
+                case "conservative":
+                    config.ActiveScanProfile = "Conservative";
+                    config.MinSaleVelocityPerDay = 2.0;
+                    config.MinNetProfitGil = 220;
+                    config.MinNetProfitPercent = 9;
+                    config.MinUnitsSold24h = 5;
+                    break;
+                case "highvolume":
+                case "high-volume":
+                    config.ActiveScanProfile = "HighVolume";
+                    config.MinSaleVelocityPerDay = 3.5;
+                    config.MinNetProfitGil = 80;
+                    config.MinNetProfitPercent = 2.5;
+                    config.MinUnitsSold24h = 8;
+                    break;
+                default:
+                    config.ActiveScanProfile = "Balanced";
+                    config.MinSaleVelocityPerDay = 2.0;
+                    config.MinNetProfitGil = 100;
+                    config.MinNetProfitPercent = 5;
+                    config.MinUnitsSold24h = 0;
+                    break;
+            }
+        }
+
         public void AddTradeHistoryEntry(uint itemId, string itemName, uint buyPrice, uint sellPrice, uint quantity)
         {
             database.AddTradeHistoryEntry(new TradeHistoryEntry
@@ -132,6 +171,109 @@ namespace UndercutterFFXIV.Services
                 Quantity = quantity,
                 TradedUtc = DateTime.UtcNow
             });
+        }
+
+        public void RecordRecommendationFeedback(ArbitrageOpportunity opportunity, bool accepted)
+            => database.SaveRecommendationFeedback(opportunity.ItemId, opportunity.ItemName, accepted, opportunity.ProjectedBatchNetGil);
+
+        public RecommendationFeedbackSummary GetRecommendationFeedbackSummary(int days = 30)
+            => database.GetRecommendationFeedbackSummary(days);
+
+        public IReadOnlyList<(string World, double ProjectedNetGil, int ItemCount)> GetTravelBatchPlans(IReadOnlyList<ArbitrageOpportunity> opportunities, int limit = 3)
+        {
+            return opportunities
+                .Where(opp => !string.IsNullOrWhiteSpace(opp.BuyFromWorld)
+                    && !string.Equals(opp.BuyFromWorld, config.WorldName, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(opp => opp.BuyFromWorld)
+                .Select(group => (
+                    World: group.Key,
+                    ProjectedNetGil: group.Sum(opp => opp.ProjectedBatchNetGil) - config.WorldTravelOverheadGil,
+                    ItemCount: group.Count()))
+                .OrderByDescending(x => x.ProjectedNetGil)
+                .ThenByDescending(x => x.ItemCount)
+                .Take(Math.Max(1, limit))
+                .ToList();
+        }
+
+        public IReadOnlyList<WatchlistSuggestion> GetWatchlistSuggestions(int limit = 8)
+        {
+            EnsureItemCacheLoaded();
+            if (marketableItemCache == null || marketableItemCache.Count == 0)
+                return Array.Empty<WatchlistSuggestion>();
+
+            var watched = GetWatchlist().Select(w => w.ItemId).ToHashSet();
+            var winners = GetTradeHistory(30)
+                .Where(entry => entry.SellPrice > entry.BuyPrice)
+                .GroupBy(entry => CategorizeItem(entry.ItemName))
+                .OrderByDescending(group => group.Count())
+                .Take(3)
+                .Select(group => group.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (winners.Count == 0)
+                winners.Add("Materials");
+
+            var results = new List<WatchlistSuggestion>();
+            foreach (var item in marketableItemCache)
+            {
+                if (watched.Contains(item.ItemId))
+                    continue;
+
+                var category = CategorizeItem(item.Name);
+                if (!winners.Contains(category))
+                    continue;
+
+                results.Add(new WatchlistSuggestion
+                {
+                    ItemId = item.ItemId,
+                    ItemName = item.Name,
+                    Reason = $"Similar to profitable {category} trades"
+                });
+
+                if (results.Count >= Math.Max(1, limit))
+                    break;
+            }
+
+            return results;
+        }
+
+        public string ExportSessionReport(
+            string outputDirectory,
+            IReadOnlyList<ArbitrageOpportunity> opportunities,
+            int queuedItems,
+            int inventoryRows)
+        {
+            Directory.CreateDirectory(outputDirectory);
+            var now = DateTime.UtcNow;
+            var analytics = GetAdvancedHistoryAnalytics(30);
+            var feedback = GetRecommendationFeedbackSummary(30);
+            var path = Path.Combine(outputDirectory, $"session_report_{now:yyyyMMdd_HHmmss}.txt");
+
+            var lines = new List<string>
+            {
+                "Market Master Pro Session Report",
+                $"UTC: {now:O}",
+                $"Profile: {config.ActiveScanProfile}",
+                $"Opportunities: {opportunities.Count}",
+                $"Inventory Rows: {inventoryRows}",
+                $"Queued Reprices: {queuedItems}",
+                $"Win Rate (30d): {analytics.WinRatePercent:F1}%",
+                $"Avg Net/Hr (30d): {analytics.AverageNetGilPerHour:N0}",
+                $"Recommendation Acceptance (30d): {feedback.AcceptanceRatePercent:F1}% ({feedback.AcceptedCount}/{feedback.AcceptedCount + feedback.RejectedCount})",
+                string.Empty,
+                "Top Opportunities"
+            };
+
+            foreach (var opp in opportunities
+                .OrderByDescending(o => o.ProjectedBatchNetGil)
+                .ThenByDescending(o => o.ConfidenceScore)
+                .Take(12))
+            {
+                lines.Add($"- {opp.ItemName} | Qty {opp.RecommendedBuyQty} | Net/Unit {opp.NetProfitPerUnit:N0} | Batch {opp.ProjectedBatchNetGil:N0} | Confidence {opp.ConfidenceScore:F0} | Regime {opp.RiskRegime}");
+            }
+
+            File.WriteAllLines(path, lines);
+            return path;
         }
 
         public IReadOnlyList<PendingBuyCaptureEntry> GetPendingBuyCaptures(int limit = 100)
@@ -826,12 +968,19 @@ namespace UndercutterFFXIV.Services
             var freshnessMinutes = dc.MostRecentSaleUtc.HasValue
                 ? Math.Max(0, (DateTime.UtcNow - dc.MostRecentSaleUtc.Value).TotalMinutes)
                 : 999;
-            var confidence = CalculateConfidenceScore(homeCandidate, dc, profitPercent, freshnessMinutes, apiHealth);
+            var confidenceBreakdown = CalculateConfidenceBreakdown(homeCandidate, dc, profitPercent, freshnessMinutes, apiHealth);
+            var confidence = confidenceBreakdown.Total;
             var lowTrust = confidence < 35 || freshnessMinutes > 180 || apiHealth.SafeZone == "Red";
             var trustReason = lowTrust
                 ? BuildTrustReason(confidence, freshnessMinutes, apiHealth)
                 : "Healthy";
             var travelPlan = BuildTravelPlanSummary(buyWorld, netProfit, homeCandidate.VelocityPerDay);
+            var regime = DetectMarketRegime(homeCandidate, dc, freshnessMinutes);
+            var maxByItemCapital = Math.Max(1, config.MaxCapitalPerItemGil) / Math.Max(1, (int)Math.Round(buyPrice));
+            var recommendedQty = CalculateRecommendedBuyQty(homeCandidate.VelocityPerDay, confidence, buySelection.TargetQty, maxByItemCapital);
+            var projectedBatchNet = netProfit * recommendedQty;
+            var routeSummary = BuildRouteSummary(buyWorld);
+            var explainability = BuildExplainabilitySummary(confidenceBreakdown, regime, travelPlan.WorthIt);
             
             // Calculate total quantity listed at home world's minimum price
             var homeWorldCurrentQty = (uint)homeCandidate.HomeListings
@@ -860,6 +1009,19 @@ namespace UndercutterFFXIV.Services
                 TrustReason = trustReason,
                 TravelPlanSummary = travelPlan.Summary,
                 TravelWorthIt = travelPlan.WorthIt,
+                RecommendedBuyQty = recommendedQty,
+                MaxAffordableQtyByCapital = Math.Max(1, maxByItemCapital),
+                ProjectedBatchNetGil = projectedBatchNet,
+                RouteSummary = routeSummary,
+                RiskRegime = regime,
+                ExplainabilitySummary = explainability,
+                ScoreVelocity = confidenceBreakdown.VelocityScore,
+                ScoreSpread = confidenceBreakdown.SpreadScore,
+                ScoreDepth = confidenceBreakdown.DepthScore,
+                ScoreVolatility = confidenceBreakdown.VolatilityScore,
+                ScoreFreshness = confidenceBreakdown.FreshnessScore,
+                ScoreApiPenalty = confidenceBreakdown.ApiPenalty,
+                NeedsManualReview = lowTrust || (config.EnableDegradedModeActionBlock && apiHealth.SafeZone != "Green"),
                 ScannedUtc = DateTime.UtcNow
             };
         }
@@ -878,7 +1040,8 @@ namespace UndercutterFFXIV.Services
                 return new BuySelection
                 {
                     EffectiveBuyPricePerUnit = cheapestPrice,
-                    BuyWorld = cheapest.WorldName
+                    BuyWorld = cheapest.WorldName,
+                    TargetQty = 1
                 };
             }
 
@@ -920,7 +1083,8 @@ namespace UndercutterFFXIV.Services
             return new BuySelection
             {
                 EffectiveBuyPricePerUnit = totalCost / consumedUnits,
-                BuyWorld = buyWorld
+                BuyWorld = buyWorld,
+                TargetQty = targetUnits
             };
         }
 
@@ -939,6 +1103,7 @@ namespace UndercutterFFXIV.Services
         {
             public double EffectiveBuyPricePerUnit { get; init; }
             public string BuyWorld { get; init; } = string.Empty;
+            public int TargetQty { get; init; } = 1;
         }
 
         private sealed class HomeSnapshotCandidate
@@ -985,6 +1150,9 @@ namespace UndercutterFFXIV.Services
             return (int)Math.Round((wins * 100.0) / rows.Count);
         }
 
+        public double? GetAverageBuyPrice(uint itemId, int days = 60)
+            => database.GetAverageBuyPrice(itemId, days);
+
         private int GetOwnedItemQuantity(uint itemId)
         {
             return retainerPriceService.GetOwnedItemQuantity(itemId);
@@ -1028,7 +1196,7 @@ namespace UndercutterFFXIV.Services
             return "Misc";
         }
 
-        private static double CalculateConfidenceScore(
+        private static ConfidenceBreakdown CalculateConfidenceBreakdown(
             HomeSnapshotCandidate homeCandidate,
             MarketSnapshot dc,
             double profitPercent,
@@ -1059,7 +1227,17 @@ namespace UndercutterFFXIV.Services
             var profitBonus = Math.Min(10, Math.Max(0, profitPercent / 5.0));
 
             var score = velocityScore + spreadScore + depthScore + volatilityScore + freshnessScore + profitBonus - apiPenalty;
-            return Math.Clamp(score, 0, 100);
+            return new ConfidenceBreakdown
+            {
+                VelocityScore = velocityScore,
+                SpreadScore = spreadScore,
+                DepthScore = depthScore,
+                VolatilityScore = volatilityScore,
+                FreshnessScore = freshnessScore,
+                ApiPenalty = apiPenalty,
+                ProfitBonus = profitBonus,
+                Total = Math.Clamp(score, 0, 100)
+            };
         }
 
         private static double CalculateSalesVolatility(IReadOnlyList<ListingRecord> listings)
@@ -1091,6 +1269,47 @@ namespace UndercutterFFXIV.Services
             return "Healthy";
         }
 
+        private static int CalculateRecommendedBuyQty(double velocityPerDay, double confidence, int targetQty, int maxByItemCapital)
+        {
+            var byVelocity = velocityPerDay < 1 ? 1 : velocityPerDay < 2.5 ? 2 : velocityPerDay < 4 ? 3 : 4;
+            var byConfidence = confidence < 35 ? 1 : confidence < 55 ? 2 : confidence < 75 ? 3 : 4;
+            var baseline = Math.Min(byVelocity, byConfidence);
+            baseline = Math.Min(baseline, Math.Max(1, targetQty));
+            return Math.Max(1, Math.Min(baseline, Math.Max(1, maxByItemCapital)));
+        }
+
+        private static string DetectMarketRegime(HomeSnapshotCandidate homeCandidate, MarketSnapshot dc, double freshnessMinutes)
+        {
+            if (freshnessMinutes > 180)
+                return "Stale";
+
+            var volatility = CalculateSalesVolatility(homeCandidate.HomeListings);
+            var spread = 0.0;
+            var ordered = dc.Listings.Where(l => l.PricePerUnit > 0).OrderBy(l => l.PricePerUnit).ToList();
+            if (ordered.Count >= 2 && ordered[0].PricePerUnit > 0)
+                spread = ((ordered[1].PricePerUnit - ordered[0].PricePerUnit) / (double)ordered[0].PricePerUnit) * 100.0;
+
+            if (homeCandidate.VelocityPerDay > 5 && spread > 6)
+                return "Patch Spike";
+            if (volatility > 0.25)
+                return "High Volatility";
+            if (homeCandidate.VelocityPerDay < 1)
+                return "Thinning Demand";
+            return "Stable";
+        }
+
+        private string BuildRouteSummary(string buyWorld)
+        {
+            if (string.IsNullOrWhiteSpace(buyWorld) || string.Equals(buyWorld, config.WorldName, StringComparison.OrdinalIgnoreCase))
+                return $"Stay on {config.WorldName}";
+            return $"{config.WorldName} -> {buyWorld} -> {config.WorldName}";
+        }
+
+        private static string BuildExplainabilitySummary(ConfidenceBreakdown breakdown, string regime, bool travelWorthIt)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"Regime {regime}; velocity {breakdown.VelocityScore:F1}, spread {breakdown.SpreadScore:F1}, depth {breakdown.DepthScore:F1}, volatility {breakdown.VolatilityScore:F1}, freshness {breakdown.FreshnessScore:F1}, api penalty {breakdown.ApiPenalty:F1}; travel {(travelWorthIt ? "worth" : "not worth")}.");
+        }
+
         private (string Summary, bool WorthIt) BuildTravelPlanSummary(string buyWorld, double netProfitPerUnit, double velocityPerDay)
         {
             var qty = Math.Max(1, (int)Math.Round(Math.Min(8, Math.Max(1, velocityPerDay))));
@@ -1102,6 +1321,18 @@ namespace UndercutterFFXIV.Services
                 return ("Local buy", true);
 
             return ($"{buyWorld} x{qty} | est net {projected:N0} after {travelCost:N0} travel", worthIt);
+        }
+
+        private sealed class ConfidenceBreakdown
+        {
+            public double VelocityScore { get; init; }
+            public double SpreadScore { get; init; }
+            public double DepthScore { get; init; }
+            public double VolatilityScore { get; init; }
+            public double FreshnessScore { get; init; }
+            public double ApiPenalty { get; init; }
+            public double ProfitBonus { get; init; }
+            public double Total { get; init; }
         }
 
         private void EnsureItemCacheLoaded()

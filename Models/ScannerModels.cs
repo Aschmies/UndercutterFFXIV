@@ -79,6 +79,19 @@ namespace UndercutterFFXIV.Models
         public string TrustReason { get; init; } = string.Empty;
         public string TravelPlanSummary { get; init; } = string.Empty;
         public bool TravelWorthIt { get; init; }
+        public int RecommendedBuyQty { get; init; }
+        public int MaxAffordableQtyByCapital { get; init; }
+        public double ProjectedBatchNetGil { get; init; }
+        public string RouteSummary { get; init; } = string.Empty;
+        public string RiskRegime { get; init; } = string.Empty;
+        public string ExplainabilitySummary { get; init; } = string.Empty;
+        public double ScoreVelocity { get; init; }
+        public double ScoreSpread { get; init; }
+        public double ScoreDepth { get; init; }
+        public double ScoreVolatility { get; init; }
+        public double ScoreFreshness { get; init; }
+        public double ScoreApiPenalty { get; init; }
+        public bool NeedsManualReview { get; init; }
         public DateTime ScannedUtc { get; init; }
 
         /// <summary>
@@ -191,5 +204,19 @@ namespace UndercutterFFXIV.Models
         public double MedianEstimatedHoldHours { get; init; }
         public IReadOnlyList<(string Category, double NetGil)> BestCategories { get; init; } = Array.Empty<(string, double)>();
         public IReadOnlyList<(string ItemName, int LossCount, double TotalLoss)> RepeatedLossItems { get; init; } = Array.Empty<(string, int, double)>();
+    }
+
+    public sealed class WatchlistSuggestion
+    {
+        public uint ItemId { get; init; }
+        public string ItemName { get; init; } = string.Empty;
+        public string Reason { get; init; } = string.Empty;
+    }
+
+    public sealed class RecommendationFeedbackSummary
+    {
+        public int AcceptedCount { get; init; }
+        public int RejectedCount { get; init; }
+        public double AcceptanceRatePercent { get; init; }
     }
 }

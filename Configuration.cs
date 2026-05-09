@@ -40,6 +40,17 @@ namespace UndercutterFFXIV
         public int WorldTravelOverheadGil { get; set; } = 250;
         public int WorldTravelMinNetGil { get; set; } = 1000;
 
+        // Profiles and guardrails
+        public string ActiveScanProfile { get; set; } = "Balanced";
+        public bool EnableStrictRepriceGuardrails { get; set; } = true;
+        public int MinRepriceMarginGil { get; set; } = 100;
+        public double MinRepriceMarginPercent { get; set; } = 5.0;
+        public bool EnableDegradedModeActionBlock { get; set; } = true;
+
+        // Position sizing / capital caps
+        public int MaxCapitalPerItemGil { get; set; } = 250000;
+        public int MaxCapitalPerDayGil { get; set; } = 1500000;
+
         // Legacy fields kept for backward compatibility with existing windows/services
         public bool PluginEnabled { get; set; } = true;
         public int CheckIntervalSeconds { get; set; } = 30;

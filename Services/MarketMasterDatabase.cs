@@ -411,6 +411,83 @@ ORDER BY scanned_utc DESC";
             }
         }
 
+        public void SaveRecommendationFeedback(uint itemId, string itemName, bool accepted, double projectedNetGil)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+INSERT INTO recommendation_feedback(item_id, item_name, accepted, projected_net_gil, action_utc)
+VALUES($itemId, $itemName, $accepted, $projected, $actionUtc)";
+                cmd.Parameters.AddWithValue("$itemId", itemId);
+                cmd.Parameters.AddWithValue("$itemName", itemName);
+                cmd.Parameters.AddWithValue("$accepted", accepted ? 1 : 0);
+                cmd.Parameters.AddWithValue("$projected", projectedNetGil);
+                cmd.Parameters.AddWithValue("$actionUtc", DateTime.UtcNow.ToString("O"));
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public RecommendationFeedbackSummary GetRecommendationFeedbackSummary(int days)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+SELECT
+    SUM(CASE WHEN accepted = 1 THEN 1 ELSE 0 END) AS accepted_count,
+    SUM(CASE WHEN accepted = 0 THEN 1 ELSE 0 END) AS rejected_count
+FROM recommendation_feedback
+WHERE action_utc >= $cutoff";
+                cmd.Parameters.AddWithValue("$cutoff", DateTime.UtcNow.AddDays(-Math.Max(1, days)).ToString("O"));
+
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read())
+                    return new RecommendationFeedbackSummary();
+
+                var accepted = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+                var rejected = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+                var total = accepted + rejected;
+                var rate = total == 0 ? 0 : (accepted * 100.0) / total;
+
+                return new RecommendationFeedbackSummary
+                {
+                    AcceptedCount = accepted,
+                    RejectedCount = rejected,
+                    AcceptanceRatePercent = rate
+                };
+            }
+        }
+
+        public double? GetAverageBuyPrice(uint itemId, int days)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+SELECT AVG(buy_price)
+FROM trade_history
+WHERE item_id = $itemId AND traded_utc >= $cutoff";
+                cmd.Parameters.AddWithValue("$itemId", itemId);
+                cmd.Parameters.AddWithValue("$cutoff", DateTime.UtcNow.AddDays(-Math.Max(1, days)).ToString("O"));
+
+                var value = cmd.ExecuteScalar();
+                if (value == null || value is DBNull)
+                    return null;
+
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            }
+        }
+
         private void InitializeSchema()
         {
             lock (dbLock)
@@ -483,13 +560,23 @@ CREATE TABLE IF NOT EXISTS retainer_listing_snapshots (
     scanned_utc TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS recommendation_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL,
+    item_name TEXT NOT NULL,
+    accepted INTEGER NOT NULL,
+    projected_net_gil REAL NOT NULL,
+    action_utc TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_opportunities_run ON opportunities(run_id);
 CREATE INDEX IF NOT EXISTS idx_opportunities_item ON opportunities(item_id);
 CREATE INDEX IF NOT EXISTS idx_trade_history_time ON trade_history(traded_utc);
 CREATE INDEX IF NOT EXISTS idx_pending_buys_time ON pending_buy_captures(captured_utc);
 CREATE INDEX IF NOT EXISTS idx_retainer_snapshots_time ON retainer_listing_snapshots(scanned_utc);
-CREATE INDEX IF NOT EXISTS idx_retainer_snapshots_item ON retainer_listing_snapshots(item_id);";
-
+CREATE INDEX IF NOT EXISTS idx_retainer_snapshots_item ON retainer_listing_snapshots(item_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_time ON recommendation_feedback(action_utc);
+CREATE INDEX IF NOT EXISTS idx_feedback_item ON recommendation_feedback(item_id);";
                 cmd.ExecuteNonQuery();
             }
         }
