@@ -110,9 +110,18 @@ jobs:
           # Push to main regardless of whether we're on a detached HEAD during a tag build
           git push origin HEAD:refs/heads/main
 
-      # Create a GitHub Release and attach the zip as 'latest.zip'
-      # The DownloadLinkInstall/Update URL  .../releases/latest/download/latest.zip
-      # will automatically resolve to this asset on the newest release.
+      # Rename latest.zip to UndercutterFFXIV-vX.X.X.zip so the asset has a
+      # stable versioned name that matches the DownloadLinkInstall URL in pluginmaster.json.
+      - name: Rename zip for release
+        id: rename_zip
+        shell: pwsh
+        run: |
+          $src  = "${{ steps.find_zip.outputs.ZIP_PATH }}"
+          $dest = Join-Path (Split-Path $src) "UndercutterFFXIV-${{ github.ref_name }}.zip"
+          Rename-Item $src $dest
+          Write-Host "Renamed to: $dest"
+          echo "RELEASE_ZIP=$dest" >> $env:GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -123,5 +132,5 @@ jobs:
 
             **Install:** Add the custom repo URL to Dalamud (see README), then install "Market Assistant".
             **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
-          files: ${{ steps.find_zip.outputs.ZIP_PATH }}#UndercutterFFXIV-${{ github.ref_name }}.zip
+          files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
           fail_on_unmatched_files: true
