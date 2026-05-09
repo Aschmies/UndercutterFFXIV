@@ -785,7 +785,7 @@ namespace UndercutterFFXIV.Windows
                     ImGui.EndDisabled();
 
                     ImGui.TableNextColumn();
-                    ImGui.BeginDisabled(!(config.EnableRetainerAutoFill && row.UndercutPrice > 0 && row.GuardrailPass && !(config.EnableDegradedModeActionBlock && row.IsLowTrust)));
+                    ImGui.BeginDisabled(!(config.EnableRetainerAutoFill && row.UndercutPrice > 0));
                     if (ImGui.SmallButton($"Fill##fill{row.SlotIndex}_{row.ItemId}"))
                     {
                         if (retainerPriceService.TryAutoFillPrice(row.UndercutPrice, out var status))
@@ -793,7 +793,7 @@ namespace UndercutterFFXIV.Windows
                         inventoryStatus = status;
                     }
                     if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip("Clicks Adjust Price first, then fills the retainer sell-price input. Blocked automatically if guardrails or trust checks fail.");
+                        ImGui.SetTooltip("Fills the suggested price into the open Adjust Price dialog.");
                     ImGui.EndDisabled();
 
                 }
