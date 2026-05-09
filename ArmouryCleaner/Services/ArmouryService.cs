@@ -14,6 +14,7 @@ namespace ArmouryCleaner.Services
         InventoryType ContainerType,
         uint Level,
         uint ILvl,
+        byte Rarity,
         bool IsHQ,
         bool IsUntradeable,
         string[] ClassJobs
@@ -73,10 +74,16 @@ namespace ArmouryCleaner.Services
                     var isUntradeable = itemData.IsUntradable;
                     var equipLevel = itemData.LevelEquip;
                     var ilvl = itemData.LevelItem.RowId;
+                    var rarity = itemData.Rarity;
                     var classJobs = GetClassJobs(itemData);
 
                     if (config.SkipHighQuality && isHQ) continue;
                     if (config.SkipUntradeable && isUntradeable) continue;
+                    if (config.SkipWhite  && rarity == 1) continue;
+                    if (config.SkipGreen  && rarity == 2) continue;
+                    if (config.SkipBlue   && rarity == 3) continue;
+                    if (config.SkipPurple && rarity == 4) continue;
+                    if (config.SkipPink   && rarity == 7) continue;
                     if (equipLevel < config.MinLevel || equipLevel > config.MaxLevel) continue;
                     if (config.FilterByIlvl && (ilvl < (uint)config.MinIlvl || ilvl > (uint)config.MaxIlvl)) continue;
                     if (config.SelectedJobs.Count > 0 && !classJobs.Any(j => config.SelectedJobs.Contains(j))) continue;
@@ -88,6 +95,7 @@ namespace ArmouryCleaner.Services
                         invType,
                         equipLevel,
                         ilvl,
+                        rarity,
                         isHQ,
                         isUntradeable,
                         classJobs

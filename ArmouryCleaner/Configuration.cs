@@ -27,6 +27,13 @@ namespace ArmouryCleaner
         // Only delete items that are NOT unique/untradeable (extra safety)
         public bool SkipUntradeable { get; set; } = false;
 
+        // Skip by rarity colour (default: skip nothing)
+        public bool SkipWhite  { get; set; } = false;
+        public bool SkipGreen  { get; set; } = false;
+        public bool SkipBlue   { get; set; } = false;
+        public bool SkipPurple { get; set; } = false;
+        public bool SkipPink   { get; set; } = false;
+
         // ── Safety ─────────────────────────────────────────────────────────────────
         // Require explicit confirmation before any deletion happens
         public bool RequireConfirmation { get; set; } = true;
