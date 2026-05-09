@@ -37,9 +37,14 @@ namespace UndercutterFFXIV.Windows
         private bool scanRunning;
         private CancellationTokenSource? currentScanCancellation;
         private string scannerStatus = "Idle";
+        private bool opportunityCompactMode;
+        private bool opportunityDetailedTooltips = true;
+        private int opportunityRowLimit = 120;
         private bool inventoryGridRefreshInProgress;
         private bool inventoryGridInitialized;
         private bool exclusionRefreshInProgress;
+        private DateTime lastExclusionRefreshUtc = DateTime.MinValue;
+        private DateTime lastExclusionRequestUtc = DateTime.MinValue;
         
         // Full-market scan mode
         private ScanMode currentScanMode = ScanMode.TopItems;
@@ -142,7 +147,7 @@ namespace UndercutterFFXIV.Windows
             cachedSuggestions = scanner.GetWatchlistSuggestions(8).ToList();
             latestResults = scanner.GetLastResults().ToList();
             RefreshCapitalPlan();
-            _ = RefreshExclusionInspectorAsync();
+            _ = RefreshExclusionInspectorAsync(force: false);
             _ = RefreshInventoryGridAsync();
         }
 
@@ -593,7 +598,7 @@ namespace UndercutterFFXIV.Windows
                 ImGui.Text("Why Not Included?");
                 ImGui.SameLine();
                 if (ImGui.Button("Refresh Inspector##exclusions") && !exclusionRefreshInProgress)
-                    _ = RefreshExclusionInspectorAsync();
+                    _ = RefreshExclusionInspectorAsync(force: true);
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Explains why watchlist items were filtered from current opportunities.");
                 ImGui.TextDisabled(exclusionStatus);
@@ -1620,23 +1625,108 @@ namespace UndercutterFFXIV.Windows
             {
                 opportunitySortDirection = SortDirection.Ascending;
             }
+
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(90);
+            if (ImGui.InputInt("Rows##oppRowLimit", ref opportunityRowLimit))
+                opportunityRowLimit = Math.Clamp(opportunityRowLimit, 20, 500);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Maximum rows rendered in the opportunities table.");
+
+            ImGui.SameLine();
+            ImGui.Checkbox("Compact##oppCompact", ref opportunityCompactMode);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Show a lighter, faster table with essential fields only.");
+
+            ImGui.SameLine();
+            ImGui.Checkbox("Detailed tooltips##oppTooltips", ref opportunityDetailedTooltips);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When disabled, tooltip text generation is minimized for smoother scrolling.");
             
             var sortedOpportunities = opportunitySortDirection == SortDirection.Descending
                 ? opportunities.OrderByDescending(o => o.ProfitPercent).ToList()
                 : opportunities.OrderBy(o => o.ProfitPercent).ToList();
+            var displayedOpportunities = sortedOpportunities.Take(opportunityRowLimit).ToList();
+
+            if (sortedOpportunities.Count > displayedOpportunities.Count)
+                ImGui.TextDisabled($"Showing {displayedOpportunities.Count:N0} / {sortedOpportunities.Count:N0} rows");
 
             var tableWidth = Math.Max(360f, ImGui.GetContentRegionAvail().X);
             var itemWidth = CalculateColumnWidth(
-                sortedOpportunities.Select(o => o.ItemName),
+                displayedOpportunities.Select(o => o.ItemName),
                 "Item",
                 190f,
                 Math.Max(320f, tableWidth * 1.55f));
             var buyFromWidth = CalculateColumnWidth(
-                sortedOpportunities.Select(o => string.IsNullOrWhiteSpace(o.BuyFromWorld) ? config.DataCenterName : o.BuyFromWorld),
+                displayedOpportunities.Select(o => string.IsNullOrWhiteSpace(o.BuyFromWorld) ? config.DataCenterName : o.BuyFromWorld),
                 "Buy From",
                 85f,
                 170f,
                 80);
+
+            if (opportunityCompactMode)
+            {
+                if (!ImGui.BeginTable(tableId, 12,
+                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoSavedSettings,
+                    new Vector2(0, 0)))
+                    return;
+
+                ImGui.TableSetupColumn("Item",       ImGuiTableColumnFlags.WidthFixed, itemWidth);
+                ImGui.TableSetupColumn("Buy From",   ImGuiTableColumnFlags.WidthFixed, buyFromWidth);
+                ImGui.TableSetupColumn("Buy @",      ImGuiTableColumnFlags.WidthFixed, 75);
+                ImGui.TableSetupColumn("Net Profit", ImGuiTableColumnFlags.WidthFixed, 80);
+                ImGui.TableSetupColumn("Profit %",   ImGuiTableColumnFlags.WidthFixed, 75);
+                ImGui.TableSetupColumn("Confidence", ImGuiTableColumnFlags.WidthFixed, 85);
+                ImGui.TableSetupColumn("Trust",      ImGuiTableColumnFlags.WidthFixed, 80);
+                ImGui.TableSetupColumn("Data Age",   ImGuiTableColumnFlags.WidthFixed, 70);
+                ImGui.TableSetupColumn("Vel/Day",    ImGuiTableColumnFlags.WidthFixed, 70);
+                ImGui.TableSetupColumn("Rec Qty",    ImGuiTableColumnFlags.WidthFixed, 70);
+                ImGui.TableSetupColumn("Batch Net",  ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Time",       ImGuiTableColumnFlags.WidthFixed, 70);
+                ImGui.TableHeadersRow();
+
+                foreach (var opp in displayedOpportunities)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn(); ImGui.TextUnformatted(opp.ItemName);
+                    if (opportunityDetailedTooltips && ImGui.IsItemHovered())
+                        ImGui.SetTooltip($"{opp.ExplainabilitySummary}");
+                    ImGui.TableNextColumn(); ImGui.Text(string.IsNullOrWhiteSpace(opp.BuyFromWorld) ? config.DataCenterName : opp.BuyFromWorld);
+                    ImGui.TableNextColumn(); ImGui.Text(opp.DataCenterLowestPrice.ToString("N0"));
+
+                    ImGui.TableNextColumn();
+                    var netColor = opp.NetProfitPerUnit >= 0
+                        ? new Vector4(0.4f, 1f, 0.4f, 1f)
+                        : new Vector4(1f, 0.4f, 0.4f, 1f);
+                    ImGui.TextColored(netColor, opp.NetProfitPerUnit.ToString("N0"));
+
+                    ImGui.TableNextColumn(); ImGui.Text($"{opp.ProfitPercent:F1}%");
+                    ImGui.TableNextColumn();
+                    var confidenceColor = opp.ConfidenceScore >= 70
+                        ? new Vector4(0.4f, 1f, 0.4f, 1f)
+                        : opp.ConfidenceScore >= 45
+                            ? new Vector4(1f, 0.85f, 0.35f, 1f)
+                            : new Vector4(1f, 0.45f, 0.45f, 1f);
+                    ImGui.TextColored(confidenceColor, $"{opp.ConfidenceScore:F0}");
+                    if (opportunityDetailedTooltips && ImGui.IsItemHovered())
+                        ImGui.SetTooltip($"Confidence score components:\nVelocity {opp.ScoreVelocity:F1}\nSpread {opp.ScoreSpread:F1}\nDepth {opp.ScoreDepth:F1}\nVolatility {opp.ScoreVolatility:F1}\nFreshness {opp.ScoreFreshness:F1}\nAPI penalty {opp.ScoreApiPenalty:F1}");
+
+                    ImGui.TableNextColumn();
+                    var trustColor = opp.IsLowTrust ? new Vector4(1f, 0.55f, 0.35f, 1f) : new Vector4(0.45f, 1f, 0.45f, 1f);
+                    ImGui.TextColored(trustColor, opp.IsLowTrust ? "Low" : "OK");
+                    if (opportunityDetailedTooltips && ImGui.IsItemHovered())
+                        ImGui.SetTooltip($"{(string.IsNullOrWhiteSpace(opp.TrustReason) ? "Healthy" : opp.TrustReason)}\nManual review: {(opp.NeedsManualReview ? "Required" : "No")}");
+
+                    ImGui.TableNextColumn(); ImGui.Text($"{opp.DataFreshnessMinutes:F0}m");
+                    ImGui.TableNextColumn(); ImGui.Text(opp.SaleVelocityPerDay.ToString("F2"));
+                    ImGui.TableNextColumn(); ImGui.Text(opp.RecommendedBuyQty.ToString("N0"));
+                    ImGui.TableNextColumn(); ImGui.Text(opp.ProjectedBatchNetGil.ToString("N0"));
+                    ImGui.TableNextColumn(); ImGui.Text(opp.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
+                }
+
+                ImGui.EndTable();
+                return;
+            }
 
             if (!ImGui.BeginTable(tableId, 20,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoSavedSettings,
@@ -1665,26 +1755,26 @@ namespace UndercutterFFXIV.Windows
             ImGui.TableSetupColumn("Time",          ImGuiTableColumnFlags.WidthFixed, 70);
             ImGui.TableHeadersRow();
 
-            foreach (var opp in sortedOpportunities)
+            foreach (var opp in displayedOpportunities)
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(opp.ItemName);
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip($"{opp.ExplainabilitySummary}");
                 ImGui.TableNextColumn(); ImGui.Text(opp.OwnedQuantity.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Owned quantity in inventory + active retainer listings. Used to prioritize opportunities you can execute immediately.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.HomeWorldCurrentQtyListing.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Current quantity listed at the home-world minimum price.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.HomeWorldMinPrice.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Current home-world floor listing price used for projected sell-side revenue.");
                 ImGui.TableNextColumn(); ImGui.Text(string.IsNullOrWhiteSpace(opp.BuyFromWorld) ? config.DataCenterName : opp.BuyFromWorld);
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Best source world for buy-side execution.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.DataCenterLowestPrice.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Estimated buy price from source world listings.");
 
                 ImGui.TableNextColumn();
@@ -1692,11 +1782,11 @@ namespace UndercutterFFXIV.Windows
                     ? new Vector4(0.4f, 1f, 0.4f, 1f)
                     : new Vector4(1f, 0.4f, 0.4f, 1f);
                 ImGui.TextColored(netColor, opp.NetProfitPerUnit.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Projected net per unit after tax using home sell floor and buy source floor.");
 
                 ImGui.TableNextColumn(); ImGui.Text($"{opp.ProfitPercent:F1}%");
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Projected return percentage versus estimated buy price.");
                 ImGui.TableNextColumn();
                 var confidenceColor = opp.ConfidenceScore >= 70
@@ -1705,51 +1795,51 @@ namespace UndercutterFFXIV.Windows
                         ? new Vector4(1f, 0.85f, 0.35f, 1f)
                         : new Vector4(1f, 0.45f, 0.45f, 1f);
                 ImGui.TextColored(confidenceColor, $"{opp.ConfidenceScore:F0}");
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip($"Confidence score components:\nVelocity {opp.ScoreVelocity:F1}\nSpread {opp.ScoreSpread:F1}\nDepth {opp.ScoreDepth:F1}\nVolatility {opp.ScoreVolatility:F1}\nFreshness {opp.ScoreFreshness:F1}\nAPI penalty {opp.ScoreApiPenalty:F1}");
                 ImGui.TableNextColumn();
                 var trustColor = opp.IsLowTrust ? new Vector4(1f, 0.55f, 0.35f, 1f) : new Vector4(0.45f, 1f, 0.45f, 1f);
                 ImGui.TextColored(trustColor, opp.IsLowTrust ? "Low" : "OK");
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip($"{(string.IsNullOrWhiteSpace(opp.TrustReason) ? "Healthy" : opp.TrustReason)}\nManual review: {(opp.NeedsManualReview ? "Required" : "No")}");
                 ImGui.TableNextColumn(); ImGui.Text($"{opp.DataFreshnessMinutes:F0}m");
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Minutes since the most recent observed sale in source data.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.RiskRegime);
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Detected market regime used to contextualize confidence and sizing.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.UnitsSold24h.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Units sold in the last 24 hours.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.SaleVelocityPerDay.ToString("F2"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Average sales/day over configured lookback window.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.RecommendedBuyQty.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip($"Position sizing recommendation capped by confidence, velocity, and item capital limit ({opp.MaxAffordableQtyByCapital}).");
                 ImGui.TableNextColumn(); ImGui.Text(opp.ProjectedBatchNetGil.ToString("N0"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Projected net if buying recommended quantity.");
                 ImGui.TableNextColumn();
                 var travelColor = opp.TravelWorthIt ? new Vector4(0.45f, 1f, 0.45f, 1f) : new Vector4(1f, 0.6f, 0.45f, 1f);
                 ImGui.TextColored(travelColor, opp.TravelPlanSummary);
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Travel planner includes overhead and minimum net threshold settings.");
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(opp.RouteSummary);
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Suggested world route for this opportunity.");
                 ImGui.TableNextColumn();
                 if (ImGui.SmallButton($"+##fbAccept{opp.ItemId}"))
                     scanner.RecordRecommendationFeedback(opp, true);
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Mark as accepted to train your personalized feedback loop.");
                 ImGui.SameLine();
                 if (ImGui.SmallButton($"-##fbReject{opp.ItemId}"))
                     scanner.RecordRecommendationFeedback(opp, false);
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Mark as rejected to improve future recommendation calibration.");
                 ImGui.TableNextColumn(); ImGui.Text(opp.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
-                if (ImGui.IsItemHovered())
+                if (opportunityDetailedTooltips && ImGui.IsItemHovered())
                     ImGui.SetTooltip("Timestamp when this opportunity was evaluated.");
             }
 
@@ -1768,16 +1858,34 @@ namespace UndercutterFFXIV.Windows
             capitalSimulation = scanner.SimulateOpportunityQueue(capitalPlan);
         }
 
-        private async Task RefreshExclusionInspectorAsync()
+        private async Task RefreshExclusionInspectorAsync(bool force)
         {
             if (exclusionRefreshInProgress)
                 return;
 
+            var now = DateTime.UtcNow;
+            var cacheTtl = TimeSpan.FromSeconds(90);
+            var debounce = TimeSpan.FromSeconds(2);
+
+            if (!force && exclusionReasons.Count > 0 && (now - lastExclusionRefreshUtc) < cacheTtl)
+            {
+                exclusionStatus = $"Using cached exclusions ({exclusionReasons.Count})";
+                return;
+            }
+
+            if (force && (now - lastExclusionRequestUtc) < debounce)
+            {
+                exclusionStatus = "Please wait before refreshing exclusions again.";
+                return;
+            }
+
             exclusionRefreshInProgress = true;
+            lastExclusionRequestUtc = now;
             exclusionStatus = "Analyzing excluded watchlist items...";
             try
             {
                 exclusionReasons = (await scanner.ExplainWatchlistExclusionsAsync(CancellationToken.None)).ToList();
+                lastExclusionRefreshUtc = DateTime.UtcNow;
                 exclusionStatus = exclusionReasons.Count == 0
                     ? "No exclusions detected"
                     : $"{exclusionReasons.Count} excluded watchlist items analyzed";
@@ -1808,7 +1916,7 @@ namespace UndercutterFFXIV.Windows
                 var results = await scanner.ScanWatchlistAsync(currentScanCancellation.Token);
                 latestResults = results.ToList();
                 RefreshCapitalPlan();
-                _ = RefreshExclusionInspectorAsync();
+                _ = RefreshExclusionInspectorAsync(force: false);
                 scannerStatus = $"Scan complete: {latestResults.Count} opportunities";
             }
             catch (OperationCanceledException)
