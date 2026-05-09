@@ -159,7 +159,7 @@ namespace ArmouryCleaner.Windows
 
             // Skip flags
             var skipHQ = Config.SkipHighQuality;
-            if (ImGui.Checkbox("Skip High Quality##skiphq", ref skipHQ))
+            if (ImGui.Checkbox("Skip High Quality (✦)##skiphq", ref skipHQ))
             {
                 Config.SkipHighQuality = skipHQ;
                 Config.Save();
@@ -171,6 +171,24 @@ namespace ArmouryCleaner.Windows
                 Config.SkipUntradeable = skipUntradeable;
                 Config.Save();
             }
+
+            // Rarity skip flags
+            ImGui.TextUnformatted("Skip Rarity:");
+            ImGui.SameLine();
+            var skipWhite  = Config.SkipWhite;
+            var skipGreen  = Config.SkipGreen;
+            var skipBlue   = Config.SkipBlue;
+            var skipPurple = Config.SkipPurple;
+            var skipPink   = Config.SkipPink;
+            DrawRarityCheckbox("White##skipWhite",   new Vector4(0.85f, 0.85f, 0.85f, 1f), ref skipWhite,  v => { Config.SkipWhite  = v; Config.Save(); });
+            ImGui.SameLine();
+            DrawRarityCheckbox("Green##skipGreen",   new Vector4(0.13f, 0.87f, 0.13f, 1f), ref skipGreen,  v => { Config.SkipGreen  = v; Config.Save(); });
+            ImGui.SameLine();
+            DrawRarityCheckbox("Blue##skipBlue",     new Vector4(0.33f, 0.67f, 1.00f, 1f), ref skipBlue,   v => { Config.SkipBlue   = v; Config.Save(); });
+            ImGui.SameLine();
+            DrawRarityCheckbox("Purple##skipPurple", new Vector4(0.75f, 0.40f, 1.00f, 1f), ref skipPurple, v => { Config.SkipPurple = v; Config.Save(); });
+            ImGui.SameLine();
+            DrawRarityCheckbox("Pink##skipPink",     new Vector4(1.00f, 0.50f, 0.80f, 1f), ref skipPink,   v => { Config.SkipPink   = v; Config.Save(); });
 
             ImGui.Spacing();
             if (ImGui.Button("Scan Armoury##scan"))
@@ -215,7 +233,7 @@ namespace ArmouryCleaner.Windows
                     var item = scanResults[i];
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
-                    ImGui.TextUnformatted(item.Name);
+                    ImGui.TextColored(RarityColor(item.Rarity), item.Name);
                     ImGui.TableNextColumn();
                     ImGui.TextUnformatted(item.Level.ToString());
                     ImGui.TableNextColumn();
@@ -307,5 +325,22 @@ namespace ArmouryCleaner.Windows
 
             Config.Save();
         }
+
+        private static void DrawRarityCheckbox(string label, Vector4 color, ref bool value, Action<bool> onChange)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, color);
+            if (ImGui.Checkbox(label, ref value))
+                onChange(value);
+            ImGui.PopStyleColor();
+        }
+
+        private static Vector4 RarityColor(byte rarity) => rarity switch
+        {
+            2 => new Vector4(0.13f, 0.87f, 0.13f, 1f), // Green
+            3 => new Vector4(0.33f, 0.67f, 1.00f, 1f), // Blue
+            4 => new Vector4(0.75f, 0.40f, 1.00f, 1f), // Purple
+            7 => new Vector4(1.00f, 0.50f, 0.80f, 1f), // Pink
+            _ => new Vector4(0.85f, 0.85f, 0.85f, 1f), // White / default
+        };
     }
 }
