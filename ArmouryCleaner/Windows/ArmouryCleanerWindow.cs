@@ -3,6 +3,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 
@@ -17,6 +18,13 @@ namespace ArmouryCleaner.Windows
         private List<ArmouryItem> scanResults = [];
         private bool confirmingMoveAll;
         private string statusMessage = string.Empty;
+
+        // Discard queue — processes one item per Draw() tick with a random 800-1100ms delay
+        private readonly Queue<ArmouryItem> discardQueue = new();
+        private int discardTotal;
+        private readonly Stopwatch discardTimer = new();
+        private int nextDelayMs;
+        private static readonly Random Rng = new();
 
         // Jobs grouped by role for display
         private static readonly (string Abbr, string Role)[] CombatJobs =
@@ -49,11 +57,39 @@ namespace ArmouryCleaner.Windows
 
         public override void Draw()
         {
+            TickDiscardQueue();
             DrawInstructions();
             ImGui.Separator();
             DrawFilters();
             ImGui.Separator();
             DrawResults();
+        }
+
+        private void TickDiscardQueue()
+        {
+            if (discardQueue.Count == 0) return;
+            if (discardTimer.IsRunning && discardTimer.ElapsedMilliseconds < nextDelayMs) return;
+
+            var item = discardQueue.Dequeue();
+            var (success, msg) = armouryService.MoveAndDiscard(item);
+            var done = discardTotal - discardQueue.Count;
+            if (success)
+                scanResults.Remove(item);
+
+            if (discardQueue.Count == 0)
+            {
+                discardTimer.Stop();
+                statusMessage = $"Discarded {done}/{discardTotal} item(s).";
+            }
+            else
+            {
+                nextDelayMs = Rng.Next(800, 1101);
+                discardTimer.Restart();
+                statusMessage = $"Discarding... {done}/{discardTotal} (next in {nextDelayMs}ms)";
+            }
+
+            if (!success)
+                statusMessage = $"[{done}/{discardTotal}] {msg}";
         }
 
         private static void DrawInstructions()
@@ -287,7 +323,21 @@ namespace ArmouryCleaner.Windows
             var bulkLabel = Config.AutoDiscard
                 ? $"Discard All {scanResults.Count}##discardall"
                 : $"Move All {scanResults.Count} to Inventory##moveall";
-            if (!confirmingMoveAll)
+
+            // While a queued discard is in progress, show progress instead of the normal buttons
+            if (discardQueue.Count > 0)
+            {
+                var done = discardTotal - discardQueue.Count;
+                ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1f), $"Discarding {done}/{discardTotal}...");
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel Queue##cancelQueue"))
+                {
+                    discardQueue.Clear();
+                    discardTimer.Stop();
+                    statusMessage = $"Cancelled — {done} item(s) already discarded.";
+                }
+            }
+            else if (!confirmingMoveAll)
             {
                 if (ImGui.Button(bulkLabel))
                     confirmingMoveAll = true;
@@ -301,21 +351,28 @@ namespace ArmouryCleaner.Windows
                 ImGui.SameLine();
                 if (ImGui.Button("Confirm##confirmAll"))
                 {
-                    var processed = 0;
-                    for (var i = scanResults.Count - 1; i >= 0; i--)
+                    if (Config.AutoDiscard)
                     {
-                        var (success, _) = Config.AutoDiscard
-                            ? armouryService.MoveAndDiscard(scanResults[i])
-                            : armouryService.MoveToInventory(scanResults[i]);
-                        if (success)
-                        {
-                            scanResults.RemoveAt(i);
-                            processed++;
-                        }
+                        // Enqueue all — TickDiscardQueue() fires one per frame with 800-1100ms random delay
+                        discardQueue.Clear();
+                        foreach (var item in scanResults)
+                            discardQueue.Enqueue(item);
+                        discardTotal = discardQueue.Count;
+                        nextDelayMs = Rng.Next(800, 1101);
+                        discardTimer.Restart();
+                        statusMessage = $"Discarding 0/{discardTotal}...";
                     }
-                    statusMessage = Config.AutoDiscard
-                        ? $"Discarded {processed} item(s)."
-                        : $"Moved {processed} item(s). Right-click each in your inventory to Discard.";
+                    else
+                    {
+                        // Move All is instant — no ban risk for moving
+                        var processed = 0;
+                        for (var i = scanResults.Count - 1; i >= 0; i--)
+                        {
+                            var (success, _) = armouryService.MoveToInventory(scanResults[i]);
+                            if (success) { scanResults.RemoveAt(i); processed++; }
+                        }
+                        statusMessage = $"Moved {processed} item(s). Right-click each in your inventory to Discard.";
+                    }
                     confirmingMoveAll = false;
                 }
                 ImGui.SameLine();
