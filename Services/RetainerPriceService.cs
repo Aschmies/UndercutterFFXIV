@@ -132,6 +132,12 @@ namespace UndercutterFFXIV.Services
             return addon != null && addon->AskingPrice != null;
         }
 
+        public bool IsRetainerSellListOpen()
+        {
+            var addon = gameGui.GetAddonByName<AtkUnitBase>("RetainerSellList");
+            return addon != null && addon->IsVisible;
+        }
+
         public bool TryAutoFillPrice(uint price, out string status)
             => TryAutoSelectAdjustPriceAndFill(price, out status);
 
@@ -155,6 +161,40 @@ namespace UndercutterFFXIV.Services
 
             addon->AskingPrice->InnerSetValue((int)price, true, true);
             status = "Selected adjust price and auto-filled retainer window";
+            return true;
+        }
+
+        public bool TryConfirmAdjustPrice(out string status)
+        {
+            var addon = gameGui.GetAddonByName<AddonRetainerSell>("RetainerSell");
+            if (addon == null) { status = "Adjust Price not open"; return false; }
+
+            // Try common node IDs for the OK/Confirm button in AddonRetainerSell
+            foreach (var nodeId in new uint[] { 9, 8, 10, 7, 6, 5 })
+            {
+                var node = addon->AtkUnitBase.GetNodeById(nodeId);
+                if (node == null || node->Type != NodeType.Component) continue;
+                var comp = node->GetComponent();
+                if (comp == null) continue;
+                comp->ReceiveEvent(AtkEventType.ButtonClick, 0, null, null);
+                status = "Confirmed price";
+                return true;
+            }
+
+            status = "Confirm button not found";
+            return false;
+        }
+
+        public bool TryClickRetainerSellListItem(int slotIndex, out string status)
+        {
+            var addon = gameGui.GetAddonByName<AtkUnitBase>("RetainerSellList");
+            if (addon == null) { status = "Markets window not open"; return false; }
+            if (!addon->IsVisible) { status = "Markets window not visible"; return false; }
+
+            // Dispatch a mouse-click style event on the list item (value 4 = MouseClick)
+            // This signals the addon to open the Adjust Price dialog for the given slot
+            addon->ReceiveEvent((AtkEventType)4, slotIndex, null, null);
+            status = $"Requesting Adjust Price for slot {slotIndex}";
             return true;
         }
     }
