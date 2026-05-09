@@ -82,7 +82,7 @@ jobs:
           $ver = "${{ steps.version.outputs.FULL }}"
           $tag = "${{ github.ref_name }}"
           $ts  = [string][System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-          $dlUrl = '"https://github.com/Aschmies/UndercutterFFXIV/releases/download/' + $tag + '/latest.zip"'
+          $dlUrl = '"https://github.com/Aschmies/UndercutterFFXIV/releases/download/' + $tag + '/UndercutterFFXIV-' + $tag + '.zip"'
           $rAV  = '"AssemblyVersion": "' + $ver + '"'
           $rTAV = '"TestingAssemblyVersion": "' + $ver + '"'
           $rLU  = '"LastUpdated": ' + $ts
@@ -123,7 +123,5 @@ jobs:
 
             **Install:** Add the custom repo URL to Dalamud (see README), then install "Market Assistant".
             **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
-          files: ${{ steps.find_zip.outputs.ZIP_PATH }}
-          # Rename the asset to latest.zip so the download link stays stable
-          # softprops/action-gh-release does not rename; DalamudPackager already names it latest.zip
+          files: ${{ steps.find_zip.outputs.ZIP_PATH }}#UndercutterFFXIV-${{ github.ref_name }}.zip
           fail_on_unmatched_files: true
