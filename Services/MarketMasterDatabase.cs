@@ -233,6 +233,184 @@ ORDER BY traded_utc DESC";
             }
         }
 
+        public bool UpsertPendingBuyCapture(PendingBuyCaptureEntry entry)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+INSERT INTO pending_buy_captures(
+    listing_id,
+    item_id,
+    item_name,
+    quantity,
+    unit_price,
+    total_tax,
+    container_index,
+    is_hq,
+    town_id,
+    captured_utc
+)
+VALUES(
+    $listingId,
+    $itemId,
+    $itemName,
+    $quantity,
+    $unitPrice,
+    $totalTax,
+    $containerIndex,
+    $isHq,
+    $townId,
+    $capturedUtc
+)
+ON CONFLICT(listing_id) DO NOTHING;";
+
+                cmd.Parameters.AddWithValue("$listingId", (long)entry.ListingId);
+                cmd.Parameters.AddWithValue("$itemId", entry.ItemId);
+                cmd.Parameters.AddWithValue("$itemName", entry.ItemName);
+                cmd.Parameters.AddWithValue("$quantity", entry.Quantity);
+                cmd.Parameters.AddWithValue("$unitPrice", entry.UnitPrice);
+                cmd.Parameters.AddWithValue("$totalTax", entry.TotalTax);
+                cmd.Parameters.AddWithValue("$containerIndex", entry.ContainerIndex);
+                cmd.Parameters.AddWithValue("$isHq", entry.IsHq ? 1 : 0);
+                cmd.Parameters.AddWithValue("$townId", entry.TownId);
+                cmd.Parameters.AddWithValue("$capturedUtc", entry.CapturedUtc.ToString("O"));
+
+                return cmd.ExecuteNonQuery() > 0;
+            }
+        }
+
+        public IReadOnlyList<PendingBuyCaptureEntry> GetPendingBuyCaptures(int limit = 100)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+SELECT listing_id, item_id, item_name, quantity, unit_price, total_tax, container_index, is_hq, town_id, captured_utc
+FROM pending_buy_captures
+ORDER BY captured_utc DESC
+LIMIT $limit";
+                cmd.Parameters.AddWithValue("$limit", Math.Max(1, limit));
+
+                using var reader = cmd.ExecuteReader();
+                var rows = new List<PendingBuyCaptureEntry>();
+                while (reader.Read())
+                {
+                    rows.Add(new PendingBuyCaptureEntry
+                    {
+                        ListingId = (ulong)reader.GetInt64(0),
+                        ItemId = (uint)reader.GetInt64(1),
+                        ItemName = reader.GetString(2),
+                        Quantity = (uint)reader.GetInt64(3),
+                        UnitPrice = (uint)reader.GetInt64(4),
+                        TotalTax = (uint)reader.GetInt64(5),
+                        ContainerIndex = (ushort)reader.GetInt64(6),
+                        IsHq = !reader.IsDBNull(7) && reader.GetInt64(7) == 1,
+                        TownId = (byte)reader.GetInt64(8),
+                        CapturedUtc = DateTime.Parse(reader.GetString(9), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
+                    });
+                }
+
+                return rows;
+            }
+        }
+
+        public void RemovePendingBuyCapture(ulong listingId)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "DELETE FROM pending_buy_captures WHERE listing_id = $listingId";
+                cmd.Parameters.AddWithValue("$listingId", (long)listingId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public void SaveRetainerListingSnapshots(IReadOnlyList<RetainerListingSnapshot> snapshots)
+        {
+            if (snapshots.Count == 0)
+                return;
+
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+                using var transaction = connection.BeginTransaction();
+
+                foreach (var snapshot in snapshots)
+                {
+                    using var cmd = connection.CreateCommand();
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = @"
+INSERT INTO retainer_listing_snapshots(
+    slot_index,
+    item_id,
+    item_name,
+    current_price,
+    suggested_price,
+    is_undercut,
+    scanned_utc
+)
+VALUES($slot, $itemId, $itemName, $currentPrice, $suggestedPrice, $isUndercut, $scannedUtc)";
+                    cmd.Parameters.AddWithValue("$slot", snapshot.SlotIndex);
+                    cmd.Parameters.AddWithValue("$itemId", snapshot.ItemId);
+                    cmd.Parameters.AddWithValue("$itemName", snapshot.ItemName);
+                    cmd.Parameters.AddWithValue("$currentPrice", snapshot.CurrentPrice);
+                    cmd.Parameters.AddWithValue("$suggestedPrice", snapshot.SuggestedPrice);
+                    cmd.Parameters.AddWithValue("$isUndercut", snapshot.IsUndercut ? 1 : 0);
+                    cmd.Parameters.AddWithValue("$scannedUtc", snapshot.ScannedUtc.ToString("O"));
+                    cmd.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+            }
+        }
+
+        public IReadOnlyList<RetainerListingSnapshot> GetRetainerListingSnapshots(int days)
+        {
+            lock (dbLock)
+            {
+                using var connection = new SqliteConnection(connectionString);
+                connection.Open();
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+SELECT id, slot_index, item_id, item_name, current_price, suggested_price, is_undercut, scanned_utc
+FROM retainer_listing_snapshots
+WHERE scanned_utc >= $cutoff
+ORDER BY scanned_utc DESC";
+                cmd.Parameters.AddWithValue("$cutoff", DateTime.UtcNow.AddDays(-Math.Max(1, days)).ToString("O"));
+
+                using var reader = cmd.ExecuteReader();
+                var rows = new List<RetainerListingSnapshot>();
+                while (reader.Read())
+                {
+                    rows.Add(new RetainerListingSnapshot
+                    {
+                        Id = reader.GetInt64(0),
+                        SlotIndex = reader.GetInt32(1),
+                        ItemId = (uint)reader.GetInt64(2),
+                        ItemName = reader.GetString(3),
+                        CurrentPrice = (uint)reader.GetInt64(4),
+                        SuggestedPrice = (uint)reader.GetInt64(5),
+                        IsUndercut = reader.GetInt64(6) == 1,
+                        ScannedUtc = DateTime.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
+                    });
+                }
+
+                return rows;
+            }
+        }
+
         private void InitializeSchema()
         {
             lock (dbLock)
@@ -281,9 +459,36 @@ CREATE TABLE IF NOT EXISTS trade_history (
     traded_utc TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS pending_buy_captures (
+    listing_id INTEGER PRIMARY KEY,
+    item_id INTEGER NOT NULL,
+    item_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price INTEGER NOT NULL,
+    total_tax INTEGER NOT NULL,
+    container_index INTEGER NOT NULL,
+    is_hq INTEGER NOT NULL,
+    town_id INTEGER NOT NULL,
+    captured_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS retainer_listing_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slot_index INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    item_name TEXT NOT NULL,
+    current_price INTEGER NOT NULL,
+    suggested_price INTEGER NOT NULL,
+    is_undercut INTEGER NOT NULL,
+    scanned_utc TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_opportunities_run ON opportunities(run_id);
 CREATE INDEX IF NOT EXISTS idx_opportunities_item ON opportunities(item_id);
-CREATE INDEX IF NOT EXISTS idx_trade_history_time ON trade_history(traded_utc);";
+CREATE INDEX IF NOT EXISTS idx_trade_history_time ON trade_history(traded_utc);
+CREATE INDEX IF NOT EXISTS idx_pending_buys_time ON pending_buy_captures(captured_utc);
+CREATE INDEX IF NOT EXISTS idx_retainer_snapshots_time ON retainer_listing_snapshots(scanned_utc);
+CREATE INDEX IF NOT EXISTS idx_retainer_snapshots_item ON retainer_listing_snapshots(item_id);";
 
                 cmd.ExecuteNonQuery();
             }

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UndercutterFFXIV.Models;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.UI.Info;
 
 namespace UndercutterFFXIV.Services
 {
@@ -131,6 +132,186 @@ namespace UndercutterFFXIV.Services
                 Quantity = quantity,
                 TradedUtc = DateTime.UtcNow
             });
+        }
+
+        public IReadOnlyList<PendingBuyCaptureEntry> GetPendingBuyCaptures(int limit = 100)
+            => database.GetPendingBuyCaptures(limit);
+
+        public bool ConfirmPendingBuyCapture(
+            ulong listingId,
+            uint itemId,
+            string itemName,
+            uint quantity,
+            uint buyPrice,
+            uint sellPrice)
+        {
+            if (string.IsNullOrWhiteSpace(itemName) || quantity == 0 || buyPrice == 0 || sellPrice == 0)
+                return false;
+
+            AddTradeHistoryEntry(itemId, itemName.Trim(), buyPrice, sellPrice, quantity);
+            database.RemovePendingBuyCapture(listingId);
+            return true;
+        }
+
+        public void DismissPendingBuyCapture(ulong listingId)
+            => database.RemovePendingBuyCapture(listingId);
+
+        public int CapturePendingBuysFromClientCache()
+        {
+            if (!config.EnableAutoBuyHistoryCapture)
+                return 0;
+
+            unsafe
+            {
+                var infoModule = InfoModule.Instance();
+                if (infoModule == null)
+                    return 0;
+
+                var proxy = (InfoProxyItemSearch*)infoModule->GetInfoProxyById(InfoProxyId.ItemSearch);
+                if (proxy == null)
+                    return 0;
+
+                var last = proxy->LastPurchasedMarketboardItem;
+                if (!last.Present || last.ListingId == 0 || last.ItemId == 0)
+                    return 0;
+
+                var itemName = ResolveItemName(last.ItemId);
+                var entry = new PendingBuyCaptureEntry
+                {
+                    ListingId = last.ListingId,
+                    ItemId = last.ItemId,
+                    ItemName = itemName,
+                    Quantity = Math.Max(1u, last.Quantity),
+                    UnitPrice = last.UnitPrice,
+                    TotalTax = last.TotalTax,
+                    ContainerIndex = last.ContainerIndex,
+                    IsHq = last.IsHqItem,
+                    TownId = last.TownId,
+                    CapturedUtc = DateTime.UtcNow
+                };
+
+                if (!database.UpsertPendingBuyCapture(entry))
+                    return 0;
+
+                if (config.AutoBuyHistoryAutoConfirm)
+                {
+                    AddTradeHistoryEntry(entry.ItemId, entry.ItemName, entry.UnitPrice, entry.UnitPrice, entry.Quantity);
+                    database.RemovePendingBuyCapture(entry.ListingId);
+                }
+
+                return 1;
+            }
+        }
+
+        public void SaveRetainerListingSnapshots(IReadOnlyList<RetainerListingSnapshot> snapshots)
+            => database.SaveRetainerListingSnapshots(snapshots);
+
+        public IReadOnlyList<RetainerListingSnapshot> GetRetainerListingSnapshots(int days = 30)
+            => database.GetRetainerListingSnapshots(days);
+
+        public RetainerSnapshotAnalytics GetRetainerSnapshotAnalytics(int days = 30)
+        {
+            var snapshots = database.GetRetainerListingSnapshots(days)
+                .OrderBy(snapshot => snapshot.ScannedUtc)
+                .ToList();
+
+            if (snapshots.Count == 0)
+                return new RetainerSnapshotAnalytics();
+
+            var undercutCount = snapshots.Count(snapshot => snapshot.IsUndercut);
+            var groupedBySlot = snapshots
+                .GroupBy(snapshot => (snapshot.ItemId, snapshot.SlotIndex));
+
+            var sitDurations = groupedBySlot
+                .Select(group => (group.Max(x => x.ScannedUtc) - group.Min(x => x.ScannedUtc)).TotalHours)
+                .Where(hours => hours >= 0)
+                .ToList();
+
+            var churn = snapshots
+                .GroupBy(snapshot => snapshot.ItemId)
+                .Select(group =>
+                {
+                    var ordered = group.OrderBy(x => x.ScannedUtc).ToList();
+                    var changes = 0;
+                    uint previous = 0;
+                    foreach (var snapshot in ordered)
+                    {
+                        if (previous > 0 && snapshot.CurrentPrice != previous)
+                            changes++;
+                        previous = snapshot.CurrentPrice;
+                    }
+
+                    return (
+                        ItemName: ordered[0].ItemName,
+                        PriceChanges: changes);
+                })
+                .OrderByDescending(x => x.PriceChanges)
+                .Take(5)
+                .ToList();
+
+            return new RetainerSnapshotAnalytics
+            {
+                TotalSnapshots = snapshots.Count,
+                UndercutFrequencyPercent = (undercutCount * 100.0) / snapshots.Count,
+                AverageSitHours = sitDurations.Count == 0 ? 0 : sitDurations.Average(),
+                FastestChurnItems = churn
+            };
+        }
+
+        public AdvancedHistoryAnalytics GetAdvancedHistoryAnalytics(int days = 30)
+        {
+            var entries = GetTradeHistory(days)
+                .OrderBy(entry => entry.TradedUtc)
+                .ToList();
+            if (entries.Count == 0)
+                return new AdvancedHistoryAnalytics();
+
+            var taxMultiplier = 1.0 - (config.MarketTaxRatePercent / 100.0);
+            var netEntries = entries
+                .Select(entry => new
+                {
+                    Entry = entry,
+                    NetTotal = ((entry.SellPrice * taxMultiplier) - entry.BuyPrice) * entry.Quantity,
+                    Category = CategorizeItem(entry.ItemName)
+                })
+                .ToList();
+
+            var wins = netEntries.Count(x => x.NetTotal > 0);
+            var firstUtc = entries.First().TradedUtc;
+            var lastUtc = entries.Last().TradedUtc;
+            var hours = Math.Max(1.0, (lastUtc - firstUtc).TotalHours);
+            var totalNet = netEntries.Sum(x => x.NetTotal);
+
+            var bestCategories = netEntries
+                .GroupBy(x => x.Category)
+                .Select(group => (Category: group.Key, NetGil: group.Sum(x => x.NetTotal)))
+                .OrderByDescending(x => x.NetGil)
+                .Take(5)
+                .ToList();
+
+            var repeatedLoss = netEntries
+                .Where(x => x.NetTotal < 0)
+                .GroupBy(x => x.Entry.ItemName)
+                .Select(group =>
+                    (ItemName: group.Key,
+                     LossCount: group.Count(),
+                     TotalLoss: group.Sum(x => x.NetTotal)))
+                .Where(x => x.LossCount >= 2)
+                .OrderBy(x => x.TotalLoss)
+                .Take(5)
+                .ToList();
+
+            var snapshotAnalytics = GetRetainerSnapshotAnalytics(days);
+
+            return new AdvancedHistoryAnalytics
+            {
+                TotalTrades = entries.Count,
+                WinRatePercent = (wins * 100.0) / entries.Count,
+                AverageNetGilPerHour = totalNet / hours,
+                MedianEstimatedHoldHours = snapshotAnalytics.AverageSitHours,
+                BestCategories = bestCategories,
+                RepeatedLossItems = repeatedLoss
+            };
         }
 
         public (bool IsRunning, int Processed, int Total, int Percent) GetScanProgress()
@@ -451,6 +632,7 @@ namespace UndercutterFFXIV.Services
                 var evaluationSw = Stopwatch.StartNew();
                 var itemsProcessedInEval = 0;
                 var evalIncrementEvery = Math.Max(1, itemsToScan.Count / 50); // Distribute remaining 50% across eval
+                var apiHealth = universalis.GetHealthSnapshot();
 
                 foreach (var item in itemsToScan)
                 {
@@ -465,7 +647,7 @@ namespace UndercutterFFXIV.Services
                         if (!dcSnapshots.TryGetValue(item.ItemId, out var dcSnapshot))
                             continue;
 
-                        var opportunity = BuildOpportunity(item, homeCandidate, dcSnapshot);
+                        var opportunity = BuildOpportunity(item, homeCandidate, dcSnapshot, apiHealth);
                         if (opportunity != null)
                         {
                             lock (resultsLock)
@@ -499,7 +681,8 @@ namespace UndercutterFFXIV.Services
 
                 sw.Stop();
                 var sorted = results
-                    .OrderByDescending(r => r.NetProfitPerUnit)
+                    .OrderByDescending(r => r.OwnedQuantity > 0)
+                    .ThenByDescending(r => r.NetProfitPerUnit)
                     .ThenByDescending(r => r.SaleVelocityPerDay)
                     .ToList();
 
@@ -611,7 +794,8 @@ namespace UndercutterFFXIV.Services
         private ArbitrageOpportunity? BuildOpportunity(
             ItemLookup item,
             HomeSnapshotCandidate homeCandidate,
-            MarketSnapshot dc)
+            MarketSnapshot dc,
+            ApiHealthSnapshot apiHealth)
         {
             if (dc.LowestPrice == 0)
                 return null;
@@ -638,6 +822,16 @@ namespace UndercutterFFXIV.Services
                 return null;
 
             var botPattern = DetectPotentialBotPattern(homeCandidate.HomeListings);
+            var ownedQuantity = GetOwnedItemQuantity(item.ItemId);
+            var freshnessMinutes = dc.MostRecentSaleUtc.HasValue
+                ? Math.Max(0, (DateTime.UtcNow - dc.MostRecentSaleUtc.Value).TotalMinutes)
+                : 999;
+            var confidence = CalculateConfidenceScore(homeCandidate, dc, profitPercent, freshnessMinutes, apiHealth);
+            var lowTrust = confidence < 35 || freshnessMinutes > 180 || apiHealth.SafeZone == "Red";
+            var trustReason = lowTrust
+                ? BuildTrustReason(confidence, freshnessMinutes, apiHealth)
+                : "Healthy";
+            var travelPlan = BuildTravelPlanSummary(buyWorld, netProfit, homeCandidate.VelocityPerDay);
             
             // Calculate total quantity listed at home world's minimum price
             var homeWorldCurrentQty = (uint)homeCandidate.HomeListings
@@ -659,6 +853,13 @@ namespace UndercutterFFXIV.Services
                 HomeWorldCurrentQtyListing = homeWorldCurrentQty,
                 PotentialBotSellerPattern = botPattern,
                 SafeBuyQty = ArbitrageOpportunity.ComputeSafeBuyQty(homeCandidate.VelocityPerDay, botPattern),
+                OwnedQuantity = ownedQuantity,
+                ConfidenceScore = confidence,
+                DataFreshnessMinutes = freshnessMinutes,
+                IsLowTrust = lowTrust,
+                TrustReason = trustReason,
+                TravelPlanSummary = travelPlan.Summary,
+                TravelWorthIt = travelPlan.WorthIt,
                 ScannedUtc = DateTime.UtcNow
             };
         }
@@ -752,7 +953,8 @@ namespace UndercutterFFXIV.Services
         private void PublishPartialResults(List<ArbitrageOpportunity> inProgressResults)
         {
             var partial = inProgressResults
-                .OrderByDescending(r => r.NetProfitPerUnit)
+                .OrderByDescending(r => r.OwnedQuantity > 0)
+                .ThenByDescending(r => r.NetProfitPerUnit)
                 .ThenByDescending(r => r.SaleVelocityPerDay)
                 .ToList();
 
@@ -764,6 +966,142 @@ namespace UndercutterFFXIV.Services
         {
             var home = await universalis.GetMarketSnapshotAsync(config.WorldName, itemId, cancellationToken);
             return home?.LowestPrice ?? 0;
+        }
+
+        public async Task<MarketSnapshot?> FetchHomeSnapshotAsync(uint itemId, CancellationToken cancellationToken)
+        {
+            return await universalis.GetMarketSnapshotAsync(config.WorldName, itemId, cancellationToken);
+        }
+
+        public int GetHistoricalFillRatePercent(uint itemId, int days = 30)
+        {
+            var rows = database.GetTradeHistory(days)
+                .Where(entry => entry.ItemId == itemId)
+                .ToList();
+            if (rows.Count == 0)
+                return 50;
+
+            var wins = rows.Count(entry => entry.SellPrice >= entry.BuyPrice);
+            return (int)Math.Round((wins * 100.0) / rows.Count);
+        }
+
+        private int GetOwnedItemQuantity(uint itemId)
+        {
+            return retainerPriceService.GetOwnedItemQuantity(itemId);
+        }
+
+        private static string ResolveItemName(uint itemId)
+        {
+            try
+            {
+                var sheet = MarketAssistantPlugin.DataManager.GetExcelSheet<Item>();
+                var row = sheet?.GetRow(itemId);
+                var name = row?.Name.ToString() ?? string.Empty;
+                return string.IsNullOrWhiteSpace(name) ? $"Item {itemId}" : name;
+            }
+            catch
+            {
+                return $"Item {itemId}";
+            }
+        }
+
+        private static string CategorizeItem(string itemName)
+        {
+            if (string.IsNullOrWhiteSpace(itemName))
+                return "Unknown";
+
+            var text = itemName.ToLowerInvariant();
+            if (text.Contains("potion") || text.Contains("tincture") || text.Contains("elixir"))
+                return "Potions";
+            if (text.Contains("materia"))
+                return "Materia";
+            if (text.Contains("ore") || text.Contains("ingot") || text.Contains("lumber") || text.Contains("cloth"))
+                return "Materials";
+            if (text.Contains("ring") || text.Contains("bracelet") || text.Contains("earring") || text.Contains("necklace"))
+                return "Accessories";
+            if (text.Contains("sword") || text.Contains("axe") || text.Contains("bow") || text.Contains("gun") || text.Contains("staff"))
+                return "Weapons";
+            if (text.Contains("helm") || text.Contains("armor") || text.Contains("coat") || text.Contains("gloves") || text.Contains("boots"))
+                return "Armor";
+            if (text.Contains("food") || text.Contains("meal") || text.Contains("tea"))
+                return "Food";
+            return "Misc";
+        }
+
+        private static double CalculateConfidenceScore(
+            HomeSnapshotCandidate homeCandidate,
+            MarketSnapshot dc,
+            double profitPercent,
+            double freshnessMinutes,
+            ApiHealthSnapshot health)
+        {
+            var listings = dc.Listings.Where(listing => listing.PricePerUnit > 0).OrderBy(listing => listing.PricePerUnit).ToList();
+            var spreadPercent = 0.0;
+            if (listings.Count >= 2)
+            {
+                var low = listings[0].PricePerUnit;
+                var second = listings[1].PricePerUnit;
+                if (low > 0)
+                    spreadPercent = ((second - low) / (double)low) * 100.0;
+            }
+
+            var totalQty = listings.Sum(listing => (double)Math.Max(1, listing.Quantity));
+            var topQty = listings.Count == 0 ? 0 : Math.Max(1, listings[0].Quantity);
+            var depthConcentration = totalQty <= 0 ? 1.0 : topQty / totalQty;
+
+            var volatility = CalculateSalesVolatility(homeCandidate.HomeListings);
+            var velocityScore = Math.Min(40, homeCandidate.VelocityPerDay * 8);
+            var spreadScore = Math.Max(0, 20 - spreadPercent * 2);
+            var depthScore = Math.Max(0, 15 - depthConcentration * 15);
+            var volatilityScore = Math.Max(0, 15 - volatility * 10);
+            var freshnessScore = Math.Max(0, 10 - (freshnessMinutes / 20.0));
+            var apiPenalty = health.SafeZone == "Green" ? 0 : health.SafeZone == "Yellow" ? 5 : 15;
+            var profitBonus = Math.Min(10, Math.Max(0, profitPercent / 5.0));
+
+            var score = velocityScore + spreadScore + depthScore + volatilityScore + freshnessScore + profitBonus - apiPenalty;
+            return Math.Clamp(score, 0, 100);
+        }
+
+        private static double CalculateSalesVolatility(IReadOnlyList<ListingRecord> listings)
+        {
+            var prices = listings
+                .Where(listing => listing.PricePerUnit > 0)
+                .Select(listing => (double)listing.PricePerUnit)
+                .ToList();
+            if (prices.Count < 2)
+                return 0;
+
+            var mean = prices.Average();
+            if (mean <= 0)
+                return 0;
+
+            var variance = prices.Sum(price => Math.Pow(price - mean, 2)) / prices.Count;
+            var stdev = Math.Sqrt(variance);
+            return stdev / mean;
+        }
+
+        private static string BuildTrustReason(double confidence, double freshnessMinutes, ApiHealthSnapshot health)
+        {
+            if (health.SafeZone == "Red")
+                return "API health degraded";
+            if (freshnessMinutes > 180)
+                return "Stale market data";
+            if (confidence < 35)
+                return "Low confidence pattern";
+            return "Healthy";
+        }
+
+        private (string Summary, bool WorthIt) BuildTravelPlanSummary(string buyWorld, double netProfitPerUnit, double velocityPerDay)
+        {
+            var qty = Math.Max(1, (int)Math.Round(Math.Min(8, Math.Max(1, velocityPerDay))));
+            var travelCost = Math.Max(0, config.WorldTravelOverheadGil);
+            var projected = (netProfitPerUnit * qty) - travelCost;
+            var worthIt = projected >= Math.Max(0, config.WorldTravelMinNetGil);
+
+            if (string.IsNullOrWhiteSpace(buyWorld) || string.Equals(buyWorld, config.WorldName, StringComparison.OrdinalIgnoreCase))
+                return ("Local buy", true);
+
+            return ($"{buyWorld} x{qty} | est net {projected:N0} after {travelCost:N0} travel", worthIt);
         }
 
         private void EnsureItemCacheLoaded()

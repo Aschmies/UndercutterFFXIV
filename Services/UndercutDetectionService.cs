@@ -109,14 +109,27 @@ namespace UndercutterFFXIV.Services
                 return true;
 
             var history = undercutHistory[itemId];
+            var cooldownSeconds = Math.Max(30, configuration.UndercutAlertCooldownSeconds);
+            var minDeltaGil = Math.Max(1, configuration.UndercutAlertMinDeltaGil);
+            var minDeltaPercent = Math.Max(0, configuration.UndercutAlertRepeatDeltaPercent);
 
-            // Don't notify if we just notified about this item in the last 5 minutes
+            // Debounce repeated notifications by item.
             var timeSinceLastNotification = DateTime.UtcNow - history.LastNotificationTime;
-            if (timeSinceLastNotification.TotalSeconds < 300)
+            if (timeSinceLastNotification.TotalSeconds < cooldownSeconds)
                 return false;
 
-            // Notify if price changed significantly (more than 5 gil difference)
-            if (Math.Abs((int)lowestPrice - (int)history.LastNotifiedPrice) >= 5)
+            var absoluteDelta = Math.Abs((int)lowestPrice - (int)history.LastNotifiedPrice);
+            if (absoluteDelta >= minDeltaGil)
+                return true;
+
+            if (history.LastNotifiedPrice > 0)
+            {
+                var percentDelta = (absoluteDelta / (double)history.LastNotifiedPrice) * 100.0;
+                if (percentDelta >= minDeltaPercent)
+                    return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(itemName))
                 return true;
 
             return false;

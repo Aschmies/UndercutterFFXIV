@@ -28,6 +28,8 @@ namespace UndercutterFFXIV.Windows
         private List<ArbitrageOpportunity> latestResults = new();
         private List<WatchedItem> cachedWatchlist = new();
         private List<InventoryGridRow> inventoryRows = new();
+        private readonly List<InventoryGridRow> repriceQueue = new();
+        private readonly HashSet<string> repriceQueueKeys = new(StringComparer.Ordinal);
         private bool scanRunning;
         private CancellationTokenSource? currentScanCancellation;
         private string scannerStatus = "Idle";
@@ -51,6 +53,10 @@ namespace UndercutterFFXIV.Windows
         private int historyBuyPriceInput;
         private int historySellPriceInput;
         private int historyQuantityInput = 1;
+        private readonly Dictionary<ulong, string> pendingBuyNameEdits = new();
+        private readonly Dictionary<ulong, int> pendingBuyBuyPriceEdits = new();
+        private readonly Dictionary<ulong, int> pendingBuySellPriceEdits = new();
+        private readonly Dictionary<ulong, int> pendingBuyQtyEdits = new();
 
         private sealed class InventoryGridRow
         {
@@ -60,6 +66,11 @@ namespace UndercutterFFXIV.Windows
             public uint CurrentSellPrice { get; init; }
             public uint UndercutPrice { get; init; }
             public bool IsUndercut { get; init; }
+            public int OwnedQuantity { get; init; }
+            public int FillRatePercent { get; init; }
+            public string PriceAction { get; init; } = "Hold";
+            public bool IsLowTrust { get; init; }
+            public string TrustReason { get; init; } = string.Empty;
         }
 
         private enum SortDirection { Ascending, Descending }
@@ -461,20 +472,49 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextDisabled("Refreshing...");
 
             ImGui.Spacing();
+            ImGui.TextDisabled($"Queued reprices: {repriceQueue.Count}");
+            ImGui.SameLine();
+            ImGui.BeginDisabled(repriceQueue.Count == 0 || !(config.EnableRetainerAutoFill && retainerWindowDetected));
+            if (ImGui.Button("Apply Next Queue Fill"))
+            {
+                var next = repriceQueue[0];
+                if (retainerPriceService.TryAutoFillPrice(next.UndercutPrice, out var queueStatus))
+                    lastAutoFillTime = DateTime.Now;
+
+                inventoryStatus = $"{queueStatus} [{next.ItemName}]";
+                var key = BuildRepriceKey(next.SlotIndex, next.ItemId);
+                repriceQueue.RemoveAt(0);
+                repriceQueueKeys.Remove(key);
+            }
+            ImGui.EndDisabled();
+            ImGui.SameLine();
+            ImGui.BeginDisabled(repriceQueue.Count == 0);
+            if (ImGui.Button("Clear Queue"))
+            {
+                repriceQueue.Clear();
+                repriceQueueKeys.Clear();
+            }
+            ImGui.EndDisabled();
+
+            ImGui.Spacing();
             if (inventoryRows.Count == 0)
             {
                 ImGui.TextDisabled("No active retainer market listings detected. Open your retainer market inventory and refresh.");
             }
-            else if (ImGui.BeginTable("##inventoryGrid", 6,
+            else if (ImGui.BeginTable("##inventoryGrid", 9,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                 new Vector2(0, 360)))
             {
                 ImGui.TableSetupColumn("Item Name");
+                ImGui.TableSetupColumn("Owned", ImGuiTableColumnFlags.WidthFixed, 70);
                 ImGui.TableSetupColumn("Current Sell Price", ImGuiTableColumnFlags.WidthFixed, 130);
                 ImGui.TableSetupColumn("Suggested New Price", ImGuiTableColumnFlags.WidthFixed, 135);
-                ImGui.TableSetupColumn("Person undercutting me?", ImGuiTableColumnFlags.WidthFixed, 170);
+                ImGui.TableSetupColumn("Undercut?", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Price Action", ImGuiTableColumnFlags.WidthFixed, 140);
+                ImGui.TableSetupColumn("Trust", ImGuiTableColumnFlags.WidthFixed, 130);
                 ImGui.TableSetupColumn("Copy new price", ImGuiTableColumnFlags.WidthFixed, 110);
                 ImGui.TableSetupColumn("Auto fill?", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Queue", ImGuiTableColumnFlags.WidthFixed, 85);
                 ImGui.TableHeadersRow();
 
                 foreach (var row in inventoryRows)
@@ -482,6 +522,9 @@ namespace UndercutterFFXIV.Windows
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
                     ImGui.TextUnformatted(row.ItemName);
+
+                    ImGui.TableNextColumn();
+                    ImGui.Text(row.OwnedQuantity.ToString("N0"));
 
                     ImGui.TableNextColumn();
                     ImGui.Text(row.CurrentSellPrice.ToString("N0"));
@@ -494,6 +537,23 @@ namespace UndercutterFFXIV.Windows
                         ImGui.TextColored(new Vector4(0.95f, 0.4f, 0.4f, 1f), "Yes");
                     else
                         ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1f), "No");
+
+                    ImGui.TableNextColumn();
+                    var actionColor = row.PriceAction.StartsWith("Exit", StringComparison.OrdinalIgnoreCase)
+                        ? new Vector4(0.95f, 0.45f, 0.45f, 1f)
+                        : row.PriceAction.StartsWith("Undercut", StringComparison.OrdinalIgnoreCase)
+                            ? new Vector4(0.95f, 0.85f, 0.35f, 1f)
+                            : new Vector4(0.7f, 0.9f, 1f, 1f);
+                    ImGui.TextColored(actionColor, row.PriceAction);
+
+                    ImGui.TableNextColumn();
+                    var trustText = row.IsLowTrust ? "Low trust" : "Healthy";
+                    var trustColor = row.IsLowTrust
+                        ? new Vector4(0.95f, 0.55f, 0.35f, 1f)
+                        : new Vector4(0.4f, 1f, 0.4f, 1f);
+                    ImGui.TextColored(trustColor, trustText);
+                    if (ImGui.IsItemHovered() && !string.IsNullOrWhiteSpace(row.TrustReason))
+                        ImGui.SetTooltip(row.TrustReason);
 
                     ImGui.TableNextColumn();
                     ImGui.BeginDisabled(row.UndercutPrice == 0);
@@ -518,6 +578,27 @@ namespace UndercutterFFXIV.Windows
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip("Clicks Adjust Price first, then fills the retainer sell-price input (requires retainer sell window open).");
                     ImGui.EndDisabled();
+
+                    ImGui.TableNextColumn();
+                    var queueKey = BuildRepriceKey(row.SlotIndex, row.ItemId);
+                    if (repriceQueueKeys.Contains(queueKey))
+                    {
+                        if (ImGui.SmallButton($"Unqueue##queue{row.SlotIndex}_{row.ItemId}"))
+                        {
+                            repriceQueue.RemoveAll(item => item.SlotIndex == row.SlotIndex && item.ItemId == row.ItemId);
+                            repriceQueueKeys.Remove(queueKey);
+                        }
+                    }
+                    else
+                    {
+                        ImGui.BeginDisabled(row.UndercutPrice == 0);
+                        if (ImGui.SmallButton($"Queue##queue{row.SlotIndex}_{row.ItemId}"))
+                        {
+                            repriceQueue.Add(row);
+                            repriceQueueKeys.Add(queueKey);
+                        }
+                        ImGui.EndDisabled();
+                    }
                 }
 
                 ImGui.EndTable();
@@ -560,6 +641,108 @@ namespace UndercutterFFXIV.Windows
 
             ImGui.SameLine();
             ImGui.TextDisabled(historyStatus);
+
+            ImGui.Separator();
+            ImGui.Text("Pending Auto-Captured Buys");
+            var pendingBuys = scanner.GetPendingBuyCaptures(30).ToList();
+            if (pendingBuys.Count == 0)
+            {
+                ImGui.TextDisabled("No pending purchase captures.");
+            }
+            else
+            {
+                if (ImGui.BeginTable("##pendingBuysTable", 8,
+                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX,
+                    new Vector2(0, 200)))
+                {
+                    ImGui.TableSetupColumn("Time", ImGuiTableColumnFlags.WidthFixed, 95);
+                    ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
+                    ImGui.TableSetupColumn("Qty", ImGuiTableColumnFlags.WidthFixed, 55);
+                    ImGui.TableSetupColumn("Buy", ImGuiTableColumnFlags.WidthFixed, 90);
+                    ImGui.TableSetupColumn("Sell", ImGuiTableColumnFlags.WidthFixed, 90);
+                    ImGui.TableSetupColumn("HQ", ImGuiTableColumnFlags.WidthFixed, 45);
+                    ImGui.TableSetupColumn("Accept", ImGuiTableColumnFlags.WidthFixed, 70);
+                    ImGui.TableSetupColumn("Dismiss", ImGuiTableColumnFlags.WidthFixed, 70);
+                    ImGui.TableHeadersRow();
+
+                    foreach (var pending in pendingBuys)
+                    {
+                        if (!pendingBuyNameEdits.ContainsKey(pending.ListingId))
+                            pendingBuyNameEdits[pending.ListingId] = pending.ItemName;
+                        if (!pendingBuyQtyEdits.ContainsKey(pending.ListingId))
+                            pendingBuyQtyEdits[pending.ListingId] = (int)Math.Max(1, pending.Quantity);
+                        if (!pendingBuyBuyPriceEdits.ContainsKey(pending.ListingId))
+                            pendingBuyBuyPriceEdits[pending.ListingId] = (int)Math.Max(1, pending.UnitPrice);
+                        if (!pendingBuySellPriceEdits.ContainsKey(pending.ListingId))
+                            pendingBuySellPriceEdits[pending.ListingId] = (int)Math.Max(1, pending.UnitPrice);
+
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.Text(pending.CapturedUtc.ToLocalTime().ToString("MM/dd HH:mm"));
+
+                        ImGui.TableNextColumn();
+                        var editName = pendingBuyNameEdits[pending.ListingId];
+                        ImGui.SetNextItemWidth(-1);
+                        ImGui.InputText($"##pendingName{pending.ListingId}", ref editName, 128);
+                        pendingBuyNameEdits[pending.ListingId] = editName;
+
+                        ImGui.TableNextColumn();
+                        var editQty = pendingBuyQtyEdits[pending.ListingId];
+                        ImGui.SetNextItemWidth(-1);
+                        ImGui.InputInt($"##pendingQty{pending.ListingId}", ref editQty);
+                        pendingBuyQtyEdits[pending.ListingId] = Math.Max(1, editQty);
+
+                        ImGui.TableNextColumn();
+                        var editBuy = pendingBuyBuyPriceEdits[pending.ListingId];
+                        ImGui.SetNextItemWidth(-1);
+                        ImGui.InputInt($"##pendingBuy{pending.ListingId}", ref editBuy);
+                        pendingBuyBuyPriceEdits[pending.ListingId] = Math.Max(1, editBuy);
+
+                        ImGui.TableNextColumn();
+                        var editSell = pendingBuySellPriceEdits[pending.ListingId];
+                        ImGui.SetNextItemWidth(-1);
+                        ImGui.InputInt($"##pendingSell{pending.ListingId}", ref editSell);
+                        pendingBuySellPriceEdits[pending.ListingId] = Math.Max(1, editSell);
+
+                        ImGui.TableNextColumn();
+                        ImGui.Text(pending.IsHq ? "Yes" : "No");
+
+                        ImGui.TableNextColumn();
+                        if (ImGui.SmallButton($"Accept##pendingAccept{pending.ListingId}"))
+                        {
+                            var ok = scanner.ConfirmPendingBuyCapture(
+                                pending.ListingId,
+                                pending.ItemId,
+                                pendingBuyNameEdits[pending.ListingId],
+                                (uint)pendingBuyQtyEdits[pending.ListingId],
+                                (uint)pendingBuyBuyPriceEdits[pending.ListingId],
+                                (uint)pendingBuySellPriceEdits[pending.ListingId]);
+
+                            historyStatus = ok
+                                ? $"Accepted auto-buy capture for {pendingBuyNameEdits[pending.ListingId]}"
+                                : "Unable to accept pending buy capture";
+
+                            pendingBuyNameEdits.Remove(pending.ListingId);
+                            pendingBuyQtyEdits.Remove(pending.ListingId);
+                            pendingBuyBuyPriceEdits.Remove(pending.ListingId);
+                            pendingBuySellPriceEdits.Remove(pending.ListingId);
+                        }
+
+                        ImGui.TableNextColumn();
+                        if (ImGui.SmallButton($"Dismiss##pendingDismiss{pending.ListingId}"))
+                        {
+                            scanner.DismissPendingBuyCapture(pending.ListingId);
+                            historyStatus = "Dismissed pending auto-buy capture";
+                            pendingBuyNameEdits.Remove(pending.ListingId);
+                            pendingBuyQtyEdits.Remove(pending.ListingId);
+                            pendingBuyBuyPriceEdits.Remove(pending.ListingId);
+                            pendingBuySellPriceEdits.Remove(pending.ListingId);
+                        }
+                    }
+
+                    ImGui.EndTable();
+                }
+            }
 
             ImGui.Separator();
             ImGui.Text("Add Trade Entry");
@@ -661,6 +844,38 @@ namespace UndercutterFFXIV.Windows
             }
 
             ImGui.EndTable();
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Text("Advanced Analytics");
+
+            var advanced = scanner.GetAdvancedHistoryAnalytics(historyDaysFilter);
+            ImGui.Text($"Win rate: {advanced.WinRatePercent:F1}% | Avg net/hour: {advanced.AverageNetGilPerHour:N0} | Est median hold: {advanced.MedianEstimatedHoldHours:F1}h");
+
+            if (advanced.BestCategories.Count > 0)
+            {
+                ImGui.Text("Best categories:");
+                foreach (var category in advanced.BestCategories)
+                    ImGui.BulletText($"{category.Category}: {category.NetGil:N0} gil");
+            }
+
+            if (advanced.RepeatedLossItems.Count > 0)
+            {
+                ImGui.TextColored(new Vector4(1f, 0.65f, 0.45f, 1f), "Repeated loss patterns:");
+                foreach (var loss in advanced.RepeatedLossItems)
+                    ImGui.BulletText($"{loss.ItemName} | losses: {loss.LossCount} | net: {loss.TotalLoss:N0} gil");
+            }
+
+            var timeline = scanner.GetRetainerSnapshotAnalytics(historyDaysFilter);
+            ImGui.Spacing();
+            ImGui.Text("Retainer Snapshot Timeline");
+            ImGui.Text($"Snapshots: {timeline.TotalSnapshots} | Undercut frequency: {timeline.UndercutFrequencyPercent:F1}% | Avg sit: {timeline.AverageSitHours:F1}h");
+            if (timeline.FastestChurnItems.Count > 0)
+            {
+                ImGui.Text("Fastest churn items:");
+                foreach (var item in timeline.FastestChurnItems)
+                    ImGui.BulletText($"{item.ItemName}: {item.PriceChanges} price changes");
+            }
         }
 
         private async Task RefreshInventoryGridAsync()
@@ -679,10 +894,14 @@ namespace UndercutterFFXIV.Windows
                     await throttler.WaitAsync();
                     try
                     {
-                        var lowestListedPrice = await scanner.FetchHomeFloorPriceAsync(listing.ItemId, CancellationToken.None);
+                        var homeSnapshot = await scanner.FetchHomeSnapshotAsync(listing.ItemId, CancellationToken.None);
+                        var lowestListedPrice = homeSnapshot?.LowestPrice ?? 0;
                         var suggested = lowestListedPrice > 0
                             ? Math.Max(1, lowestListedPrice - 1)
                             : listing.CurrentPrice;
+                        var fillRate = scanner.GetHistoricalFillRatePercent(listing.ItemId);
+                        var action = DeterminePriceAction(listing.CurrentPrice, suggested, lowestListedPrice, homeSnapshot, fillRate);
+                        var trustReason = BuildInventoryTrustReason(homeSnapshot);
 
                         return new InventoryGridRow
                         {
@@ -691,7 +910,12 @@ namespace UndercutterFFXIV.Windows
                             ItemName = listing.Name,
                             CurrentSellPrice = listing.CurrentPrice,
                             UndercutPrice = suggested,
-                            IsUndercut = lowestListedPrice > 0 && lowestListedPrice < listing.CurrentPrice
+                            IsUndercut = lowestListedPrice > 0 && lowestListedPrice < listing.CurrentPrice,
+                            OwnedQuantity = listing.OwnedQuantity,
+                            FillRatePercent = fillRate,
+                            PriceAction = action,
+                            IsLowTrust = !string.IsNullOrWhiteSpace(trustReason),
+                            TrustReason = trustReason
                         };
                     }
                     finally
@@ -704,9 +928,21 @@ namespace UndercutterFFXIV.Windows
 
                 inventoryRows = rows
                     .OrderByDescending(row => row.IsUndercut)
+                    .ThenByDescending(row => row.OwnedQuantity)
                     .ThenBy(row => row.ItemName, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(row => row.SlotIndex)
                     .ToList();
+
+                scanner.SaveRetainerListingSnapshots(inventoryRows.Select(row => new RetainerListingSnapshot
+                {
+                    SlotIndex = row.SlotIndex,
+                    ItemId = row.ItemId,
+                    ItemName = row.ItemName,
+                    CurrentPrice = row.CurrentSellPrice,
+                    SuggestedPrice = row.UndercutPrice,
+                    IsUndercut = row.IsUndercut,
+                    ScannedUtc = DateTime.UtcNow
+                }).ToList());
 
                 inventoryGridInitialized = true;
                 inventoryStatus = inventoryRows.Count == 0
@@ -721,6 +957,55 @@ namespace UndercutterFFXIV.Windows
             {
                 inventoryGridRefreshInProgress = false;
             }
+        }
+
+        private static string BuildRepriceKey(int slotIndex, uint itemId)
+            => $"{slotIndex}:{itemId}";
+
+        private string DeterminePriceAction(
+            uint currentPrice,
+            uint suggestedPrice,
+            uint homeLowest,
+            MarketSnapshot? homeSnapshot,
+            int fillRatePercent)
+        {
+            if (homeLowest == 0 || homeSnapshot == null)
+                return "Hold";
+
+            var ordered = homeSnapshot.Listings
+                .Where(listing => listing.PricePerUnit > 0)
+                .OrderBy(listing => listing.PricePerUnit)
+                .ToList();
+
+            var spreadPercent = 0.0;
+            if (ordered.Count >= 2 && ordered[0].PricePerUnit > 0)
+                spreadPercent = ((ordered[1].PricePerUnit - ordered[0].PricePerUnit) / (double)ordered[0].PricePerUnit) * 100.0;
+
+            var velocity = homeSnapshot.RecentSales.Count / (double)Math.Max(1, config.ScannerLookbackDays);
+
+            if (currentPrice <= homeLowest)
+                return "Hold";
+            if (fillRatePercent < 35 && velocity < 1.0)
+                return "Exit item";
+            if (spreadPercent <= 0.5 && ordered.Count > 12)
+                return $"Match {homeLowest:N0}";
+            if (suggestedPrice < currentPrice)
+                return $"Undercut {currentPrice - suggestedPrice:N0}";
+            return "Hold";
+        }
+
+        private static string BuildInventoryTrustReason(MarketSnapshot? snapshot)
+        {
+            if (snapshot == null)
+                return "No market snapshot";
+            if (!snapshot.MostRecentSaleUtc.HasValue)
+                return "No recent sale history";
+
+            var ageMinutes = (DateTime.UtcNow - snapshot.MostRecentSaleUtc.Value).TotalMinutes;
+            if (ageMinutes > 180)
+                return "Sale history is stale";
+
+            return string.Empty;
         }
 
         private void DrawSettingsTab()
@@ -934,6 +1219,69 @@ namespace UndercutterFFXIV.Windows
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Automatically includes your actively listed retainer items in watchlist scans.");
 
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Text("Automation & Alert Quality");
+
+            var autoBuyCapture = config.EnableAutoBuyHistoryCapture;
+            if (ImGui.Checkbox("Enable auto buy-history capture", ref autoBuyCapture))
+            {
+                config.EnableAutoBuyHistoryCapture = autoBuyCapture;
+                settingsChanged = true;
+            }
+
+            var autoConfirmBuys = config.AutoBuyHistoryAutoConfirm;
+            if (ImGui.Checkbox("Auto-confirm captured buys", ref autoConfirmBuys))
+            {
+                config.AutoBuyHistoryAutoConfirm = autoConfirmBuys;
+                settingsChanged = true;
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When disabled, buys are queued for manual confirm/edit in History tab.");
+
+            var alertCooldown = config.UndercutAlertCooldownSeconds;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.InputInt("Undercut alert cooldown (sec)", ref alertCooldown))
+            {
+                config.UndercutAlertCooldownSeconds = Math.Max(30, alertCooldown);
+                settingsChanged = true;
+            }
+
+            var alertDelta = config.UndercutAlertMinDeltaGil;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.InputInt("Undercut min delta (gil)", ref alertDelta))
+            {
+                config.UndercutAlertMinDeltaGil = Math.Max(1, alertDelta);
+                settingsChanged = true;
+            }
+
+            var alertPctDelta = (float)config.UndercutAlertRepeatDeltaPercent;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.SliderFloat("Undercut repeat delta %", ref alertPctDelta, 0, 20, "%.1f%%"))
+            {
+                config.UndercutAlertRepeatDeltaPercent = Math.Max(0, alertPctDelta);
+                settingsChanged = true;
+            }
+
+            ImGui.Spacing();
+            ImGui.Text("World-travel planner");
+
+            var travelOverhead = config.WorldTravelOverheadGil;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.InputInt("Travel overhead (gil)", ref travelOverhead))
+            {
+                config.WorldTravelOverheadGil = Math.Max(0, travelOverhead);
+                settingsChanged = true;
+            }
+
+            var travelMinNet = config.WorldTravelMinNetGil;
+            ImGui.SetNextItemWidth(220);
+            if (ImGui.InputInt("Travel min net (gil)", ref travelMinNet))
+            {
+                config.WorldTravelMinNetGil = Math.Max(0, travelMinNet);
+                settingsChanged = true;
+            }
+
             if (ImGui.Button("Save Settings"))
             {
                 config.Save();
@@ -981,20 +1329,25 @@ namespace UndercutterFFXIV.Windows
                 170f,
                 80);
 
-            if (!ImGui.BeginTable(tableId, 10,
+            if (!ImGui.BeginTable(tableId, 14,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoSavedSettings,
                 new Vector2(0, 0)))
                 return;
 
             ImGui.TableSetupColumn("Item",          ImGuiTableColumnFlags.WidthFixed, itemWidth);
+            ImGui.TableSetupColumn("Owned",         ImGuiTableColumnFlags.WidthFixed, 60);
             ImGui.TableSetupColumn("Home Qty",      ImGuiTableColumnFlags.WidthFixed, 75);
             ImGui.TableSetupColumn("Price",         ImGuiTableColumnFlags.WidthFixed, 85);
             ImGui.TableSetupColumn("Buy From",      ImGuiTableColumnFlags.WidthFixed, buyFromWidth);
             ImGui.TableSetupColumn("Buy @",         ImGuiTableColumnFlags.WidthFixed, 75);
             ImGui.TableSetupColumn("Net Profit",    ImGuiTableColumnFlags.WidthFixed, 80);
             ImGui.TableSetupColumn("Profit %",      ImGuiTableColumnFlags.WidthFixed, 75);
+            ImGui.TableSetupColumn("Confidence",    ImGuiTableColumnFlags.WidthFixed, 85);
+            ImGui.TableSetupColumn("Trust",         ImGuiTableColumnFlags.WidthFixed, 80);
+            ImGui.TableSetupColumn("Data Age",      ImGuiTableColumnFlags.WidthFixed, 70);
             ImGui.TableSetupColumn("Sold 24h",      ImGuiTableColumnFlags.WidthFixed, 75);
             ImGui.TableSetupColumn("Vel/Day",       ImGuiTableColumnFlags.WidthFixed, 70);
+            ImGui.TableSetupColumn("Travel Plan",   ImGuiTableColumnFlags.WidthFixed, 220);
             ImGui.TableSetupColumn("Time",          ImGuiTableColumnFlags.WidthFixed, 70);
             ImGui.TableHeadersRow();
 
@@ -1002,6 +1355,7 @@ namespace UndercutterFFXIV.Windows
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(opp.ItemName);
+                ImGui.TableNextColumn(); ImGui.Text(opp.OwnedQuantity.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.Text(opp.HomeWorldCurrentQtyListing.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.Text(opp.HomeWorldMinPrice.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.Text(string.IsNullOrWhiteSpace(opp.BuyFromWorld) ? config.DataCenterName : opp.BuyFromWorld);
@@ -1014,8 +1368,24 @@ namespace UndercutterFFXIV.Windows
                 ImGui.TextColored(netColor, opp.NetProfitPerUnit.ToString("N0"));
 
                 ImGui.TableNextColumn(); ImGui.Text($"{opp.ProfitPercent:F1}%");
+                ImGui.TableNextColumn();
+                var confidenceColor = opp.ConfidenceScore >= 70
+                    ? new Vector4(0.4f, 1f, 0.4f, 1f)
+                    : opp.ConfidenceScore >= 45
+                        ? new Vector4(1f, 0.85f, 0.35f, 1f)
+                        : new Vector4(1f, 0.45f, 0.45f, 1f);
+                ImGui.TextColored(confidenceColor, $"{opp.ConfidenceScore:F0}");
+                ImGui.TableNextColumn();
+                var trustColor = opp.IsLowTrust ? new Vector4(1f, 0.55f, 0.35f, 1f) : new Vector4(0.45f, 1f, 0.45f, 1f);
+                ImGui.TextColored(trustColor, opp.IsLowTrust ? "Low" : "OK");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(string.IsNullOrWhiteSpace(opp.TrustReason) ? "Healthy" : opp.TrustReason);
+                ImGui.TableNextColumn(); ImGui.Text($"{opp.DataFreshnessMinutes:F0}m");
                 ImGui.TableNextColumn(); ImGui.Text(opp.UnitsSold24h.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.Text(opp.SaleVelocityPerDay.ToString("F2"));
+                ImGui.TableNextColumn();
+                var travelColor = opp.TravelWorthIt ? new Vector4(0.45f, 1f, 0.45f, 1f) : new Vector4(1f, 0.6f, 0.45f, 1f);
+                ImGui.TextColored(travelColor, opp.TravelPlanSummary);
                 ImGui.TableNextColumn(); ImGui.Text(opp.ScannedUtc.ToLocalTime().ToString("HH:mm:ss"));
             }
 

@@ -34,6 +34,20 @@ namespace UndercutterFFXIV.Services
                 .ToList();
         }
 
+        public int GetOwnedItemQuantity(uint itemId)
+        {
+            var inventoryManager = InventoryManager.Instance();
+            if (inventoryManager == null || itemId == 0)
+                return 0;
+
+            // Includes normal inventory + armoury in live character state.
+            var owned = Math.Max(0, inventoryManager->GetInventoryItemCount(itemId, false, true, true, 0));
+
+            // Add currently listed retainer-market quantity for stronger "already own this" prioritization.
+            var listed = Math.Max(0, inventoryManager->GetItemCountInContainer(itemId, InventoryType.RetainerMarket, false, 0));
+            return owned + listed;
+        }
+
         public IReadOnlyList<RetainerSaleListing> GetCurrentSellingListings()
         {
             var inventoryManager = InventoryManager.Instance();

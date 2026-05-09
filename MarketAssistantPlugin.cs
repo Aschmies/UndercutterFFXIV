@@ -104,6 +104,8 @@ namespace UndercutterFFXIV
             {
                 try
                 {
+                    scanner.CapturePendingBuysFromClientCache();
+
                     if (Configuration.EnableSessionLimit)
                     {
                         var max = Math.Max(1, Configuration.SessionLimitHours);
@@ -147,6 +149,15 @@ namespace UndercutterFFXIV
 
         private void DrawUI()
         {
+            try
+            {
+                scanner.CapturePendingBuysFromClientCache();
+            }
+            catch (Exception ex)
+            {
+                LoggingService.LogError($"Auto buy capture poll failed: {ex.Message}");
+            }
+
             windowSystem.Draw();
         }
 

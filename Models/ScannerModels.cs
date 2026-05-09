@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace UndercutterFFXIV.Models
 {
@@ -26,6 +27,7 @@ namespace UndercutterFFXIV.Models
         public uint ItemId { get; init; }
         public string Name { get; init; } = string.Empty;
         public uint CurrentPrice { get; init; }
+        public int OwnedQuantity { get; init; }
     }
 
     public sealed class SaleRecord
@@ -50,6 +52,9 @@ namespace UndercutterFFXIV.Models
         public uint LowestPrice { get; init; }
         public IReadOnlyList<SaleRecord> RecentSales { get; init; } = Array.Empty<SaleRecord>();
         public IReadOnlyList<ListingRecord> Listings { get; init; } = Array.Empty<ListingRecord>();
+
+        public DateTime? MostRecentSaleUtc
+            => RecentSales.Count == 0 ? null : RecentSales.Max(s => s.TimestampUtc);
     }
 
     public sealed class ArbitrageOpportunity
@@ -67,6 +72,13 @@ namespace UndercutterFFXIV.Models
         public uint HomeWorldCurrentQtyListing { get; init; }
         public bool PotentialBotSellerPattern { get; init; }
         public int SafeBuyQty { get; init; }
+        public int OwnedQuantity { get; init; }
+        public double ConfidenceScore { get; init; }
+        public double DataFreshnessMinutes { get; init; }
+        public bool IsLowTrust { get; init; }
+        public string TrustReason { get; init; } = string.Empty;
+        public string TravelPlanSummary { get; init; } = string.Empty;
+        public bool TravelWorthIt { get; init; }
         public DateTime ScannedUtc { get; init; }
 
         /// <summary>
@@ -135,5 +147,49 @@ namespace UndercutterFFXIV.Models
         public uint SellPrice { get; init; }
         public uint Quantity { get; init; }
         public DateTime TradedUtc { get; init; }
+    }
+
+    public sealed class PendingBuyCaptureEntry
+    {
+        public ulong ListingId { get; init; }
+        public uint ItemId { get; init; }
+        public string ItemName { get; init; } = string.Empty;
+        public uint Quantity { get; init; }
+        public uint UnitPrice { get; init; }
+        public uint TotalTax { get; init; }
+        public ushort ContainerIndex { get; init; }
+        public bool IsHq { get; init; }
+        public byte TownId { get; init; }
+        public DateTime CapturedUtc { get; init; }
+    }
+
+    public sealed class RetainerListingSnapshot
+    {
+        public long Id { get; init; }
+        public int SlotIndex { get; init; }
+        public uint ItemId { get; init; }
+        public string ItemName { get; init; } = string.Empty;
+        public uint CurrentPrice { get; init; }
+        public uint SuggestedPrice { get; init; }
+        public bool IsUndercut { get; init; }
+        public DateTime ScannedUtc { get; init; }
+    }
+
+    public sealed class RetainerSnapshotAnalytics
+    {
+        public int TotalSnapshots { get; init; }
+        public double UndercutFrequencyPercent { get; init; }
+        public double AverageSitHours { get; init; }
+        public IReadOnlyList<(string ItemName, int PriceChanges)> FastestChurnItems { get; init; } = Array.Empty<(string, int)>();
+    }
+
+    public sealed class AdvancedHistoryAnalytics
+    {
+        public int TotalTrades { get; init; }
+        public double WinRatePercent { get; init; }
+        public double AverageNetGilPerHour { get; init; }
+        public double MedianEstimatedHoldHours { get; init; }
+        public IReadOnlyList<(string Category, double NetGil)> BestCategories { get; init; } = Array.Empty<(string, double)>();
+        public IReadOnlyList<(string ItemName, int LossCount, double TotalLoss)> RepeatedLossItems { get; init; } = Array.Empty<(string, int, double)>();
     }
 }

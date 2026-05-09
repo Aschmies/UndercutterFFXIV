@@ -27,6 +27,19 @@ namespace UndercutterFFXIV
         public bool EnableRetainerAutoFill { get; set; } = false;
         public bool AutoTrackCurrentlySellingItems { get; set; } = true;
 
+        // Auto buy-history capture
+        public bool EnableAutoBuyHistoryCapture { get; set; } = true;
+        public bool AutoBuyHistoryAutoConfirm { get; set; } = false;
+
+        // Undercut alert quality controls
+        public int UndercutAlertCooldownSeconds { get; set; } = 300;
+        public int UndercutAlertMinDeltaGil { get; set; } = 5;
+        public double UndercutAlertRepeatDeltaPercent { get; set; } = 1.0;
+
+        // World-travel planner
+        public int WorldTravelOverheadGil { get; set; } = 250;
+        public int WorldTravelMinNetGil { get; set; } = 1000;
+
         // Legacy fields kept for backward compatibility with existing windows/services
         public bool PluginEnabled { get; set; } = true;
         public int CheckIntervalSeconds { get; set; } = 30;
