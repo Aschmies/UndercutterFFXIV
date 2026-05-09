@@ -551,46 +551,75 @@ namespace UndercutterFFXIV.Windows
                     ImGui.SetTooltip("Distributes daily capital across top opportunities using confidence, velocity, trust, and profit quality.");
                 ImGui.TextDisabled($"Budget used: {capitalSimulation.TotalCostGil:N0} / {config.MaxCapitalPerDayGil:N0} | Allocated items: {capitalSimulation.ItemCount}");
 
-                if (ImGui.BeginTable("##capitalPlan", 7,
+                if (ImGui.BeginTable("##capitalPlan", 8,
                     ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY,
                     new Vector2(0, 140)))
                 {
                     ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
                     ImGui.TableSetupColumn("Buy From", ImGuiTableColumnFlags.WidthFixed, 75);
+                    ImGui.TableSetupColumn("Buy @", ImGuiTableColumnFlags.WidthFixed, 75);
+                    ImGui.TableSetupColumn("Sell @", ImGuiTableColumnFlags.WidthFixed, 75);
                     ImGui.TableSetupColumn("Profit %", ImGuiTableColumnFlags.WidthFixed, 65);
                     ImGui.TableSetupColumn("Priority", ImGuiTableColumnFlags.WidthFixed, 62);
                     ImGui.TableSetupColumn("Qty", ImGuiTableColumnFlags.WidthFixed, 40);
-                    ImGui.TableSetupColumn("Cost", ImGuiTableColumnFlags.WidthFixed, 85);
-                    ImGui.TableSetupColumn("Net", ImGuiTableColumnFlags.WidthFixed, 85);
+                    ImGui.TableSetupColumn("Est. Return", ImGuiTableColumnFlags.WidthFixed, 85);
                     ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
                     ImGui.TableNextColumn(); ImGui.TableHeader("Item");
                     ImGui.TableNextColumn(); ImGui.TableHeader("Buy From");
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("The world with the lowest listed price for this item — travel here to buy.");
+                    ImGui.TableNextColumn();
+                    ImGui.TableHeader("Buy @");
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Cheapest listed price on the source world. This is what you pay per unit.");
+                    ImGui.TableNextColumn();
+                    ImGui.TableHeader("Sell @");
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Current lowest listing on your home world.\nList at this price or 1 gil below to be the cheapest seller.");
                     ImGui.TableNextColumn(); ImGui.TableHeader("Profit %");
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("(Sell @ − Buy @) / Buy @ — gross margin before taxes/fees.");
                     ImGui.TableNextColumn();
                     ImGui.TableHeader("Priority");
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip("Capital allocation priority — higher = allocated first.\n\nCombines Confidence with velocity, profit margin, trust, and market regime:\n  Confidence x velocity factor (0.4-1.3x) x profit factor (0.35-1.4x)\n  x trust (1.0 OK / 0.55 Low Trust) x regime penalty.\n\nUnlike Confidence which only measures data reliability,\nPriority also weights how liquid and profitable the market is.");
                     ImGui.TableNextColumn(); ImGui.TableHeader("Qty");
-                    ImGui.TableNextColumn(); ImGui.TableHeader("Cost");
-                    ImGui.TableNextColumn(); ImGui.TableHeader("Net");
+                    ImGui.TableNextColumn();
+                    ImGui.TableHeader("Est. Return");
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Estimated total profit for this allocation.\n\nCalculation: (Sell @ − Buy @) × Qty\n  Buy from source world at Buy @\n  Sell on your home world at Sell @\n\nHover each row for the full per-item breakdown.");
 
                     foreach (var allocation in capitalPlan.Take(14))
                     {
                         ImGui.TableNextRow();
                         ImGui.TableNextColumn(); ImGui.TextUnformatted(allocation.ItemName);
                         ImGui.TableNextColumn(); ImGui.TextUnformatted(string.IsNullOrWhiteSpace(allocation.BuyFromWorld) ? config.DataCenterName : allocation.BuyFromWorld);
+                        ImGui.TableNextColumn(); ImGui.Text(allocation.UnitBuyPrice.ToString("N0"));
+                        ImGui.TableNextColumn(); ImGui.Text(allocation.SuggestedSellPrice.ToString("N0"));
+                        if (ImGui.IsItemHovered())
+                            ImGui.SetTooltip("Current home-world floor price. List at or just below this to undercut existing sellers.");
                         ImGui.TableNextColumn(); ImGui.Text($"{allocation.ProfitPercent:F1}%");
                         ImGui.TableNextColumn();
                         ImGui.Text($"{allocation.Score:F0}");
                         if (ImGui.IsItemHovered())
                             ImGui.SetTooltip($"Allocation priority: {allocation.Score:F0}\nFormula: Confidence x velocity factor x profit factor x trust x regime penalties.\nSee the Confidence column in Flip Opportunities for the data quality breakdown.");
                         ImGui.TableNextColumn(); ImGui.Text(allocation.AllocatedQty.ToString("N0"));
-                        ImGui.TableNextColumn(); ImGui.Text(allocation.AllocatedCostGil.ToString("N0"));
                         ImGui.TableNextColumn();
                         var netColor = allocation.ProjectedNetGil >= 0
                             ? new Vector4(0.4f, 1f, 0.4f, 1f)
                             : new Vector4(1f, 0.45f, 0.45f, 1f);
                         ImGui.TextColored(netColor, allocation.ProjectedNetGil.ToString("N0"));
+                        if (ImGui.IsItemHovered())
+                        {
+                            var totalCost = allocation.UnitBuyPrice * allocation.AllocatedQty;
+                            var totalRevenue = (double)allocation.SuggestedSellPrice * allocation.AllocatedQty;
+                            var buyWorld = string.IsNullOrWhiteSpace(allocation.BuyFromWorld) ? config.DataCenterName : allocation.BuyFromWorld;
+                            ImGui.SetTooltip(
+                                $"Buy: {allocation.AllocatedQty} × {allocation.UnitBuyPrice:N0} gil on {buyWorld} = {totalCost:N0} gil\n" +
+                                $"Sell: {allocation.AllocatedQty} × {allocation.SuggestedSellPrice:N0} gil on {config.WorldName} = {totalRevenue:N0} gil\n" +
+                                $"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n" +
+                                $"Est. Return: {allocation.ProjectedNetGil:N0} gil ({allocation.ProfitPercent:F1}% margin)");
+                        }
                     }
 
                     ImGui.EndTable();

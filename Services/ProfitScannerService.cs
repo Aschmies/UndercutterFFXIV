@@ -232,7 +232,8 @@ namespace UndercutterFFXIV.Services
                     AllocatedCostGil = allocatedCost,
                     ProjectedNetGil = qty * opportunity.NetProfitPerUnit,
                     BuyFromWorld = opportunity.BuyFromWorld,
-                    ProfitPercent = opportunity.ProfitPercent
+                    ProfitPercent = opportunity.ProfitPercent,
+                    SuggestedSellPrice = opportunity.HomeWorldMinPrice
                 });
             }
 
