@@ -38,6 +38,10 @@ namespace ArmouryCleaner
         // Require explicit confirmation before any deletion happens
         public bool RequireConfirmation { get; set; } = true;
 
+        // When true: move to inventory then immediately call DiscardItem
+        // When false (default): only move to inventory, user discards manually
+        public bool AutoDiscard { get; set; } = false;
+
         private IDalamudPluginInterface? pluginInterface;
 
         public void Initialize(IDalamudPluginInterface pi) => pluginInterface = pi;

@@ -214,7 +214,27 @@ namespace ArmouryCleaner.Windows
                 return;
             }
 
+            // Auto-discard toggle
+            var autoDiscard = Config.AutoDiscard;
+            if (ImGui.Checkbox("Auto-Discard (skip inventory step)##autodiscard", ref autoDiscard))
+            {
+                Config.AutoDiscard = autoDiscard;
+                Config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, items are moved to a free inventory slot and immediately discarded.\nWhen disabled, items are only moved to your inventory so you can review them first.");
+            if (Config.AutoDiscard)
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(new Vector4(1f, 0.4f, 0.2f, 1f), "WARNING: items will be permanently deleted!");
+            }
+
             ImGui.TextUnformatted($"{scanResults.Count} item(s) matched.");
+            var actionLabel = Config.AutoDiscard ? "Discard" : "Move";
+            var actionTooltip = Config.AutoDiscard
+                ? "Permanently discard this item immediately."
+                : "Move this item to your inventory so you can right-click → Discard it.";
+
             if (ImGui.BeginTable("##armouryResults", 6,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit,
                 new Vector2(0, 220)))
@@ -225,7 +245,7 @@ namespace ArmouryCleaner.Windows
                 ImGui.TableSetupColumn("iLvl", ImGuiTableColumnFlags.WidthFixed, 42);
                 ImGui.TableSetupColumn("Jobs", ImGuiTableColumnFlags.WidthFixed, 130);
                 ImGui.TableSetupColumn("HQ", ImGuiTableColumnFlags.WidthFixed, 26);
-                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 56);
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 66);
                 ImGui.TableHeadersRow();
 
                 for (var i = 0; i < scanResults.Count; i++)
@@ -244,9 +264,11 @@ namespace ArmouryCleaner.Windows
                     if (item.IsHQ)
                         ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1f), "HQ");
                     ImGui.TableNextColumn();
-                    if (ImGui.SmallButton($"Move##move{i}"))
+                    if (ImGui.SmallButton($"{actionLabel}##act{i}"))
                     {
-                        var (success, msg) = armouryService.MoveToInventory(item);
+                        var (success, msg) = Config.AutoDiscard
+                            ? armouryService.MoveAndDiscard(item)
+                            : armouryService.MoveToInventory(item);
                         statusMessage = msg;
                         if (success)
                         {
@@ -255,35 +277,45 @@ namespace ArmouryCleaner.Windows
                         }
                     }
                     if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip("Move this item to your inventory so you can right-click → Discard it.");
+                        ImGui.SetTooltip(actionTooltip);
                 }
 
                 ImGui.EndTable();
             }
 
             ImGui.Spacing();
+            var bulkLabel = Config.AutoDiscard
+                ? $"Discard All {scanResults.Count}##discardall"
+                : $"Move All {scanResults.Count} to Inventory##moveall";
             if (!confirmingMoveAll)
             {
-                if (ImGui.Button($"Move All {scanResults.Count} to Inventory##moveall"))
+                if (ImGui.Button(bulkLabel))
                     confirmingMoveAll = true;
             }
             else
             {
-                ImGui.TextColored(new Vector4(1f, 0.5f, 0.2f, 1f), $"Move all {scanResults.Count} items to your inventory?");
+                var warningText = Config.AutoDiscard
+                    ? $"PERMANENTLY DISCARD all {scanResults.Count} items? This cannot be undone!"
+                    : $"Move all {scanResults.Count} items to your inventory?";
+                ImGui.TextColored(new Vector4(1f, 0.4f, 0.2f, 1f), warningText);
                 ImGui.SameLine();
                 if (ImGui.Button("Confirm##confirmAll"))
                 {
-                    var moved = 0;
+                    var processed = 0;
                     for (var i = scanResults.Count - 1; i >= 0; i--)
                     {
-                        var (success, _) = armouryService.MoveToInventory(scanResults[i]);
+                        var (success, _) = Config.AutoDiscard
+                            ? armouryService.MoveAndDiscard(scanResults[i])
+                            : armouryService.MoveToInventory(scanResults[i]);
                         if (success)
                         {
                             scanResults.RemoveAt(i);
-                            moved++;
+                            processed++;
                         }
                     }
-                    statusMessage = $"Moved {moved} item(s). Right-click each in your inventory to Discard.";
+                    statusMessage = Config.AutoDiscard
+                        ? $"Discarded {processed} item(s)."
+                        : $"Moved {processed} item(s). Right-click each in your inventory to Discard.";
                     confirmingMoveAll = false;
                 }
                 ImGui.SameLine();
@@ -291,8 +323,11 @@ namespace ArmouryCleaner.Windows
                     confirmingMoveAll = false;
             }
 
-            ImGui.Spacing();
-            ImGui.TextDisabled("Items moved to inventory can be discarded via right-click → Discard.");
+            if (!Config.AutoDiscard)
+            {
+                ImGui.Spacing();
+                ImGui.TextDisabled("Items moved to inventory can be discarded via right-click → Discard.");
+            }
         }
 
         private void ToggleJob(string abbr, bool nowEnabled)
