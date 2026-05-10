@@ -1,0 +1,33 @@
+{
+  "Author": "Market Assistant Dev",
+  "Name": "Slidecaster",
+  "Punchline": "Highlights the final safe-move window while casting.",
+  "Description": "Adds a cast-bar overlay that marks the slidecasting timeframe so you can start moving without interrupting the cast. Includes an optional audio cue when the safe window begins.",
+  "Changelog": "v1.0.0: Initial release with cast-bar safe-zone overlay, configurable timing, and optional safe-move sound cue.",
+  "InternalName": "Slidecaster",
+  "AssemblyVersion": "1.0.0.0",
+  "TestingAssemblyVersion": "1.0.0.0",
+  "IsHide": false,
+  "IsTestingExclusive": false,
+  "RepoUrl": "https://github.com/Aschmies/AschyQOL",
+  "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",
+  "DownloadLinkInstall": "",
+  "DownloadLinkUpdate": "",
+  "DownloadLinkTesting": "",
+  "DalamudApiLevel": 15,
+  "ApplicableVersion": "any",
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "SupportsProfiles": false,
+  "AcceptsFeedback": true,
+  "Tags": [
+    "combat",
+    "casting",
+    "slidecast",
+    "overlay"
+  ],
+  "LastUpdated": 1778400000,
+  "DownloadCount": 0
+}

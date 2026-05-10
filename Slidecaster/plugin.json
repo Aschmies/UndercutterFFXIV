@@ -1,0 +1,15 @@
+{
+  "Version": "1.0.0",
+  "Author": "Market Assistant Dev",
+  "Name": "Slidecaster",
+  "Description": "Highlights the safe movement window near the end of casts and can play an optional cue.",
+  "InternalName": "Slidecaster",
+  "RepoUrl": "https://github.com/Aschmies/AschyQOL",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "Tags": ["combat", "casting", "slidecast", "overlay"]
+}
