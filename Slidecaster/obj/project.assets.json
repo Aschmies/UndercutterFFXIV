@@ -76,13 +76,13 @@
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
-    "version": "1.1.13",
+    "version": "1.0.5",
     "restore": {
-      "projectUniqueName": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\QuestNav\\QuestNav.csproj",
-      "projectName": "QuestNav",
-      "projectPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\QuestNav\\QuestNav.csproj",
+      "projectUniqueName": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\Slidecaster.csproj",
+      "projectName": "Slidecaster",
+      "projectPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\Slidecaster.csproj",
       "packagesPath": "C:\\Users\\David\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\QuestNav\\obj\\",
+      "outputPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\David\\Projects\\UndercutterFFXIV\\ArmouryCleaner\\ArmouryCleaner.csproj": {}
+    "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\Slidecaster.csproj": {}
   },
   "projects": {
-    "C:\\Users\\David\\Projects\\UndercutterFFXIV\\ArmouryCleaner\\ArmouryCleaner.csproj": {
-      "version": "1.0.9",
+    "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\Slidecaster.csproj": {
+      "version": "1.0.5",
       "restore": {
-        "projectUniqueName": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\ArmouryCleaner\\ArmouryCleaner.csproj",
-        "projectName": "ArmouryCleaner",
-        "projectPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\ArmouryCleaner\\ArmouryCleaner.csproj",
+        "projectUniqueName": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\Slidecaster.csproj",
+        "projectName": "Slidecaster",
+        "projectPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\Slidecaster.csproj",
         "packagesPath": "C:\\Users\\David\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\ArmouryCleaner\\obj\\",
+        "outputPath": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\Slidecaster\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "Slidecaster/1.0.5": {
+        "runtime": {
+          "Slidecaster.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Slidecaster/1.0.5": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

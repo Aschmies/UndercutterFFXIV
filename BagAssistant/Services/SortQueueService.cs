@@ -12,7 +12,7 @@ namespace BagAssistant.Services;
 /// </summary>
 public sealed class SortQueueService(InventoryService inventoryService, Configuration config)
 {
-    private readonly Queue<(InventoryItemInfo Item, InventoryType DestBag)> queue = new();
+    private readonly Queue<(InventoryItemInfo Item, InventoryType DestBag, int? DestSlot)> queue = new();
     private readonly List<(InventoryType SrcBag, int SrcSlot, InventoryType DestBag, int DestSlot)> moveHistory = new();
     private readonly Stopwatch timer = new();
     private int total;
@@ -25,7 +25,7 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
     public int Total => total;
     public bool CanUndo => moveHistory.Count > 0;
 
-    public void Enqueue(IEnumerable<(InventoryItemInfo Item, InventoryType DestBag)> items, string description)
+    public void Enqueue(IEnumerable<(InventoryItemInfo Item, InventoryType DestBag, int? DestSlot)> items, string description)
     {
         var added = 0;
         foreach (var entry in items)
@@ -57,7 +57,20 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
         if (timer.IsRunning && timer.ElapsedMilliseconds < nextDelayMs) return;
 
         var entry = queue.Dequeue();
-        var (success, msg) = inventoryService.MoveOrSwap(entry.Item, entry.DestBag);
+                bool success;
+        string msg;
+        if (entry.DestSlot.HasValue)
+        {
+            var res = inventoryService.MoveSlotToSlot(entry.DestBag, entry.DestSlot.Value, entry.Item.Container, entry.Item.Slot, "Sort Queue");
+            success = res.Success;
+            msg = res.Message;
+        }
+        else
+        {
+            var res = inventoryService.MoveOrSwap(entry.Item, entry.DestBag);
+            success = res.Success;
+            msg = res.Message;
+        }
         
         if (success)
         {

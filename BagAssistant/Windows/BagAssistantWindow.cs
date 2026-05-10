@@ -83,9 +83,14 @@ public sealed class BagAssistantWindow : Window, IDisposable
                 DrawQuickSortTab();
                 ImGui.EndTabItem();
             }
-            if (ImGui.BeginTabItem("Custom Rules"))
+            // if (ImGui.BeginTabItem("Custom Rules"))
+            // {
+            //     DrawRulesTab();
+            //     ImGui.EndTabItem();
+            // }
+            if (ImGui.BeginTabItem("Layout Zones"))
             {
-                DrawRulesTab();
+                DrawVisualZonesTab();
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Run / Preview"))
@@ -109,6 +114,55 @@ public sealed class BagAssistantWindow : Window, IDisposable
                 ImGui.EndTabItem();
             }
             ImGui.EndTabBar();
+        }
+
+                if (openJunkConfirmPopup)
+        {
+            ImGui.OpenPopup("Confirm Junk Discard");
+            openJunkConfirmPopup = false;
+        }
+
+        if (ImGui.BeginPopupModal("Confirm Junk Discard", ref openJunkConfirmPopup, ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.Text("The following items will be permanently discarded:");
+            ImGui.Separator();
+
+            if (pendingJunkDiscards != null && pendingJunkDiscards.Count > 0)
+            {
+                ImGui.BeginChild("##junkList", new Vector2(400, 200), true);
+                for (int i = pendingJunkDiscards.Count - 1; i >= 0; i--)
+                {
+                    var item = pendingJunkDiscards[i];
+                    ImGui.Text($"{item.Name} (Price: {item.VendorPrice} gil)");
+                    ImGui.SameLine(ImGui.GetWindowWidth() - 70);
+                    if (ImGui.Button($"Keep##{i}"))
+                    {
+                        pendingJunkDiscards.RemoveAt(i);
+                    }
+                }
+                ImGui.EndChild();
+            }
+            else
+            {
+                ImGui.Text("No junk items found, or all items were removed from discard list.");
+            }
+
+            ImGui.Separator();
+            if (ImGui.Button("Confirm Discard", new Vector2(120, 0)))
+            {
+                if (pendingJunkDiscards != null && pendingJunkDiscards.Count > 0)
+                {
+                    plugin.DeleteSpecificJunk(pendingJunkDiscards);
+                }
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SetItemDefaultFocus();
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel", new Vector2(120, 0)))
+            {
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.EndPopup();
         }
 
         if (!string.IsNullOrEmpty(plugin.SortQueueStatus))
@@ -762,6 +816,25 @@ public sealed class BagAssistantWindow : Window, IDisposable
             Config.Save();
         }
         ImGui.TextDisabled("Pick which custom rule the overlay's second button runs. Build rules in the 'Custom Rules' tab.");
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Junk Filtering Logic");
+        
+        var exclusion = Config.ExcludeCraftingFromJunk;
+        if (ImGui.Checkbox("Exclude stackable crafting materials from Junk", ref exclusion))
+        {
+            Config.ExcludeCraftingFromJunk = exclusion;
+            Config.Save();
+        }
+        
+        var junkPrice = Config.MaxJunkVendorPrice;
+        ImGui.SetNextItemWidth(120);
+        if (ImGui.InputInt("Max Vendor Price for Junk##junkPrice", ref junkPrice))
+        {
+            Config.MaxJunkVendorPrice = Math.Max(0, junkPrice);
+            Config.Save();
+        }
     }
 
     private void DrawBagToggle(string label, Func<Configuration, bool> get, Action<Configuration, bool> set)
@@ -775,6 +848,9 @@ public sealed class BagAssistantWindow : Window, IDisposable
     }
 
     // ─── Tab: Advanced ──────────────────────────────────────────────────────
+
+        private List<InventoryItemInfo>? pendingJunkDiscards = null;
+    private bool openJunkConfirmPopup = false;
 
     private string naturalLanguageSearchBox = string.Empty;
     private List<InventoryItemInfo> searchResults = new();
@@ -884,6 +960,104 @@ public sealed class BagAssistantWindow : Window, IDisposable
     }
 
     // ─── Tab: Help ──────────────────────────────────────────────────────────
+
+        
+    private int activeZoneTagIndex = 0;
+    private readonly string[] zoneTags = new[] { "None", "Gear", "Materia", "Consumables", "Crafting", "Gathering", "Crystals", "Junk" };
+    private readonly System.Numerics.Vector4[] zoneColors = new[] {
+        new System.Numerics.Vector4(0.2f, 0.2f, 0.2f, 1f), // None
+        new System.Numerics.Vector4(0.2f, 0.6f, 1.0f, 1f), // Gear
+        new System.Numerics.Vector4(0.8f, 0.2f, 0.8f, 1f), // Materia
+        new System.Numerics.Vector4(0.4f, 0.9f, 0.4f, 1f), // Consumables
+        new System.Numerics.Vector4(0.9f, 0.6f, 0.2f, 1f), // Crafting
+        new System.Numerics.Vector4(0.9f, 0.8f, 0.2f, 1f), // Gathering
+        new System.Numerics.Vector4(0.4f, 0.8f, 0.9f, 1f), // Crystals
+        new System.Numerics.Vector4(0.5f, 0.5f, 0.5f, 1f), // Junk
+    };
+
+    private void DrawVisualZonesTab()
+    {
+        ImGui.TextWrapped("Visual Layout Zones let you assign specific categories to specific slots in your bags. Items will be automatically routed and sorted into these designated areas.");
+        ImGui.Spacing();
+
+        if (ImGui.Button("Apply Visual Zones Now"))
+        {
+            plugin.ApplyVisualZones();
+        }
+
+        ImGui.Separator();
+        
+        ImGui.Text("Active Paintbrush:");
+        for (int i = 0; i < zoneTags.Length; i++)
+        {
+            if (i > 0 && i % 4 != 0) ImGui.SameLine();
+            ImGui.PushStyleColor(ImGuiCol.Button, activeZoneTagIndex == i ? zoneColors[i] : zoneColors[i] * 0.5f);
+            if (ImGui.Button($"{zoneTags[i]}##brush{i}"))
+            {
+                activeZoneTagIndex = i;
+            }
+            ImGui.PopStyleColor();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        if (ImGui.BeginTabBar("##ZoneBagsTabBar"))
+        {
+            for (int b = 0; b < 4; b++)
+            {
+                if (ImGui.BeginTabItem($"Bag {b + 1}##ZoneBag_{b}"))
+                {
+                    DrawZoneGrid(b);
+                    ImGui.EndTabItem();
+                }
+            }
+            ImGui.EndTabBar();
+        }
+    }
+
+    private void DrawZoneGrid(int bagIndex)
+    {
+        int offset = bagIndex * 35;
+        ImGui.Text("Click or drag across slots to paint them with the active tag.");
+        ImGui.Spacing();
+        
+        if (ImGui.BeginTable($"##ZoneTable_{bagIndex}", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit))
+        {
+            for (int r = 0; r < 7; r++)
+            {
+                ImGui.TableNextRow();
+                for (int c = 0; c < 5; c++)
+                {
+                    ImGui.TableNextColumn();
+                    int slotIndex = r * 5 + c;
+                    int globalIndex = offset + slotIndex;
+                    string currentTag = Config.VisualZoneLayout[globalIndex];
+                    int tagIdx = Array.IndexOf(zoneTags, currentTag);
+                    if (tagIdx < 0) tagIdx = 0;
+
+                    ImGui.PushID($"zoneBtn_{globalIndex}");
+                    ImGui.PushStyleColor(ImGuiCol.Button, zoneColors[tagIdx]);
+                    
+                    ImGui.Button(string.IsNullOrEmpty(currentTag) || currentTag == "None" ? $"Slot {slotIndex+1}" : currentTag, new System.Numerics.Vector2(90, 40));
+                    
+                    if (ImGui.IsItemHovered() && ImGui.IsMouseDown(ImGuiMouseButton.Left))
+                    {
+                        var newTag = zoneTags[activeZoneTagIndex];
+                        if (Config.VisualZoneLayout[globalIndex] != newTag)
+                        {
+                            Config.VisualZoneLayout[globalIndex] = newTag;
+                            Config.Save();
+                        }
+                    }
+
+                    ImGui.PopStyleColor();
+                    ImGui.PopID();
+                }
+            }
+            ImGui.EndTable();
+        }
+    }
 
     private void DrawHelpTab()
     {

@@ -10,6 +10,7 @@ public sealed class QuickMove
 {
     public required InventoryItemInfo Item { get; init; }
     public required InventoryType DestBag { get; init; }
+    public int? DestSlot { get; init; }
 }
 
 /// <summary>A one-click sort preset: a filter + destination bag with a friendly name and description.</summary>
@@ -280,13 +281,13 @@ public static class QuickSortPresets
     /// <summary>
     /// Vendor Trash: Group all grey-rarity items (white) into Bag 4 for easy discard.
     /// </summary>
-    public static List<QuickMove> BuildVendorTrashGroup(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
+    public static List<QuickMove> BuildVendorTrashGroup(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags, Configuration config)
     {
         if (!bagFlags[3]) return new List<QuickMove>();
         var destBag = InventoryService.PlayerBags[3];
         
         return items
-            .Where(i => i.Rarity == 1 && i.Container != destBag)
+            .Where(i => IsJunk(i, config.MaxJunkVendorPrice, config.ExcludeCraftingFromJunk) && i.Container != destBag)
             .Select(i => new QuickMove { Item = i, DestBag = destBag })
             .ToList();
     }
@@ -297,6 +298,16 @@ public static class QuickSortPresets
     /// Simple natural language keyword matching for item categories.
     /// Maps combat-related keywords to item properties.
     /// </summary>
+        public static bool IsJunk(InventoryItemInfo i, int maxVendorPrice, bool excludeCrafting)
+    {
+        if (i.Rarity != 1) return false;
+        if (i.IsEquippable) return false;
+        if (i.UICategoryRowId == UICategoryCrystal || i.UICategoryRowId == UICategoryMateria) return false;
+        if (i.VendorPrice > maxVendorPrice) return false;
+        if (excludeCrafting && i.IsStackable && SearchByKeyword(new[] { i }.ToList(), "craft").Count > 0) return false;
+        return true;
+    }
+
     public static List<InventoryItemInfo> SearchByKeyword(IReadOnlyList<InventoryItemInfo> items, string keyword)
     {
         var lower = keyword.ToLowerInvariant().Trim();
@@ -368,6 +379,51 @@ public static class QuickSortPresets
     /// <summary>
     /// Apply a saved layout template to another bag by moving items to match the template order.
     /// </summary>
+        public static List<QuickMove> ApplyVisualZones(IReadOnlyList<InventoryItemInfo> items, string[] layoutMap, bool[] bagFlags, Configuration config)
+    {
+        var moves = new List<QuickMove>();
+        var itemsToMove = items.ToList();
+
+        var slotsByTag = new Dictionary<string, List<(InventoryType Bag, int Slot)>>();
+        for (int i = 0; i < 140; i++)
+        {
+            var tag = layoutMap[i];
+            if (string.IsNullOrEmpty(tag) || tag == "None") continue;
+            if (!slotsByTag.ContainsKey(tag)) slotsByTag[tag] = new();
+            var bagIndex = i / 35;
+            var slotIndex = i % 35;
+            if (bagIndex < bagFlags.Length && bagFlags[bagIndex])
+            {
+                slotsByTag[tag].Add((InventoryService.PlayerBags[bagIndex], slotIndex));
+            }
+        }
+
+        foreach (var kvp in slotsByTag)
+        {
+            var tag = kvp.Key;
+            var targetSlots = kvp.Value;
+            var matchedItems = itemsToMove.Where(i => tag switch
+            {
+                "Gear" => i.IsEquippable && i.Rarity > 1,
+                "Materials" => i.IsStackable && !IsJunk(i, config.MaxJunkVendorPrice, config.ExcludeCraftingFromJunk) && i.UICategoryRowId != UICategoryMateria && i.UICategoryRowId != UICategoryCrystal,
+                "Consumables" => i.UICategoryRowId == 44 || i.UICategoryRowId == 45 || i.UICategoryRowId == 46, // Medicines, Meals
+                "Materia" => i.UICategoryRowId == UICategoryMateria || i.Name.ToString().Contains("Materia"),
+                "Crystals" => i.UICategoryRowId == UICategoryCrystal,
+                "Junk" => IsJunk(i, config.MaxJunkVendorPrice, config.ExcludeCraftingFromJunk),
+                _ => false
+            }).ToList();
+
+            int moveCount = Math.Min(matchedItems.Count, targetSlots.Count);
+            for (int k = 0; k < moveCount; k++)
+            {
+                moves.Add(new QuickMove { Item = matchedItems[k], DestBag = targetSlots[k].Bag, DestSlot = targetSlots[k].Slot });
+                itemsToMove.Remove(matchedItems[k]);
+            }
+        }
+
+        return moves;
+    }
+
     public static List<QuickMove> ApplyLayoutTemplate(
         IReadOnlyList<InventoryItemInfo> items,
         List<uint?> template,

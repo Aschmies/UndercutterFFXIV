@@ -23,6 +23,12 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>If true, ask for confirmation before running a sort.</summary>
     public bool RequireConfirmation { get; set; } = true;
 
+    /// <summary>Maximum vendor price for an item to be considered Junk.</summary>
+    public int MaxJunkVendorPrice { get; set; } = 50;
+
+    /// <summary>If true, items flagged as stackable/crafting materials are excluded from Junk.</summary>
+    public bool ExcludeCraftingFromJunk { get; set; } = true;
+
     /// <summary>Random per-move delay range in milliseconds, used to keep sorts human-paced.</summary>
     public int MoveDelayMinMs { get; set; } = 40;
     public int MoveDelayMaxMs { get; set; } = 80;
@@ -32,6 +38,9 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>Index into <see cref="Rules"/> for the rule the overlay's rule button runs (-1 = none selected).</summary>
     public int OverlayRuleIndex { get; set; } = -1;
+
+    /// <summary>Array of 140 strings (35 per bag * 4 bags) indicating the visual zone tag assigned to each slot.</summary>
+    public string[] VisualZoneLayout { get; set; } = new string[140];
 
     private IDalamudPluginInterface? pluginInterface;
     public void Initialize(IDalamudPluginInterface pi)

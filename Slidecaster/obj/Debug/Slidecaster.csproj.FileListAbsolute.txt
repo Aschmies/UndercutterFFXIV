@@ -1,0 +1,9 @@
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\obj\Debug\Slidecaster.csproj.AssemblyReference.cache
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\obj\Debug\Slidecaster.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\obj\Debug\Slidecaster.AssemblyInfoInputs.cache
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\obj\Debug\Slidecaster.AssemblyInfo.cs
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\obj\Debug\Slidecaster.csproj.CoreCompileInputs.cache
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\obj\Debug\Slidecaster.sourcelink.json
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\obj\Debug\Slidecaster.dll
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\bin\Debug\Slidecaster.deps.json
+C:\Users\David\Projects\UndercutterFFXIV\Slidecaster\bin\Debug\Slidecaster.dll

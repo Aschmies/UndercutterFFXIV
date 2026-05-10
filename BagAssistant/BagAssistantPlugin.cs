@@ -98,7 +98,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildSmartSortPlan(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "Smart Sort");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Smart Sort");
     }
 
     public void RunPreset(QuickPreset preset)
@@ -107,14 +107,14 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildPresetPlan(preset, items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), preset.Name);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), preset.Name);
     }
 
     public void RunAllRules()
     {
         if (SortQueue.IsBusy) return;
         var plan = SortRunner.BuildPlan(Configuration);
-        SortQueue.Enqueue(plan.Select(p => (p.Item, p.DestBag)), "Custom rules");
+        SortQueue.Enqueue(plan.Select(p => (p.Item, p.DestBag, (int?)null)), "Custom rules");
     }
 
     public void RunSingleRule(SortRule rule)
@@ -133,7 +133,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
             if (item.Container == destBag) continue;
             moves.Add((item, destBag));
         }
-        SortQueue.Enqueue(moves, $"Rule: {rule.Name}");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, (int?)null)), $"Rule: {rule.Name}");
     }
 
     // ─── Advanced Sorts ───────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildGathererSort(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "The Gatherer");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "The Gatherer");
     }
 
     public void RunRaiderSort()
@@ -153,7 +153,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildRaiderSort(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "The Raider");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "The Raider");
     }
 
     public void RunHoarderSort()
@@ -162,7 +162,33 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildHoarderSort(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "The Hoarder");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "The Hoarder");
+    }
+
+        public List<InventoryItemInfo> GetJunkItems()
+    {
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        return items.Where(i => QuickSortPresets.IsJunk(i, Configuration.MaxJunkVendorPrice, Configuration.ExcludeCraftingFromJunk)).ToList();
+    }
+
+    public void DeleteSpecificJunk(List<InventoryItemInfo> junk)
+    {
+        if (SortQueue.IsBusy) return;
+        var discardCount = 0;
+        foreach (var item in junk)
+        {
+            unsafe
+            {
+                var mgr = FFXIVClientStructs.FFXIV.Client.Game.InventoryManager.Instance();
+                if (mgr != null)
+                {
+                    mgr->DiscardItem(item.Container, (ushort)item.Slot);
+                    discardCount++;
+                }
+            }
+        }
+        SortQueue.StatusMessage = $"Discarded {discardCount} junk item(s).";
     }
 
     public void DeleteJunk()
@@ -171,7 +197,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         // Junk = white rarity (vendor trash)
-        var junk = items.Where(i => i.Rarity == 1).ToList();
+        var junk = items.Where(i => QuickSortPresets.IsJunk(i, Configuration.MaxJunkVendorPrice, Configuration.ExcludeCraftingFromJunk)).ToList();
         if (junk.Count == 0)
         {
             SortQueue.StatusMessage = "No junk (white items) found.";
@@ -202,7 +228,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildExtractMateria(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "Extract Materia (100% spiritbond gear)");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Extract Materia (100% spiritbond gear)");
     }
 
     public void MergeStacks()
@@ -211,7 +237,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildMergeStacks(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "Merge Stacks");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Merge Stacks");
     }
 
     public void GroupVendorTrash()
@@ -219,8 +245,8 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         if (SortQueue.IsBusy) return;
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildVendorTrashGroup(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "Group Vendor Trash");
+        var moves = QuickSortPresets.BuildVendorTrashGroup(items, bagFlags, Configuration);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Group Vendor Trash");
     }
 
     public List<InventoryItemInfo> SearchByKeyword(string keyword)
@@ -237,13 +263,22 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         return QuickSortPresets.SnapshotBagLayout(items, bagType);
     }
 
+        public void ApplyVisualZones()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.ApplyVisualZones(items, Configuration.VisualZoneLayout, bagFlags, Configuration);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Apply Visual Zones");
+    }
+
     public void SyncLayoutToOtherBag(InventoryType sourceBag, InventoryType targetBag, List<uint?> template)
     {
         if (SortQueue.IsBusy) return;
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.ApplyLayoutTemplate(items, template, sourceBag, targetBag);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), $"Sync layout from {sourceBag} to {targetBag}");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), $"Sync layout from {sourceBag} to {targetBag}");
     }
 
     public void Dispose()
