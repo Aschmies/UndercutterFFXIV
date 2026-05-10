@@ -1,9 +1,0 @@
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\bin\Debug\QuestNav.deps.json
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\bin\Debug\QuestNav.dll
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\obj\Debug\QuestNav.csproj.AssemblyReference.cache
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\obj\Debug\QuestNav.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\obj\Debug\QuestNav.AssemblyInfoInputs.cache
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\obj\Debug\QuestNav.AssemblyInfo.cs
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\obj\Debug\QuestNav.csproj.CoreCompileInputs.cache
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\obj\Debug\QuestNav.sourcelink.json
-C:\Users\David\Projects\UndercutterFFXIV\QuestNav\obj\Debug\QuestNav.dll

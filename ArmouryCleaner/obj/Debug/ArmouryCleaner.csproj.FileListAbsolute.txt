@@ -1,9 +1,0 @@
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\bin\Debug\ArmouryCleaner.deps.json
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\bin\Debug\ArmouryCleaner.dll
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\obj\Debug\ArmouryCleaner.csproj.AssemblyReference.cache
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\obj\Debug\ArmouryCleaner.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\obj\Debug\ArmouryCleaner.AssemblyInfoInputs.cache
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\obj\Debug\ArmouryCleaner.AssemblyInfo.cs
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\obj\Debug\ArmouryCleaner.csproj.CoreCompileInputs.cache
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\obj\Debug\ArmouryCleaner.sourcelink.json
-C:\Users\David\Projects\UndercutterFFXIV\ArmouryCleaner\obj\Debug\ArmouryCleaner.dll
