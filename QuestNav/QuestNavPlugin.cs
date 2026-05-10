@@ -1,3 +1,4 @@
+using System;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -17,8 +18,12 @@ namespace QuestNav
         [PluginService] internal static IAetheryteList AetheryteList          { get; private set; } = null!;
         [PluginService] internal static IGameGui GameGui                      { get; private set; } = null!;
         [PluginService] internal static IPluginLog Log                        { get; private set; } = null!;
+        [PluginService] internal static IFramework Framework                  { get; private set; } = null!;
 
         private const string CommandName = "/questnav";
+
+        private int lastQuestCount = -1;
+        private DateTime lastEventRefresh = DateTime.MinValue;
 
         public Configuration Configuration { get; }
 
@@ -46,9 +51,27 @@ namespace QuestNav
 
             PluginInterface.UiBuilder.Draw += DrawUI;
             PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
+            Framework.Update += OnFrameworkUpdate;
         }
 
         private void OnCommand(string command, string args) => ToggleMainUi();
+
+        private void OnFrameworkUpdate(IFramework framework)
+        {
+            // Detect quest changes and refresh immediately
+            if (!ClientState.IsLoggedIn)
+                return;
+
+            var currentQuests = questService.GetActiveQuests();
+            bool questsChanged = currentQuests.Count != lastQuestCount;
+            lastQuestCount = currentQuests.Count;
+
+            if (questsChanged && (DateTime.UtcNow - lastEventRefresh).TotalMilliseconds > 500)
+            {
+                mainWindow.TriggerRefresh();
+                lastEventRefresh = DateTime.UtcNow;
+            }
+        }
 
         private void DrawUI() => windowSystem.Draw();
 
@@ -57,6 +80,7 @@ namespace QuestNav
         public void Dispose()
         {
             CommandManager.RemoveHandler(CommandName);
+            Framework.Update -= OnFrameworkUpdate;
             windowSystem.RemoveAllWindows();
         }
     }
