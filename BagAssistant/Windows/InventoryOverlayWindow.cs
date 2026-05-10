@@ -80,41 +80,90 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
             ImGui.SameLine();
             if (ImGui.SmallButton("Stop##ovstop"))
                 plugin.StopSort();
+            ImGui.SameLine();
+            if (plugin.CanUndo && ImGui.SmallButton("Undo##ovundo"))
+                plugin.UndoLastSort();
             return;
         }
 
-        // Smart Sort
-        if (ImGui.Button("Smart Sort##ov_smart"))
+        // Row 1: Smart Sort, Rule, Undo
+        if (ImGui.Button("Smart Sort##ov_smart", new Vector2(80, 0)))
         {
             plugin.RunSmartSort();
         }
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("Sort everything: Gear -> Bag1, Food/Medicine -> Bag2, Materials -> Bag3, Crystals/Materia -> Bag4.");
+            ImGui.SetTooltip("Sort everything: Gear -> Bag1, Food/Medicine -> Bag2,\nMaterials -> Bag3, Crystals/Materia -> Bag4.");
         }
 
-        // Rule button (only if a rule is selected and exists)
-        var rule = ResolveOverlayRule();
         ImGui.SameLine();
+        var rule = ResolveOverlayRule();
         if (rule != null)
         {
             ImGui.PushStyleColor(ImGuiCol.Button, rule.GetColor() * new Vector4(1, 1, 1, 0.5f));
-            if (ImGui.Button($"{rule.Name}##ov_rule"))
+            if (ImGui.Button($"{rule.Name}##ov_rule", new Vector2(80, 0)))
             {
                 plugin.RunSingleRule(rule);
             }
             ImGui.PopStyleColor();
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Run only this rule: {rule.Name}");
+                ImGui.SetTooltip($"Run only this rule:\n{rule.Name}");
         }
         else
         {
             ImGui.BeginDisabled();
-            ImGui.Button("(no rule)##ov_rule_none");
+            ImGui.Button("(no rule)##ov_rule_none", new Vector2(80, 0));
             ImGui.EndDisabled();
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Pick a rule for the overlay button in Settings tab.");
+                ImGui.SetTooltip("Pick a rule for the overlay button\nin Settings tab.");
         }
+
+        ImGui.SameLine();
+        if (plugin.CanUndo)
+        {
+            if (ImGui.SmallButton("Undo##ov_undo"))
+                plugin.UndoLastSort();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Reverse the last sort.");
+        }
+        else
+        {
+            ImGui.BeginDisabled();
+            ImGui.SmallButton("Undo##ov_undo_dis");
+            ImGui.EndDisabled();
+        }
+
+        // Row 2: Delete Junk, Presets
+        if (ImGui.Button("Delete Junk##ov_junk", new Vector2(80, 0)))
+        {
+            plugin.DeleteJunk();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Delete all vendor trash (white rarity items).");
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Gatherer"))
+        {
+            plugin.RunGathererSort();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Crystals & Materia top priority,\nmaterials next, rest in Bag2.");
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Raider"))
+        {
+            plugin.RunRaiderSort();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("High ilvl gear + consumables\nfor combat readiness.");
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Hoarder"))
+        {
+            plugin.RunHoarderSort();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Group by rarity (white/green/blue/purple)\nto find junk easily.");
 
         ImGui.SameLine();
         if (ImGui.SmallButton("BA##ov_open"))

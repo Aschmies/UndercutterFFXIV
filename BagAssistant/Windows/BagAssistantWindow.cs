@@ -197,9 +197,76 @@ public sealed class BagAssistantWindow : Window, IDisposable
             ImGui.PopID();
         }
 
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // ── Advanced Presets ────────────────────────────────────────────────
+        ImGui.TextUnformatted("Advanced presets:");
+        ImGui.Spacing();
+
+        var presets = new (string Name, string Desc, System.Action RunAction)[]
+        {
+            ("The Gatherer", "Crystals/Materia prioritized, materials grouped, rest scattered.", () => plugin.RunGathererSort()),
+            ("The Raider", "High-level gear + raid consumables for combat readiness.", () => plugin.RunRaiderSort()),
+            ("The Hoarder", "Group by rarity: junk (white) obvious and easy to discard.", () => plugin.RunHoarderSort()),
+        };
+
+        foreach (var (name, desc, action) in presets)
+        {
+            ImGui.PushID($"adv_{name}");
+
+            if (queueBusy) ImGui.BeginDisabled();
+            if (ImGui.Button($"Run##adv_{name}", new Vector2(80, 0)))
+            {
+                action();
+            }
+            if (queueBusy) ImGui.EndDisabled();
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted(name);
+            ImGui.Indent(90);
+            ImGui.TextDisabled(desc);
+            ImGui.Unindent(90);
+            ImGui.Spacing();
+
+            ImGui.PopID();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // ── Delete Junk & Undo ──────────────────────────────────────────────
+        if (ImGui.Button("Delete All Junk##deljunk", new Vector2(150, 0)))
+        {
+            plugin.DeleteJunk();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Discard all white (vendor trash) items.");
+
+        ImGui.SameLine();
+        if (plugin.CanUndo)
+        {
+            if (ImGui.Button("Undo Last Sort##undo", new Vector2(150, 0)))
+            {
+                plugin.UndoLastSort();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Reverse all moves from the last sort.");
+        }
+        else
+        {
+            ImGui.BeginDisabled();
+            ImGui.Button("Undo Last Sort##undo_dis", new Vector2(150, 0));
+            ImGui.EndDisabled();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
         if (queueBusy)
         {
-            ImGui.Separator();
             if (ImGui.Button("Stop Sort##stopquick"))
                 plugin.StopSort();
         }

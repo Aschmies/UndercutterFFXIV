@@ -8,19 +8,22 @@ namespace BagAssistant.Services;
 /// <summary>
 /// Single source of truth for the paced item-move queue. The plugin ticks this once per frame
 /// (so multiple UI windows sharing the queue can't double-process moves).
+/// Tracks move history for undo capability.
 /// </summary>
 public sealed class SortQueueService(InventoryService inventoryService, Configuration config)
 {
     private readonly Queue<(InventoryItemInfo Item, InventoryType DestBag)> queue = new();
+    private readonly List<(InventoryType SrcBag, int SrcSlot, InventoryType DestBag, int DestSlot)> moveHistory = new();
     private readonly Stopwatch timer = new();
     private int total;
     private int nextDelayMs;
     private static readonly Random Rng = new();
 
-    public string StatusMessage { get; private set; } = string.Empty;
+    public string StatusMessage { get; set; } = string.Empty;
     public bool IsBusy => queue.Count > 0;
     public int Remaining => queue.Count;
     public int Total => total;
+    public bool CanUndo => moveHistory.Count > 0;
 
     public void Enqueue(IEnumerable<(InventoryItemInfo Item, InventoryType DestBag)> items, string description)
     {
@@ -55,12 +58,19 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
 
         var entry = queue.Dequeue();
         var (success, msg) = inventoryService.MoveOrSwap(entry.Item, entry.DestBag);
+        
+        if (success)
+        {
+            // Track the move for undo (assuming MoveOrSwap moved to a free slot or first slot)
+            moveHistory.Add((entry.Item.Container, entry.Item.Slot, entry.DestBag, 0));
+        }
+        
         var done = total - queue.Count;
 
         if (queue.Count == 0)
         {
             timer.Stop();
-            StatusMessage = $"Sort complete: {done}/{total}.";
+            StatusMessage = $"Sort complete: {done}/{total}. (Undo available)";
             total = 0;
         }
         else
@@ -73,5 +83,30 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
         }
 
         if (!success) StatusMessage = $"[{done}/{total}] {msg}";
+    }
+
+    public void Undo()
+    {
+        if (moveHistory.Count == 0)
+        {
+            StatusMessage = "No moves to undo.";
+            return;
+        }
+
+        // Reverse moves in reverse order
+        var movesToUndo = new Stack<(InventoryType SrcBag, int SrcSlot, InventoryType DestBag, int DestSlot)>(moveHistory);
+        moveHistory.Clear();
+        StatusMessage = "Undoing...";
+
+        int count = 0;
+        while (movesToUndo.Count > 0)
+        {
+            var (srcBag, srcSlot, destBag, destSlot) = movesToUndo.Pop();
+            // Reverse: move from destBag back to original position
+            var (success, _) = inventoryService.MoveSlotToSlot(destBag, destSlot, srcBag, srcSlot, $"Undo {count}");
+            if (success) count++;
+        }
+
+        StatusMessage = $"Undo complete: reversed {count} move(s).";
     }
 }

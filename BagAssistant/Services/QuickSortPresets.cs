@@ -95,6 +95,101 @@ public static class QuickSortPresets
         GroupCrystalsToBag4,
     ];
 
+    // ─── Advanced Presets (The Gatherer, The Raider, The Hoarder) ─────────────
+
+    /// <summary>
+    /// "The Gatherer": Crystals/Materia to Bag 4 (top priority, fast turnover), 
+    /// then raw materials (stackables, mostly crafting) to Bag 3, then everything else to Bag 2.
+    /// </summary>
+    public static List<QuickMove> BuildGathererSort(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
+    {
+        var result = new List<QuickMove>();
+        var crystalDestBag = bagFlags.Count > 3 && bagFlags[3] ? InventoryService.PlayerBags[3] : (InventoryType?)null;
+        var materialDestBag = bagFlags.Count > 2 && bagFlags[2] ? InventoryService.PlayerBags[2] : (InventoryType?)null;
+        var otherDestBag = bagFlags.Count > 1 && bagFlags[1] ? InventoryService.PlayerBags[1] : (InventoryType?)null;
+
+        foreach (var item in items)
+        {
+            InventoryType? destBag = null;
+
+            // Crystals/Materia first (priority)
+            if ((item.UICategoryRowId == UICategoryCrystal || item.UICategoryRowId == UICategoryMateria) && crystalDestBag.HasValue)
+                destBag = crystalDestBag;
+            // Stackables (materials)
+            else if (item.IsStackable && !item.IsEquippable && materialDestBag.HasValue)
+                destBag = materialDestBag;
+            // Everything else
+            else if (otherDestBag.HasValue)
+                destBag = otherDestBag;
+
+            if (destBag.HasValue && item.Container != destBag)
+                result.Add(new QuickMove { Item = item, DestBag = destBag.Value });
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// "The Raider": Food, potions, and combat-focused consumables to Bag 2 (quick access).
+    /// All gear (prioritize high ilvl) to Bag 1. Mats/crystals to Bag 4.
+    /// </summary>
+    public static List<QuickMove> BuildRaiderSort(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
+    {
+        var result = new List<QuickMove>();
+        var gearDestBag = bagFlags.Count > 0 && bagFlags[0] ? InventoryService.PlayerBags[0] : (InventoryType?)null;
+        var consumableDestBag = bagFlags.Count > 1 && bagFlags[1] ? InventoryService.PlayerBags[1] : (InventoryType?)null;
+        var crystalDestBag = bagFlags.Count > 3 && bagFlags[3] ? InventoryService.PlayerBags[3] : (InventoryType?)null;
+
+        // Sort by: high ilvl gear first, then consumables, then crystals
+        foreach (var item in items.OrderByDescending(i => i.IsEquippable ? i.ItemLevel : 0))
+        {
+            InventoryType? destBag = null;
+
+            if (item.IsEquippable && gearDestBag.HasValue)
+                destBag = gearDestBag;
+            else if ((item.UICategoryRowId == UICategoryMeal || item.UICategoryRowId == UICategoryMedicine) && consumableDestBag.HasValue)
+                destBag = consumableDestBag;
+            else if ((item.UICategoryRowId == UICategoryCrystal || item.UICategoryRowId == UICategoryMateria) && crystalDestBag.HasValue)
+                destBag = crystalDestBag;
+
+            if (destBag.HasValue && item.Container != destBag)
+                result.Add(new QuickMove { Item = item, DestBag = destBag.Value });
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// "The Hoarder": Group by item rarity. Whites/vendor trash to Bag 4, greens to Bag 3, 
+    /// blues/purples to Bags 1-2 (organized by equippable/non). Makes it easy to spot junk.
+    /// </summary>
+    public static List<QuickMove> BuildHoarderSort(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
+    {
+        var result = new List<QuickMove>();
+
+        foreach (var item in items)
+        {
+            InventoryType? destBag = null;
+
+            // Vendor trash (white, rarity 1)
+            if (item.Rarity == 1 && bagFlags.Count > 3 && bagFlags[3])
+                destBag = InventoryService.PlayerBags[3];
+            // Green (rarity 2)
+            else if (item.Rarity == 2 && bagFlags.Count > 2 && bagFlags[2])
+                destBag = InventoryService.PlayerBags[2];
+            // Blue/Purple (rarity 3-4): separate by type
+            else if (item.Rarity == 3 || item.Rarity == 4)
+            {
+                if (item.IsEquippable && bagFlags.Count > 0 && bagFlags[0])
+                    destBag = InventoryService.PlayerBags[0];
+                else if (!item.IsEquippable && bagFlags.Count > 1 && bagFlags[1])
+                    destBag = InventoryService.PlayerBags[1];
+            }
+
+            if (destBag.HasValue && item.Container != destBag)
+                result.Add(new QuickMove { Item = item, DestBag = destBag.Value });
+        }
+        return result;
+    }
+
     /// <summary>
     /// Builds a list of moves for the "Smart Sort Everything" preset:
     /// Gear → Bag1, Consumables → Bag2, Crystals/Materia → Bag4, everything stackable else → Bag3.

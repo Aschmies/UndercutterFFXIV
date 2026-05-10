@@ -78,8 +78,10 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
     public int SortQueueRemaining => SortQueue.Remaining;
     public int SortQueueTotal => SortQueue.Total;
     public string SortQueueStatus => SortQueue.StatusMessage;
+    public bool CanUndo => SortQueue.CanUndo;
 
     public void StopSort() => SortQueue.Stop();
+    public void UndoLastSort() => SortQueue.Undo();
 
     private bool[] GetBagFlags() => new[]
     {
@@ -131,6 +133,64 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
             moves.Add((item, destBag));
         }
         SortQueue.Enqueue(moves, $"Rule: {rule.Name}");
+    }
+
+    // ─── Advanced Sorts ───────────────────────────────────────────────────────
+
+    public void RunGathererSort()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildGathererSort(items, bagFlags);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "The Gatherer");
+    }
+
+    public void RunRaiderSort()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildRaiderSort(items, bagFlags);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "The Raider");
+    }
+
+    public void RunHoarderSort()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildHoarderSort(items, bagFlags);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "The Hoarder");
+    }
+
+    public void DeleteJunk()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        // Junk = white rarity (vendor trash)
+        var junk = items.Where(i => i.Rarity == 1).ToList();
+        if (junk.Count == 0)
+        {
+            SortQueue.StatusMessage = "No junk (white items) found.";
+            return;
+        }
+        // Discard each junk item via InventoryManager.DiscardItem
+        var discardCount = 0;
+        foreach (var item in junk)
+        {
+            unsafe
+            {
+                var mgr = FFXIVClientStructs.FFXIV.Client.Game.InventoryManager.Instance();
+                if (mgr != null)
+                {
+                    mgr->DiscardItem(item.Container, (ushort)item.Slot);
+                    discardCount++;
+                }
+            }
+        }
+        SortQueue.StatusMessage = $"Discarded {discardCount} junk item(s).";
     }
 
     public void Dispose()
