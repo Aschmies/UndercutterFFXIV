@@ -1,0 +1,15 @@
+{
+  "Version": "1.0.0",
+  "Author": "Market Assistant Dev",
+  "Name": "QuestNav",
+  "Description": "One-click teleport to the nearest aetheryte for each active quest.",
+  "InternalName": "QuestNav",
+  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "Tags": ["quest", "teleport", "navigation", "aetheryte"]
+}

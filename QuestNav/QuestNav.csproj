@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <AssemblyName>QuestNav</AssemblyName>
+    <RootNamespace>QuestNav</RootNamespace>
+    <Authors>Market Assistant Dev</Authors>
+    <Description>QuestNav: one-click teleport to the nearest aetheryte for each of your active quests.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+</Project>
