@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("Slidecaster: highlights the final safe-to-move window during casts so you can sli" +
     "decast consistently."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.6.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.6+ce8bb251e3881af1adcb93d8712e6353d65314c6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.6+84710b7028b5a3e0bccf964fe0c6bd421922c8e2")]
 [assembly: System.Reflection.AssemblyProductAttribute("Slidecaster")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Slidecaster")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.6.0")]
