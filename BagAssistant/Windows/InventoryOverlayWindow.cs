@@ -55,10 +55,10 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
 
     public override void PreDraw()
     {
-        // Always anchor the button strip just above the inventory addon. The strip is constrained
-        // to the inventory's width so its buttons wrap onto multiple rows rather than running off
-        // the screen — the floating window itself acts as a single bordered container.
-        var pos = new Vector2(anchorPos.X, MathF.Max(0, anchorPos.Y - 80f));
+        // Anchor the button strip with its TOP edge inline with the top of the inventory addon,
+        // sitting just to the left of the inventory window. This keeps it visually attached to
+        // the inventory rather than floating high above it.
+        var pos = new Vector2(anchorPos.X, anchorPos.Y);
         ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
         // Cap window width to the inventory addon's width; height is auto via AlwaysAutoResize.
         var maxW = MathF.Max(220f, anchorSize.X);
