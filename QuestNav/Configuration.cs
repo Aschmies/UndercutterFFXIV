@@ -9,6 +9,7 @@ namespace QuestNav
 
         // Arrow overlay
         public bool ShowArrow { get; set; } = true;
+        public float ArrowBgOpacity { get; set; } = 0.55f;  // 0 = fully transparent, 1 = opaque
         public uint NavQuestId { get; set; } = 0;  // 0 = no target selected
 
         // Quest list settings

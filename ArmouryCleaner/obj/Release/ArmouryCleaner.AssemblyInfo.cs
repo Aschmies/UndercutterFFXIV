@@ -12,13 +12,13 @@ using System.Reflection;
 
 [assembly: System.Reflection.AssemblyCompanyAttribute("Market Assistant Dev")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
-[assembly: System.Reflection.AssemblyDescriptionAttribute(("QuestNav: one-click teleport to the nearest aetheryte for each of your active que" +
-    "sts."))]
-[assembly: System.Reflection.AssemblyFileVersionAttribute("1.1.3.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.1.3+812fb46e92e8a40adc20d59ddaf66697e2de1404")]
-[assembly: System.Reflection.AssemblyProductAttribute("QuestNav")]
-[assembly: System.Reflection.AssemblyTitleAttribute("QuestNav")]
-[assembly: System.Reflection.AssemblyVersionAttribute("1.1.3.0")]
+[assembly: System.Reflection.AssemblyDescriptionAttribute(("ArmouryCleaner: filter and discard unwanted items from your armoury chest by job," +
+    " level, and item level."))]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.3.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.3+8960a54b08cd21920f39ecaf8c765d45b3553d0c")]
+[assembly: System.Reflection.AssemblyProductAttribute("ArmouryCleaner")]
+[assembly: System.Reflection.AssemblyTitleAttribute("ArmouryCleaner")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.3.0")]
 [assembly: System.Reflection.AssemblyMetadataAttribute("RepositoryUrl", "https://github.com/Aschmies/UndercutterFFXIV.git")]
 [assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
 [assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]

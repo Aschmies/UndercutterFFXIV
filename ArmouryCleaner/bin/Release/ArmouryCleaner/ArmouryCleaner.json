@@ -1,0 +1,24 @@
+{
+  "Author": "Market Assistant Dev",
+  "Name": "Armoury Cleaner",
+  "InternalName": "ArmouryCleaner",
+  "AssemblyVersion": "1.0.3.0",
+  "Description": "Define filters by job, minimum/maximum level, and item level. Armoury Cleaner will scan each gear slot and safely discard only items that match all active filters.",
+  "ApplicableVersion": "any",
+  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+  "Tags": [
+    "inventory",
+    "armoury",
+    "gear",
+    "cleanup"
+  ],
+  "DalamudApiLevel": 15,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
+  "Punchline": "Filter and discard unwanted gear from your armoury chest.",
+  "Changelog": "v1.0.3: Auto-Discard mode — items can now be permanently deleted in one click via InventoryManager.DiscardItem (opt-in, off by default, confirmation required).\nv1.0.2: Rarity colour filters (skip White/Green/Blue/Purple/Pink); item names now coloured by rarity in results table.\nv1.0.1: Wider level/iLvl input boxes, working None button, collapsible instructions panel.\nv1.0.0: Initial release.",
+  "AcceptsFeedback": true
+}

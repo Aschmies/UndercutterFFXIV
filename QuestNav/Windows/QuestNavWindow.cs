@@ -147,6 +147,14 @@ namespace QuestNav.Windows
                 SyncArrowTarget();
             }
             ImGui.SameLine();
+            ImGui.SetNextItemWidth(70f);
+            float bgOpacity = config.ArrowBgOpacity;
+            if (ImGui.SliderFloat("BG##arrowbg", ref bgOpacity, 0f, 1f))
+            {
+                config.ArrowBgOpacity = bgOpacity;
+                config.Save();
+            }
+            ImGui.SameLine();
 
             // Auto-refresh toggle
             bool autoR = config.AutoRefresh;

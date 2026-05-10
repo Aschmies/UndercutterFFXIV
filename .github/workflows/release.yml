@@ -1,4 +1,4 @@
-name: Build and Release
+﻿name: Build and Release
 
 # Triggers on a version tag push: git tag v1.0.1 && git push origin v1.0.1
 on:
@@ -55,7 +55,7 @@ jobs:
         run: |
           $zip = Get-ChildItem -Path "bin\Release" -Recurse -Filter "latest.zip" |
             Select-Object -First 1
-          if (-not $zip) { throw "Could not find latest.zip under bin\Release — DalamudPackager may not have run." }
+          if (-not $zip) { throw "Could not find latest.zip under bin\Release â€” DalamudPackager may not have run." }
           Write-Host "Found zip: $($zip.FullName)"
           echo "ZIP_PATH=$($zip.FullName)" >> $env:GITHUB_OUTPUT
 
@@ -84,7 +84,7 @@ jobs:
           $entry = $arr | Where-Object { $_.InternalName -eq "UndercutterFFXIV" }
           $ver   = "${{ steps.version.outputs.FULL }}"
           $tag   = "${{ github.ref_name }}"
-          $dlUrl = "https://github.com/Aschmies/UndercutterFFXIV/releases/download/$tag/UndercutterFFXIV-$tag.zip"
+          $dlUrl = "https://github.com/Aschmies/AschyQOL/releases/download/$tag/UndercutterFFXIV-$tag.zip"
           $entry.AssemblyVersion        = $ver
           $entry.TestingAssemblyVersion = $ver
           $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -194,7 +194,7 @@ jobs:
           $entry = $arr | Where-Object { $_.InternalName -eq "ArmouryCleaner" }
           $ver   = "${{ steps.version.outputs.FULL }}"
           $tag   = "${{ github.ref_name }}"
-          $dlUrl = "https://github.com/Aschmies/UndercutterFFXIV/releases/download/$tag/ArmouryCleaner-$tag.zip"
+          $dlUrl = "https://github.com/Aschmies/AschyQOL/releases/download/$tag/ArmouryCleaner-$tag.zip"
           $entry.AssemblyVersion        = $ver
           $entry.TestingAssemblyVersion = $ver
           $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -299,7 +299,7 @@ jobs:
           $entry = $arr | Where-Object { $_.InternalName -eq "QuestNav" }
           $ver   = "${{ steps.version.outputs.FULL }}"
           $tag   = "${{ github.ref_name }}"
-          $dlUrl = "https://github.com/Aschmies/UndercutterFFXIV/releases/download/$tag/QuestNav-$tag.zip"
+          $dlUrl = "https://github.com/Aschmies/AschyQOL/releases/download/$tag/QuestNav-$tag.zip"
           $entry.AssemblyVersion        = $ver
           $entry.TestingAssemblyVersion = $ver
           $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()

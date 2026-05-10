@@ -2,10 +2,10 @@
   "Author": "Market Assistant Dev",
   "Name": "QuestNav",
   "InternalName": "QuestNav",
-  "AssemblyVersion": "1.1.1.0",
-  "Description": "QuestNav lists all your active quests and adds a Teleport button next to each one. Clicking it teleports you to the nearest unlocked aetheryte to the quest's location — no more hunting through the map.",
+  "AssemblyVersion": "1.1.3.0",
+  "Description": "QuestNav lists all your active quests and adds a Teleport button next to each one. Clicking it teleports you to the nearest unlocked aetheryte to the quest's location â€” no more hunting through the map.",
   "ApplicableVersion": "any",
-  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+  "RepoUrl": "https://github.com/Aschmies/AschyQOL",
   "Tags": [
     "quest",
     "teleport",
@@ -17,8 +17,8 @@
   "LoadSync": false,
   "CanUnloadAsync": false,
   "LoadPriority": 0,
-  "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
+  "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",
   "Punchline": "One-click teleport to the nearest aetheryte for each active quest.",
-  "Changelog": "v1.1.1: Fix crash on quests with IDs not present in the Excel sheet (GetRowOrDefault).\r\nv1.1.0: Arrow overlay, teleport cost display, zone highlight, map flag, compact mode, auto-refresh, quest type badges, sort by current zone.\r\nv1.0.0: Initial release.",
+  "Changelog": "v1.1.3: Arrow background opacity slider (0 = transparent, 1 = opaque).\r\nv1.1.2: Fix arrow overlay never appearing (IsOpen was never set to true).\r\nv1.1.1: Fix crash on quests with IDs not present in the Excel sheet.\r\nv1.1.0: Arrow overlay, teleport cost, zone highlight, map flag, compact mode, auto-refresh, type badges.\r\nv1.0.0: Initial release.",
   "AcceptsFeedback": true
 }

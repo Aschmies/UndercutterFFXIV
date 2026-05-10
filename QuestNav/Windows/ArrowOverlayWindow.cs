@@ -70,8 +70,8 @@ namespace QuestNav.Windows
             var center = winPos + new Vector2(winSize.X * 0.5f, winSize.Y * 0.45f);
             const float Radius = 34f;
 
-            // Semi-transparent dark disc as background
-            var bgColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 0.55f));
+            // Semi-transparent dark disc as background (opacity controlled by config)
+            var bgColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, config.ArrowBgOpacity));
             drawList.AddCircleFilled(center, Radius + 5f, bgColor);
 
             bool sameZone = clientState.TerritoryType == (ushort)navTarget.TerritoryId;
