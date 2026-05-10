@@ -212,6 +212,15 @@ namespace ArmouryCleaner.Windows
                 Config.SkipUntradeable = skipUntradeable;
                 Config.Save();
             }
+            ImGui.SameLine();
+            var skipGearset = Config.SkipGearsetItems;
+            if (ImGui.Checkbox("Skip Gearset Items##skipgearset", ref skipGearset))
+            {
+                Config.SkipGearsetItems = skipGearset;
+                Config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Excludes any item currently assigned to a saved gearset, so discard cannot delete gear you actively use.");
 
             // Rarity skip flags
             ImGui.TextUnformatted("Skip Rarity:");

@@ -27,6 +27,9 @@ namespace ArmouryCleaner
         // Only delete items that are NOT unique/untradeable (extra safety)
         public bool SkipUntradeable { get; set; } = false;
 
+        // Exclude any item currently assigned to a gearset (extra safety, default ON)
+        public bool SkipGearsetItems { get; set; } = true;
+
         // Skip by rarity colour (default: skip nothing)
         public bool SkipWhite  { get; set; } = false;
         public bool SkipGreen  { get; set; } = false;

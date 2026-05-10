@@ -1,5 +1,6 @@
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
@@ -57,6 +58,8 @@ namespace ArmouryCleaner.Services
             if (mgr == null)
                 return results;
 
+            var gearsetItemIds = config.SkipGearsetItems ? GetGearsetItemIds() : null;
+
             foreach (var invType in ArmouryContainers)
             {
                 var container = mgr->GetInventoryContainer(invType);
@@ -77,6 +80,7 @@ namespace ArmouryCleaner.Services
                     var rarity = itemData.Rarity;
                     var classJobs = GetClassJobs(itemData);
 
+                    if (gearsetItemIds != null && gearsetItemIds.Contains(invItem->ItemId)) continue;
                     if (config.SkipHighQuality && isHQ) continue;
                     if (config.SkipUntradeable && isUntradeable) continue;
                     if (config.SkipWhite  && rarity == 1) continue;
@@ -235,6 +239,35 @@ namespace ArmouryCleaner.Services
             if (cat.PCT) jobs.Add("PCT");
 
             return [.. jobs];
+        }
+
+        /// <summary>
+        /// Collects every base ItemId currently assigned to any saved gearset slot.
+        /// Gearset entries store HQ items as base + 1,000,000 — we strip that offset so the
+        /// returned set matches the raw ItemId reported by inventory slots.
+        /// </summary>
+        private static HashSet<uint> GetGearsetItemIds()
+        {
+            var set = new HashSet<uint>();
+            var module = RaptureGearsetModule.Instance();
+            if (module == null) return set;
+
+            for (var i = 0; i < 100; i++)
+            {
+                if (!module->IsValidGearset(i)) continue;
+                var entry = module->GetGearset(i);
+                if (entry == null) continue;
+
+                var items = entry->Items;
+                for (var s = 0; s < items.Length; s++)
+                {
+                    var rawId = items[s].ItemId;
+                    if (rawId == 0) continue;
+                    set.Add(rawId % 1_000_000u); // strip HQ offset
+                }
+            }
+
+            return set;
         }
     }
 }
