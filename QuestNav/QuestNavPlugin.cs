@@ -15,6 +15,7 @@ namespace QuestNav
         [PluginService] internal static IDataManager DataManager              { get; private set; } = null!;
         [PluginService] internal static IClientState ClientState              { get; private set; } = null!;
         [PluginService] internal static IAetheryteList AetheryteList          { get; private set; } = null!;
+        [PluginService] internal static IGameGui GameGui                      { get; private set; } = null!;
         [PluginService] internal static IPluginLog Log                        { get; private set; } = null!;
 
         private const string CommandName = "/questnav";
@@ -23,6 +24,7 @@ namespace QuestNav
 
         private readonly WindowSystem windowSystem = new("QuestNav");
         private readonly QuestNavWindow mainWindow;
+        private readonly ArrowOverlayWindow arrowOverlay;
         private readonly QuestService questService;
 
         public QuestNavPlugin()
@@ -30,9 +32,12 @@ namespace QuestNav
             Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
             Configuration.Initialize(PluginInterface);
 
-            questService = new QuestService(DataManager, AetheryteList, Log);
-            mainWindow = new QuestNavWindow(questService, ClientState);
+            questService  = new QuestService(DataManager, AetheryteList, Log);
+            arrowOverlay  = new ArrowOverlayWindow(Configuration, ClientState);
+            mainWindow    = new QuestNavWindow(questService, ClientState, GameGui, Configuration, arrowOverlay);
+
             windowSystem.AddWindow(mainWindow);
+            windowSystem.AddWindow(arrowOverlay);
 
             CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
@@ -56,3 +61,4 @@ namespace QuestNav
         }
     }
 }
+

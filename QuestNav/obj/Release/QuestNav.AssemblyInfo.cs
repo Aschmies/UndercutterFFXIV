@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("QuestNav: one-click teleport to the nearest aetheryte for each of your active que" +
     "sts."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8ed1baf2b0939792742b322e40efdc270645ba4e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bcd10cc3496f721a7bea024927c1c7693ab35b71")]
 [assembly: System.Reflection.AssemblyProductAttribute("QuestNav")]
 [assembly: System.Reflection.AssemblyTitleAttribute("QuestNav")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
