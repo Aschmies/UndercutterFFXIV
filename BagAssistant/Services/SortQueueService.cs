@@ -61,7 +61,7 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
         string msg;
         if (entry.DestSlot.HasValue)
         {
-            var res = inventoryService.MoveSlotToSlot(entry.DestBag, entry.DestSlot.Value, entry.Item.Container, entry.Item.Slot, "Sort Queue");
+            var res = inventoryService.MoveSlotToSlot(entry.Item.Container, entry.Item.Slot, entry.DestBag, entry.DestSlot.Value, "Sort Queue");
             success = res.Success;
             msg = res.Message;
         }
