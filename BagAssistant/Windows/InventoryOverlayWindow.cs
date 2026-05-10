@@ -165,6 +165,31 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Group by rarity (white/green/blue/purple)\nto find junk easily.");
 
+        // Row 3: Advanced operations
+        ImGui.Spacing();
+        if (ImGui.SmallButton("Extract Materia##ov_materia"))
+        {
+            plugin.ExtractMateria();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Move all gear at 100% spiritbond to\nBag 1 for materia extraction.");
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Merge Stacks##ov_merge"))
+        {
+            plugin.MergeStacks();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Consolidate duplicate items\ninto single stacks.");
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Vendor Trash##ov_trash"))
+        {
+            plugin.GroupVendorTrash();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Group all vendor trash (grey items)\ninto Bag 4 for easy discard.");
+
         ImGui.SameLine();
         if (ImGui.SmallButton("BA##ov_open"))
             plugin.ToggleMainUi();

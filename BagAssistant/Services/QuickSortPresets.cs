@@ -232,4 +232,165 @@ public static class QuickSortPresets
             .Select(i => new QuickMove { Item = i, DestBag = destBag })
             .ToList();
     }
+
+    // ─── Advanced Operations ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Extract Materia: Move all gear at 100% spiritbond to the top of Bag 1
+    /// (ready for materia extraction from spiritbond process).
+    /// </summary>
+    public static List<QuickMove> BuildExtractMateria(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
+    {
+        if (!bagFlags[0]) return new List<QuickMove>();
+        var destBag = InventoryService.PlayerBags[0];
+        
+        return items
+            .Where(i => i.IsEquippable && i.SpiritbondPercent >= 100)
+            .OrderByDescending(i => i.ItemLevel)
+            .Where(i => i.Container != destBag)
+            .Select(i => new QuickMove { Item = i, DestBag = destBag })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Merge Stacks: Find duplicate items by ItemId and consolidate into one stack.
+    /// Moves all duplicates into the first occurrence's bag, allowing natural consolidation.
+    /// </summary>
+    public static List<QuickMove> BuildMergeStacks(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
+    {
+        var result = new List<QuickMove>();
+        var grouped = items.GroupBy(i => i.ItemId).Where(g => g.Count() > 1);
+
+        foreach (var group in grouped)
+        {
+            var first = group.First();
+            var targetBag = first.Container;
+
+            // Move all duplicates to the first item's bag (triggers consolidation)
+            foreach (var item in group.Skip(1))
+            {
+                if (item.Container != targetBag)
+                    result.Add(new QuickMove { Item = item, DestBag = targetBag });
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Vendor Trash: Group all grey-rarity items (white) into Bag 4 for easy discard.
+    /// </summary>
+    public static List<QuickMove> BuildVendorTrashGroup(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
+    {
+        if (!bagFlags[3]) return new List<QuickMove>();
+        var destBag = InventoryService.PlayerBags[3];
+        
+        return items
+            .Where(i => i.Rarity == 1 && i.Container != destBag)
+            .Select(i => new QuickMove { Item = i, DestBag = destBag })
+            .ToList();
+    }
+
+    // ─── Natural Language Search Helpers ───────────────────────────────────────
+
+    /// <summary>
+    /// Simple natural language keyword matching for item categories.
+    /// Maps combat-related keywords to item properties.
+    /// </summary>
+    public static List<InventoryItemInfo> SearchByKeyword(IReadOnlyList<InventoryItemInfo> items, string keyword)
+    {
+        var lower = keyword.ToLowerInvariant().Trim();
+        if (string.IsNullOrEmpty(lower)) return items.ToList();
+
+        // Map keywords to filter logic
+        return lower switch
+        {
+            "combat" or "fight" or "battle" => items.Where(i => 
+                i.IsEquippable || (i.UICategoryRowId == UICategoryMeal || i.UICategoryRowId == UICategoryMedicine)).ToList(),
+            
+            "heal" or "healer" or "medicine" => items.Where(i =>
+                i.ClassJobs.Any(j => new[] { "WHM", "SCH", "AST", "SGE" }.Contains(j)) || i.UICategoryRowId == UICategoryMedicine).ToList(),
+            
+            "magic" or "caster" or "spell" => items.Where(i =>
+                i.ClassJobs.Any(j => new[] { "BLM", "SMN", "RDM", "BLU", "PCT" }.Contains(j))).ToList(),
+            
+            "physical" or "melee" or "strength" => items.Where(i =>
+                i.ClassJobs.Any(j => new[] { "PLD", "MNK", "DRG", "NIN", "SAM", "RPR", "VPR" }.Contains(j))).ToList(),
+            
+            "tank" => items.Where(i =>
+                i.ClassJobs.Any(j => new[] { "PLD", "WAR", "DRK", "GNB" }.Contains(j))).ToList(),
+            
+            "craft" or "crafter" => items.Where(i =>
+                i.ClassJobs.Any(j => new[] { "CRP", "BSM", "ARM", "GSM", "LTW", "WVR", "ALC", "CUL" }.Contains(j))).ToList(),
+            
+            "gather" or "gatherer" => items.Where(i =>
+                i.ClassJobs.Any(j => new[] { "MIN", "BTN", "FSH" }.Contains(j))).ToList(),
+            
+            "hq" or "highquality" => items.Where(i => i.IsHQ).ToList(),
+            
+            "junk" or "trash" or "vendor" => items.Where(i => i.Rarity == 1).ToList(),
+            
+            "consumable" or "food" or "pot" => items.Where(i =>
+                i.UICategoryRowId == UICategoryMeal || i.UICategoryRowId == UICategoryMedicine).ToList(),
+            
+            "materia" => items.Where(i => i.UICategoryRowId == UICategoryMateria).ToList(),
+            
+            "crystal" => items.Where(i => i.UICategoryRowId == UICategoryCrystal).ToList(),
+            
+            "spiritbond" or "extractable" => items.Where(i => i.SpiritbondPercent >= 100).ToList(),
+            
+            _ => items.ToList()
+        };
+    }
+
+    // ─── Layout Snapshot & Copy System ────────────────────────────────────────
+
+    /// <summary>
+    /// Snapshot a bag's current layout: item IDs in slot order.
+    /// Used as a template for "Mirror" operations.
+    /// </summary>
+    public static List<uint?> SnapshotBagLayout(IReadOnlyList<InventoryItemInfo> items, InventoryType bagType)
+    {
+        var result = new List<uint?>();
+        var bagItems = items.Where(i => i.Container == bagType).OrderBy(i => i.Slot).ToList();
+        
+        // Create a map of slot -> itemId for this bag
+        var maxSlot = bagItems.Any() ? bagItems.Max(i => i.Slot) : 0;
+        for (var s = 0; s <= maxSlot; s++)
+        {
+            var item = bagItems.FirstOrDefault(i => i.Slot == s);
+            result.Add(item?.ItemId);
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Apply a saved layout template to another bag by moving items to match the template order.
+    /// </summary>
+    public static List<QuickMove> ApplyLayoutTemplate(
+        IReadOnlyList<InventoryItemInfo> items,
+        List<uint?> template,
+        InventoryType sourceBag,
+        InventoryType targetBag)
+    {
+        var result = new List<QuickMove>();
+        var sourceItems = items.Where(i => i.Container == sourceBag).ToList();
+        var targetItems = items.Where(i => i.Container == targetBag).ToList();
+
+        // Try to match items from source layout to target bag
+        foreach (var templateItemId in template)
+        {
+            if (!templateItemId.HasValue) continue;
+            var sourceItem = sourceItems.FirstOrDefault(i => i.ItemId == templateItemId);
+            if (sourceItem == null) continue;
+
+            // Move this item to target bag
+            if (sourceItem.Container != targetBag)
+                result.Add(new QuickMove { Item = sourceItem, DestBag = targetBag });
+        }
+
+        return result;
+    }
 }
+

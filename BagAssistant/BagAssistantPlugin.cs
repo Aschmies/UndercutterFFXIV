@@ -5,6 +5,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using BagAssistant.Services;
 using BagAssistant.Windows;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -191,6 +192,58 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
             }
         }
         SortQueue.StatusMessage = $"Discarded {discardCount} junk item(s).";
+    }
+
+    // ─── v1.0.4 Operations ────────────────────────────────────────────────────
+
+    public void ExtractMateria()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildExtractMateria(items, bagFlags);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "Extract Materia (100% spiritbond gear)");
+    }
+
+    public void MergeStacks()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildMergeStacks(items, bagFlags);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "Merge Stacks");
+    }
+
+    public void GroupVendorTrash()
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildVendorTrashGroup(items, bagFlags);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), "Group Vendor Trash");
+    }
+
+    public List<InventoryItemInfo> SearchByKeyword(string keyword)
+    {
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        return QuickSortPresets.SearchByKeyword(items, keyword);
+    }
+
+    public List<uint?> SnapshotBagLayout(InventoryType bagType)
+    {
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        return QuickSortPresets.SnapshotBagLayout(items, bagType);
+    }
+
+    public void SyncLayoutToOtherBag(InventoryType sourceBag, InventoryType targetBag, List<uint?> template)
+    {
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.ApplyLayoutTemplate(items, template, sourceBag, targetBag);
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag)), $"Sync layout from {sourceBag} to {targetBag}");
     }
 
     public void Dispose()

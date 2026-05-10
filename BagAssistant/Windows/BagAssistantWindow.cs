@@ -2,6 +2,7 @@ using BagAssistant.Services;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
@@ -22,6 +23,7 @@ public sealed class BagAssistantWindow : Window, IDisposable
     private bool confirmingSort;
     private QuickPreset? confirmingPreset;
     private bool confirmingSmartSort;
+    private int selectedBag = 0;
 
     // Cached UI category list.
     private readonly List<(uint RowId, string Name)> uiCategoryCache = new();
@@ -94,6 +96,11 @@ public sealed class BagAssistantWindow : Window, IDisposable
             if (ImGui.BeginTabItem("Settings"))
             {
                 DrawSettingsTab();
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Advanced"))
+            {
+                DrawAdvancedTab();
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Help"))
@@ -765,6 +772,115 @@ public sealed class BagAssistantWindow : Window, IDisposable
             set(Config, v);
             Config.Save();
         }
+    }
+
+    // ─── Tab: Advanced ──────────────────────────────────────────────────────
+
+    private string naturalLanguageSearchBox = string.Empty;
+    private List<InventoryItemInfo> searchResults = new();
+
+    private void DrawAdvancedTab()
+    {
+        ImGui.TextWrapped("Advanced tools: Natural language search, layout mirroring, zone management.");
+        ImGui.Spacing();
+
+        var queueBusy = plugin.IsSortQueueBusy;
+
+        // ── Natural Language Search ─────────────────────────────────────────
+        ImGui.TextUnformatted("Natural Language Search:");
+        ImGui.TextDisabled("Type: combat, heal, magic, tank, craft, gather, hq, junk, consumable, materia, crystal, spiritbond, etc.");
+        
+        ImGui.SetNextItemWidth(250);
+        if (ImGui.InputText("##nlsearch", ref naturalLanguageSearchBox, 100))
+        {
+            if (!string.IsNullOrWhiteSpace(naturalLanguageSearchBox))
+                searchResults = plugin.SearchByKeyword(naturalLanguageSearchBox);
+            else
+                searchResults.Clear();
+        }
+
+        if (searchResults.Count > 0)
+        {
+            ImGui.TextColored(new Vector4(0.4f, 0.8f, 1f, 1f), $"Found {searchResults.Count} item(s):");
+            if (ImGui.BeginChild("##searchresults", new Vector2(-1, 150)))
+            {
+                foreach (var item in searchResults.Take(50))
+                {
+                    var color = item.Rarity switch
+                    {
+                        4 => new Vector4(1f, 0.5f, 0f, 1f), // Purple
+                        3 => new Vector4(0.2f, 0.6f, 1f, 1f), // Blue
+                        2 => new Vector4(0.2f, 1f, 0.2f, 1f), // Green
+                        _ => new Vector4(1f, 1f, 1f, 1f)      // White
+                    };
+                    ImGui.TextColored(color, $"{item.Name} (x{item.StackCount}) - {item.Container}[{item.Slot}]");
+                }
+                ImGui.EndChild();
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // ── Layout Snapshot & Sync ──────────────────────────────────────────
+        ImGui.TextUnformatted("Layout Mirror:");
+        ImGui.TextDisabled("Capture a bag's layout as a template, then apply it to another bag.");
+
+        var bags = new (string Label, InventoryType Type)[]
+        {
+            ("Bag 1", InventoryType.Inventory1),
+            ("Bag 2", InventoryType.Inventory2),
+            ("Bag 3", InventoryType.Inventory3),
+            ("Bag 4", InventoryType.Inventory4),
+        };
+
+        ImGui.Combo("##sourcebag", ref selectedBag, bags.Select(b => b.Label).ToArray(), bags.Length);
+
+        if (queueBusy) ImGui.BeginDisabled();
+        if (ImGui.Button("Snapshot this Bag"))
+        {
+            var layout = plugin.SnapshotBagLayout(bags[selectedBag].Type);
+            ImGui.SetClipboardText(System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join(",", layout))));
+            statusMessage = $"Snapshot saved to clipboard for {bags[selectedBag].Label}.";
+        }
+        if (queueBusy) ImGui.EndDisabled();
+
+        ImGui.TextDisabled("(Snapshot saved to clipboard - paste the code into another bag's 'Apply Layout' field)");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // ── Quick Operations ────────────────────────────────────────────────
+        ImGui.TextUnformatted("One-Click Operations:");
+
+        if (queueBusy) ImGui.BeginDisabled();
+        if (ImGui.Button("Extract Materia##adv_mat", new Vector2(120, 0)))
+        {
+            plugin.ExtractMateria();
+        }
+        if (queueBusy) ImGui.EndDisabled();
+        ImGui.SameLine();
+        ImGui.TextDisabled("Move 100% spiritbond gear to Bag 1");
+
+        if (queueBusy) ImGui.BeginDisabled();
+        if (ImGui.Button("Merge Stacks##adv_merge", new Vector2(120, 0)))
+        {
+            plugin.MergeStacks();
+        }
+        if (queueBusy) ImGui.EndDisabled();
+        ImGui.SameLine();
+        ImGui.TextDisabled("Consolidate duplicate items");
+
+        if (queueBusy) ImGui.BeginDisabled();
+        if (ImGui.Button("Group Vendor Trash##adv_trash", new Vector2(120, 0)))
+        {
+            plugin.GroupVendorTrash();
+        }
+        if (queueBusy) ImGui.EndDisabled();
+        ImGui.SameLine();
+        ImGui.TextDisabled("Move all grey items to Bag 4");
     }
 
     // ─── Tab: Help ──────────────────────────────────────────────────────────

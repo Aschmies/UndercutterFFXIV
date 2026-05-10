@@ -22,6 +22,8 @@ public record InventoryItemInfo(
     uint ItemLevel,
     uint VendorPrice,
     uint UICategoryRowId,
+    uint EquipSlotCategoryRowId,
+    byte SpiritbondPercent,
     string[] ClassJobs,
     int StackCount);
 
@@ -77,6 +79,8 @@ public sealed unsafe class InventoryService(IDataManager dataManager, IPluginLog
                     data.LevelItem.RowId,
                     data.PriceLow,
                     data.ItemUICategory.RowId,
+                    data.EquipSlotCategory.RowId,
+                    (byte)inv->Condition,
                     GetClassJobs(data),
                     inv->Quantity
                 ));
@@ -133,6 +137,22 @@ public sealed unsafe class InventoryService(IDataManager dataManager, IPluginLog
         }
 
         return (false, $"Move failed (code {result}) for '{item.Name}'.");
+    }
+
+    /// <summary>Move/swap by explicit slot coordinates (used by the smart-sort planner).</summary>
+    public (bool Success, string Message) MoveSlotToSlot(InventoryType srcBag, int srcSlot, InventoryType destBag, int destSlot, string label)
+    {
+        var mgr = InventoryManager.Instance();
+        if (mgr == null) return (false, "InventoryManager unavailable.");
+        if (srcBag == destBag && srcSlot == destSlot) return (true, "Already at destination.");
+
+        var result = mgr->MoveItemSlot(srcBag, (ushort)srcSlot, destBag, (ushort)destSlot, true);
+        if (result == 0)
+        {
+            log.Debug($"[BagAssistant] {label}: {srcBag}[{srcSlot}] -> {destBag}[{destSlot}]");
+            return (true, $"Moved '{label}'.");
+        }
+        return (false, $"Move failed (code {result}) for '{label}'.");
     }
 
     private static string[] GetClassJobs(Item item)
