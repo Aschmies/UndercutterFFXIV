@@ -287,7 +287,7 @@ public static class QuickSortPresets
         var destBag = InventoryService.PlayerBags[3];
         
         return items
-            .Where(i => IsJunk(i, config.MaxJunkVendorPrice, config.ExcludeCraftingFromJunk) && i.Container != destBag)
+            .Where(i => IsJunk(i, config) && i.Container != destBag)
             .Select(i => new QuickMove { Item = i, DestBag = destBag })
             .ToList();
     }
@@ -298,13 +298,14 @@ public static class QuickSortPresets
     /// Simple natural language keyword matching for item categories.
     /// Maps combat-related keywords to item properties.
     /// </summary>
-        public static bool IsJunk(InventoryItemInfo i, int maxVendorPrice, bool excludeCrafting)
+        public static bool IsJunk(InventoryItemInfo i, Configuration config)
     {
         if (i.Rarity != 1) return false;
-        if (i.IsEquippable) return false;
-        if (i.UICategoryRowId == UICategoryCrystal || i.UICategoryRowId == UICategoryMateria) return false;
-        if (i.VendorPrice > maxVendorPrice) return false;
-        if (excludeCrafting && i.IsStackable) return false; // Any stackable item is highly likely a crafting material or consumable
+        if (config.ExcludeGearFromJunk && i.IsEquippable) return false;
+        if (i.UICategoryRowId == 59 || i.UICategoryRowId == 58) return false;
+        if (config.ExcludeConsumablesFromJunk && (i.UICategoryRowId == 44 || i.UICategoryRowId == 46)) return false;
+        if (config.ExcludeCraftingFromJunk && i.IsStackable) return false;
+        if (i.VendorPrice > config.MaxJunkVendorPrice) return false;
         return true;
     }
 
@@ -405,11 +406,11 @@ public static class QuickSortPresets
             var matchedItems = itemsToMove.Where(i => tag switch
             {
                 "Gear" => i.IsEquippable && i.Rarity > 1,
-                "Materials" => i.IsStackable && !IsJunk(i, config.MaxJunkVendorPrice, config.ExcludeCraftingFromJunk) && i.UICategoryRowId != UICategoryMateria && i.UICategoryRowId != UICategoryCrystal,
+                "Materials" => i.IsStackable && !IsJunk(i, config) && i.UICategoryRowId != UICategoryMateria && i.UICategoryRowId != UICategoryCrystal,
                 "Consumables" => i.UICategoryRowId == 44 || i.UICategoryRowId == 45 || i.UICategoryRowId == 46, // Medicines, Meals
                 "Materia" => i.UICategoryRowId == UICategoryMateria || i.Name.ToString().Contains("Materia"),
                 "Crystals" => i.UICategoryRowId == UICategoryCrystal,
-                "Junk" => IsJunk(i, config.MaxJunkVendorPrice, config.ExcludeCraftingFromJunk),
+                "Junk" => IsJunk(i, config),
                 _ => false
             }).ToList();
 
@@ -449,4 +450,6 @@ public static class QuickSortPresets
         return result;
     }
 }
+
+
 

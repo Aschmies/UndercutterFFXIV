@@ -29,6 +29,18 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>If true, items flagged as stackable/crafting materials are excluded from Junk.</summary>
     public bool ExcludeCraftingFromJunk { get; set; } = true;
 
+    /// <summary>If true, items that are equipment/gear are excluded from Junk.</summary>
+    public bool ExcludeGearFromJunk { get; set; } = true;
+
+    /// <summary>If true, items that are food or medicine are excluded from Junk.</summary>
+    public bool ExcludeConsumablesFromJunk { get; set; } = true;
+
+    /// <summary>If true, show visual zone overlays over the inventory slots.</summary>
+    public bool ShowVisualZoneOverlay { get; set; } = false;
+
+    /// <summary>If true, show slot numbers on the visual zone overlay.</summary>
+    public bool ShowVisualZoneNumbers { get; set; } = false;
+
     /// <summary>Random per-move delay range in milliseconds, used to keep sorts human-paced.</summary>
     public int MoveDelayMinMs { get; set; } = 40;
     public int MoveDelayMaxMs { get; set; } = 80;

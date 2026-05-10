@@ -169,7 +169,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
     {
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
-        return items.Where(i => QuickSortPresets.IsJunk(i, Configuration.MaxJunkVendorPrice, Configuration.ExcludeCraftingFromJunk)).ToList();
+        return items.Where(i => QuickSortPresets.IsJunk(i, Configuration)).ToList();
     }
 
     public void DeleteSpecificJunk(List<InventoryItemInfo> junk)
@@ -197,7 +197,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         // Junk = white rarity (vendor trash)
-        var junk = items.Where(i => QuickSortPresets.IsJunk(i, Configuration.MaxJunkVendorPrice, Configuration.ExcludeCraftingFromJunk)).ToList();
+        var junk = items.Where(i => QuickSortPresets.IsJunk(i, Configuration)).ToList();
         if (junk.Count == 0)
         {
             SortQueue.StatusMessage = "No junk (white items) found.";

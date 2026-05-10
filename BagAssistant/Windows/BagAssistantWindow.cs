@@ -816,11 +816,41 @@ public sealed class BagAssistantWindow : Window, IDisposable
             Config.Save();
         }
         ImGui.TextDisabled("Pick which custom rule the overlay's second button runs. Build rules in the 'Custom Rules' tab.");
+        ImGui.Separator();
+        ImGui.TextUnformatted("Inventory Overlay Enhancements");
+        
+        var showVisualOverlay = Config.ShowVisualZoneOverlay;
+        if (ImGui.Checkbox("Draw Layout Zones over the Inventory window", ref showVisualOverlay))
+        {
+            Config.ShowVisualZoneOverlay = showVisualOverlay;
+            Config.Save();
+        }
+        
+        var showVisualNumbers = Config.ShowVisualZoneNumbers;
+        if (ImGui.Checkbox("Show Slot Numbers on overlay", ref showVisualNumbers))
+        {
+            Config.ShowVisualZoneNumbers = showVisualNumbers;
+            Config.Save();
+        }
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
         ImGui.TextUnformatted("Junk Filtering Logic");
         
+                var excGear = Config.ExcludeGearFromJunk;
+        if (ImGui.Checkbox("Exclude Gear from Junk", ref excGear))
+        {
+            Config.ExcludeGearFromJunk = excGear;
+            Config.Save();
+        }
+        
+        var excConsumables = Config.ExcludeConsumablesFromJunk;
+        if (ImGui.Checkbox("Exclude Potions/Food from Junk", ref excConsumables))
+        {
+            Config.ExcludeConsumablesFromJunk = excConsumables;
+            Config.Save();
+        }
+
         var exclusion = Config.ExcludeCraftingFromJunk;
         if (ImGui.Checkbox("Exclude stackable crafting materials from Junk", ref exclusion))
         {
@@ -1039,7 +1069,9 @@ public sealed class BagAssistantWindow : Window, IDisposable
                     ImGui.PushID($"zoneBtn_{globalIndex}");
                     ImGui.PushStyleColor(ImGuiCol.Button, zoneColors[tagIdx]);
                     
-                    ImGui.Button(string.IsNullOrEmpty(currentTag) || currentTag == "None" ? $"Slot {slotIndex+1}" : currentTag, new System.Numerics.Vector2(90, 40));
+                    var title = string.IsNullOrEmpty(currentTag) || currentTag == "None" ? $"Slot {slotIndex+1}" : currentTag;
+                    if (Config.ShowVisualZoneNumbers && !title.StartsWith("Slot")) title += $"\n({slotIndex+1})";
+                    ImGui.Button(title, new System.Numerics.Vector2(90, 40));
                     
                     if (ImGui.IsItemHovered() && ImGui.IsMouseDown(ImGuiMouseButton.Left))
                     {

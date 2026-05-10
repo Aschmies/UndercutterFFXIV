@@ -183,6 +183,14 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
             ImGui.SetTooltip("Consolidate duplicate items\ninto single stacks.");
 
         ImGui.SameLine();
+        if (ImGui.SmallButton("Apply Zones##ov_zones"))
+        {
+            plugin.ApplyVisualZones();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Sort inventory into your painted Layout Zones.");
+
+        ImGui.SameLine();
         if (ImGui.SmallButton("Vendor Trash##ov_trash"))
         {
             plugin.GroupVendorTrash();
@@ -204,6 +212,49 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
         if (idx < 0 || idx >= Config.Rules.Count) return null;
         var rule = Config.Rules[idx];
         return rule.Enabled ? rule : null;
+    }
+
+        private void DrawVisualZoneMinimap()
+    {
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextDisabled("Painted Layout Zones Overview");
+        
+        var drawList = ImGui.GetWindowDrawList();
+        var startPos = ImGui.GetCursorScreenPos();
+        float slotSize = 14f;
+        float spacing = 2f;
+        float bagGap = 10f;
+        
+        for (int bagIndex = 0; bagIndex < 4; bagIndex++)
+        {
+            var bagPos = startPos + new Vector2(bagIndex * (5 * (slotSize + spacing) + bagGap), 0);
+            drawList.AddText(bagPos + new Vector2(0, -15), ImGui.GetColorU32(ImGuiCol.Text), $"B{bagIndex + 1}");
+            for (int r = 0; r < 7; r++)
+            {
+                for (int c = 0; c < 5; c++)
+                {
+                    int slotIndex = r * 5 + c;
+                    int globalIndex = bagIndex * 35 + slotIndex;
+                    string tag = Config.VisualZoneLayout?[globalIndex] ?? "None";
+                    
+                    Vector4 color = new Vector4(0.2f, 0.2f, 0.2f, 1f); // default none
+                    if (tag == "Gear") color = new Vector4(0.2f, 0.6f, 1.0f, 1f);
+                    else if (tag == "Materia") color = new Vector4(0.8f, 0.2f, 0.8f, 1f);
+                    else if (tag == "Consumables") color = new Vector4(0.4f, 0.9f, 0.4f, 1f);
+                    else if (tag == "Crafting") color = new Vector4(0.9f, 0.6f, 0.2f, 1f);
+                    else if (tag == "Gathering") color = new Vector4(0.9f, 0.8f, 0.2f, 1f);
+                    else if (tag == "Crystals") color = new Vector4(0.4f, 0.8f, 0.9f, 1f);
+                    else if (tag == "Junk") color = new Vector4(0.5f, 0.5f, 0.5f, 1f);
+
+                    var slotRectMin = bagPos + new Vector2(c * (slotSize + spacing), r * (slotSize + spacing));
+                    var slotRectMax = slotRectMin + new Vector2(slotSize, slotSize);
+                    
+                    drawList.AddRectFilled(slotRectMin, slotRectMax, ImGui.ColorConvertFloat4ToU32(color), 2f);
+                }
+            }
+        }
+        ImGui.Dummy(new Vector2(4 * (5 * (slotSize + spacing) + bagGap), 7 * (slotSize + spacing) + 20f));
     }
 
     private bool TryGetInventoryRect(out Vector2 position, out Vector2 size)
