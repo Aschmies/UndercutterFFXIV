@@ -6,13 +6,14 @@ on:
     tags:
       - 'v*'
       - 'ac-v*'
+      - 'qn-v*'
 
 permissions:
   contents: write   # needed to create releases and push pluginmaster.json
 
 jobs:
   build-and-release:
-    if: "!startsWith(github.ref_name, 'ac-v')"
+    if: "!startsWith(github.ref_name, 'ac-v') && !startsWith(github.ref_name, 'qn-v')"
     runs-on: windows-latest
 
     steps:
@@ -232,6 +233,111 @@ jobs:
             ### Armoury Cleaner ${{ steps.version.outputs.SHORT }}
 
             **Install:** Add the custom repo URL to Dalamud (see README), then install "Armoury Cleaner".
+            **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
+          files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
+          fail_on_unmatched_files: true
+
+  build-and-release-questnav:
+    if: startsWith(github.ref_name, 'qn-v')
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          $out = "${{ github.workspace }}\dalamud"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip" `
+            -OutFile "$out\dalamud.zip"
+          Expand-Archive -Path "$out\dalamud.zip" -DestinationPath $out -Force
+          Remove-Item "$out\dalamud.zip"
+          echo "DALAMUD_HOME=$out" >> $env:GITHUB_ENV
+
+      - name: Restore dependencies
+        run: dotnet restore QuestNav\QuestNav.csproj
+
+      - name: Build Release
+        run: dotnet build QuestNav\QuestNav.csproj --configuration Release --no-restore
+
+      - name: Locate plugin zip
+        id: find_zip
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path "QuestNav\bin\Release" -Recurse -Filter "latest.zip" |
+            Select-Object -First 1
+          if (-not $zip) { throw "Could not find latest.zip under QuestNav\bin\Release" }
+          Write-Host "Found zip: $($zip.FullName)"
+          echo "ZIP_PATH=$($zip.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Parse version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"      # e.g. qn-v1.0.0
+          $ver = $tag -replace '^qn-v', ''     # e.g. 1.0.0
+          $parts = $ver.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $full = $parts -join '.'
+          echo "SHORT=$ver"   >> $env:GITHUB_OUTPUT
+          echo "FULL=$full"   >> $env:GITHUB_OUTPUT
+
+      - name: Update pluginmaster.json
+        shell: pwsh
+        run: |
+          $arr   = Get-Content pluginmaster.json -Raw | ConvertFrom-Json
+          $entry = $arr | Where-Object { $_.InternalName -eq "QuestNav" }
+          $ver   = "${{ steps.version.outputs.FULL }}"
+          $tag   = "${{ github.ref_name }}"
+          $dlUrl = "https://github.com/Aschmies/UndercutterFFXIV/releases/download/$tag/QuestNav-$tag.zip"
+          $entry.AssemblyVersion        = $ver
+          $entry.TestingAssemblyVersion = $ver
+          $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $entry.DownloadLinkInstall    = $dlUrl
+          $entry.DownloadLinkUpdate     = $dlUrl
+          $entry.DownloadLinkTesting    = $dlUrl
+          $json = ConvertTo-Json -InputObject $arr -Depth 10
+          [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $json, [System.Text.Encoding]::UTF8)
+
+      - name: Commit updated pluginmaster.json
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pluginmaster.json
+          git commit -m "chore: bump QuestNav pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:refs/heads/main
+
+      - name: Rename zip for release
+        id: rename_zip
+        shell: pwsh
+        run: |
+          $src  = "${{ steps.find_zip.outputs.ZIP_PATH }}"
+          $dest = Join-Path (Split-Path $src) "QuestNav-${{ github.ref_name }}.zip"
+          Rename-Item $src $dest
+          Write-Host "Renamed to: $dest"
+          echo "RELEASE_ZIP=$dest" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            ### QuestNav ${{ steps.version.outputs.SHORT }}
+
+            **Install:** Add the custom repo URL to Dalamud (see README), then install "QuestNav".
             **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
           files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
           fail_on_unmatched_files: true

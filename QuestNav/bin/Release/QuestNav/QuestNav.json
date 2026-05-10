@@ -1,0 +1,24 @@
+{
+  "Author": "Market Assistant Dev",
+  "Name": "QuestNav",
+  "InternalName": "QuestNav",
+  "AssemblyVersion": "1.0.0.0",
+  "Description": "QuestNav lists all your active quests and adds a Teleport button next to each one. Clicking it teleports you to the nearest unlocked aetheryte to the quest's location — no more hunting through the map.",
+  "ApplicableVersion": "any",
+  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+  "Tags": [
+    "quest",
+    "teleport",
+    "navigation",
+    "aetheryte"
+  ],
+  "DalamudApiLevel": 15,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "IconUrl": "https://raw.githubusercontent.com/Aschmies/UndercutterFFXIV/main/assets/icon-market-master-pro.png",
+  "Punchline": "One-click teleport to the nearest aetheryte for each active quest.",
+  "Changelog": "v1.0.0: Initial release. Lists active quests with one-click teleport to nearest aetheryte.",
+  "AcceptsFeedback": true
+}
