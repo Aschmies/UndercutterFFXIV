@@ -86,8 +86,8 @@ namespace QuestNav.Windows
                 // World bearing relative to north (0 = north, π/2 = east)
                 // FFXIV: Z increases southward, X increases eastward
                 double worldBearing = Math.Atan2(dx, -dz);
-                // Subtract player rotation (0 = north in FFXIV) to get screen-relative bearing
-                float angle = (float)(worldBearing - player->Rotation);
+                // Subtract world bearing from player rotation to get screen-relative bearing
+                float angle = (float)(player->Rotation - worldBearing);
 
                 // Arrow color: gold when in range (<30y), green otherwise
                 var arrowCol = dist < 30f

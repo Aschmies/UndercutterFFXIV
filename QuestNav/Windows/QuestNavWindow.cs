@@ -60,6 +60,11 @@ namespace QuestNav.Windows
 
         public void Dispose() { }
 
+        public void TriggerRefresh()
+        {
+            Refresh();
+        }
+
         public override void Draw()
         {
             if (!clientState.IsLoggedIn)
