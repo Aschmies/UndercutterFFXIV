@@ -92,92 +92,42 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         Configuration.IncludeBag4,
     };
 
-    private void EnqueueWithIntraBagSort(List<QuickMove> moves, string label, bool[] bagFlags)
+    /// <summary>
+    /// All sort presets route through the unified full-rebuild engine. The caller supplies a
+    /// label and a planner delegate; the planner returns a <see cref="QueuedMove"/> list which
+    /// is enqueued via <see cref="SortQueueService.EnqueueDirect"/>.
+    /// </summary>
+    private void RunRebuild(string label, System.Func<List<InventoryItemInfo>, bool[], List<Services.QueuedMove>> planner)
     {
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot, m.SrcSlotOverride)), label);
-        
-        SortQueue.OnComplete = () => {
-            var items = InventoryService.ScanBags(bagFlags);
-            var intraMoves = QuickSortPresets.BuildIntraBagSort(items, bagFlags, Configuration);
-            if (intraMoves.Count > 0)
-            {
-                SortQueue.Enqueue(intraMoves.Select(m => (m.Item, m.DestBag, m.DestSlot, m.SrcSlotOverride)), $" (In-bag Sort)");
-            }
-        };
+        if (SortQueue.IsBusy) return;
+        var bagFlags = GetBagFlags();
+        var items = InventoryService.ScanBags(bagFlags);
+        var moves = planner(items, bagFlags);
+        SortQueue.EnqueueDirect(moves, label);
     }
 
     public void RunSmartSort()
-    {
-        if (SortQueue.IsBusy) return;
-        var bagFlags = GetBagFlags();
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildSmartSortPlan(items, bagFlags);
-        EnqueueWithIntraBagSort(moves, "Smart Sort", bagFlags);
-    }
+        => RunRebuild("Smart Sort", (items, flags) => QuickSortPresets.BuildSmartSortPlanV2(items, flags, Configuration));
 
     public void RunPreset(QuickPreset preset)
-    {
-        if (SortQueue.IsBusy) return;
-        var bagFlags = GetBagFlags();
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildPresetPlan(preset, items, bagFlags);
-        EnqueueWithIntraBagSort(moves, preset.Name, bagFlags);
-    }
+        => RunRebuild(preset.Name, (items, flags) => QuickSortPresets.BuildPresetRebuildPlan(preset, items, flags, Configuration));
 
     public void RunAllRules()
-    {
-        if (SortQueue.IsBusy) return;
-        var plan = SortRunner.BuildPlan(Configuration);
-        SortQueue.Enqueue(plan.Select(p => (p.Item, p.DestBag, (int?)null, (int?)null)), "Custom rules");
-    }
+        => RunRebuild("Custom rules", (items, flags) => QuickSortPresets.BuildAllRulesRebuildPlan(Configuration.Rules, items, flags, Configuration));
 
     public void RunSingleRule(SortRule rule)
-    {
-        if (SortQueue.IsBusy) return;
-        if (rule.Target != SortTarget.SpecificBag) return;
-        var bagFlags = GetBagFlags();
-        var destIdx = System.Math.Clamp(rule.TargetBagIndex, 0, 3);
-        if (!bagFlags[destIdx]) return;
-        var destBag = InventoryService.PlayerBags[destIdx];
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = new List<(InventoryItemInfo Item, FFXIVClientStructs.FFXIV.Client.Game.InventoryType DestBag)>();
-        foreach (var item in items)
-        {
-            if (!RuleMatcher.Matches(rule, item)) continue;
-            if (item.Container == destBag) continue;
-            moves.Add((item, destBag));
-        }
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, (int?)null, (int?)null)), $"Rule: {rule.Name}");
-    }
+        => RunRebuild($"Rule: {rule.Name}", (items, flags) => QuickSortPresets.BuildSingleRuleRebuildPlan(rule, items, flags, Configuration));
 
     // ─── Advanced Sorts ───────────────────────────────────────────────────────
 
     public void RunGathererSort()
-    {
-        if (SortQueue.IsBusy) return;
-        var bagFlags = GetBagFlags();
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildGathererSort(items, bagFlags);
-        EnqueueWithIntraBagSort(moves, "The Gatherer", bagFlags);
-    }
+        => RunRebuild("The Gatherer", (items, flags) => QuickSortPresets.BuildGathererSortPlan(items, flags, Configuration));
 
     public void RunRaiderSort()
-    {
-        if (SortQueue.IsBusy) return;
-        var bagFlags = GetBagFlags();
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildRaiderSort(items, bagFlags);
-        EnqueueWithIntraBagSort(moves, "The Raider", bagFlags);
-    }
+        => RunRebuild("The Raider", (items, flags) => QuickSortPresets.BuildRaiderSortPlan(items, flags, Configuration));
 
     public void RunHoarderSort()
-    {
-        if (SortQueue.IsBusy) return;
-        var bagFlags = GetBagFlags();
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildHoarderSort(items, bagFlags);
-        EnqueueWithIntraBagSort(moves, "The Hoarder", bagFlags);
-    }
+        => RunRebuild("The Hoarder", (items, flags) => QuickSortPresets.BuildHoarderSortPlan(items, flags, Configuration));
 
         public List<InventoryItemInfo> GetJunkItems()
     {
@@ -237,13 +187,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
     // ─── v1.0.4 Operations ────────────────────────────────────────────────────
 
     public void ExtractMateria()
-    {
-        if (SortQueue.IsBusy) return;
-        var bagFlags = GetBagFlags();
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildExtractMateria(items, bagFlags);
-        EnqueueWithIntraBagSort(moves, "Extract Materia (100% spiritbond gear)", bagFlags);
-    }
+        => RunRebuild("Extract Materia (100% spiritbond gear)", (items, flags) => QuickSortPresets.BuildExtractMateriaPlan(items, flags, Configuration));
 
     public void MergeStacks()
     {
@@ -251,17 +195,14 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildMergeStacks(items, bagFlags);
-        EnqueueWithIntraBagSort(moves, "Merge Stacks", bagFlags);
+        // Merge Stacks is a slot-merge operation (not a layout rebuild), so it still uses the
+        // legacy enqueue path which emits move-onto-occupied-slot operations to trigger the
+        // game's stack merge.
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot, m.SrcSlotOverride)), "Merge Stacks");
     }
 
     public void GroupVendorTrash()
-    {
-        if (SortQueue.IsBusy) return;
-        var bagFlags = GetBagFlags();
-        var items = InventoryService.ScanBags(bagFlags);
-        var moves = QuickSortPresets.BuildVendorTrashGroup(items, bagFlags, Configuration);
-        EnqueueWithIntraBagSort(moves, "Group Vendor Trash", bagFlags);
-    }
+        => RunRebuild("Group Vendor Trash", (items, flags) => QuickSortPresets.BuildVendorTrashPlan(items, flags, Configuration));
 
     public List<InventoryItemInfo> SearchByKeyword(string keyword)
     {
@@ -312,7 +253,8 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.ApplyLayoutTemplate(items, template, sourceBag, targetBag);
-        EnqueueWithIntraBagSort(moves, $"Sync layout from {sourceBag} to {targetBag}", bagFlags);
+        // SyncLayout is item-id-based template matching; route through the legacy queue path.
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot, m.SrcSlotOverride)), $"Sync layout from {sourceBag} to {targetBag}");
     }
 
     public void Dispose()
