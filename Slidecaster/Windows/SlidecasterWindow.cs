@@ -1,5 +1,6 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
+using System;
 using System.Reflection;
 using System.Numerics;
 
@@ -14,6 +15,7 @@ public sealed class SlidecasterWindow : Window
 
     private readonly Configuration configuration;
     private readonly CastbarOverlayWindow overlayWindow;
+    private string statusMessage = string.Empty;
 
     public SlidecasterWindow(Configuration configuration, CastbarOverlayWindow overlayWindow)
         : base($"Slidecaster v{DisplayVersion} Settings##window")
@@ -57,6 +59,14 @@ public sealed class SlidecasterWindow : Window
             configuration.OverlayHeightScale = overlayHeightScale;
             configuration.Save();
         }
+        ImGui.SameLine();
+        var overlayHeightExact = configuration.OverlayHeightScale;
+        ImGui.SetNextItemWidth(90f);
+        if (ImGui.InputFloat("##overlay-height-exact", ref overlayHeightExact, 0.05f, 0.20f, "%.2f"))
+        {
+            configuration.OverlayHeightScale = Math.Clamp(overlayHeightExact, 0.5f, 2.5f);
+            configuration.Save();
+        }
 
         var safeBarHeightScale = configuration.SafeBarHeightScale;
         if (ImGui.SliderFloat("Safe Bar Height Scale", ref safeBarHeightScale, 0.3f, 2.5f, "%.2f"))
@@ -64,11 +74,34 @@ public sealed class SlidecasterWindow : Window
             configuration.SafeBarHeightScale = safeBarHeightScale;
             configuration.Save();
         }
+        ImGui.SameLine();
+        var safeBarHeightExact = configuration.SafeBarHeightScale;
+        ImGui.SetNextItemWidth(90f);
+        if (ImGui.InputFloat("##safe-bar-height-exact", ref safeBarHeightExact, 0.05f, 0.20f, "%.2f"))
+        {
+            configuration.SafeBarHeightScale = Math.Clamp(safeBarHeightExact, 0.3f, 2.5f);
+            configuration.Save();
+        }
 
         var showBorder = configuration.ShowCastBarBorder;
         if (ImGui.Checkbox("Show cast bar frame border", ref showBorder))
         {
             configuration.ShowCastBarBorder = showBorder;
+            configuration.Save();
+        }
+
+        var endTrim = configuration.OverlayEndTrimPx;
+        if (ImGui.SliderFloat("Overlay End Trim (px)", ref endTrim, -20f, 120f, "%.1f"))
+        {
+            configuration.OverlayEndTrimPx = endTrim;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        var endTrimExact = configuration.OverlayEndTrimPx;
+        ImGui.SetNextItemWidth(90f);
+        if (ImGui.InputFloat("##overlay-end-trim-exact", ref endTrimExact, 1f, 5f, "%.1f"))
+        {
+            configuration.OverlayEndTrimPx = Math.Clamp(endTrimExact, -20f, 120f);
             configuration.Save();
         }
 
@@ -85,6 +118,22 @@ public sealed class SlidecasterWindow : Window
             configuration.PlaySafeMoveSound = playCue;
             configuration.Save();
         }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Save Current as Defaults"))
+        {
+            configuration.CaptureCurrentAsDefaults();
+            statusMessage = "Saved current settings as defaults.";
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Reset to Saved Defaults"))
+        {
+            configuration.ApplySavedDefaults();
+            statusMessage = "Restored settings from saved defaults.";
+        }
+
+        if (!string.IsNullOrEmpty(statusMessage))
+            ImGui.TextDisabled(statusMessage);
 
         ImGui.Spacing();
         ImGui.TextDisabled($"Current safe trigger: {overlayWindow.GetConfiguredSafeWindowMs()}ms before cast end");

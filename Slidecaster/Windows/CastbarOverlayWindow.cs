@@ -136,7 +136,11 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         var alpha = Math.Clamp(configuration.OverlayOpacity, 0.1f, 1f);
 
         var x1 = castbarPos.X;
-        var x2 = castbarPos.X + castbarSize.X;
+        var x2 = castbarPos.X + castbarSize.X - configuration.OverlayEndTrimPx;
+        if (x2 < x1 + 12f)
+            x2 = x1 + 12f;
+
+        var width = x2 - x1;
         var overlayHeight = castbarSize.Y * Math.Clamp(configuration.OverlayHeightScale, 0.5f, 3.0f);
         var overlayY1 = castbarPos.Y + (castbarSize.Y - overlayHeight) * 0.5f;
         var overlayY2 = overlayY1 + overlayHeight;
@@ -145,8 +149,8 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         var y1 = overlayY1 + (overlayHeight - safeBarHeight) * 0.5f;
         var y2 = y1 + safeBarHeight;
 
-        var safeX = x1 + castbarSize.X * safeStartRatio;
-        var progressX = x1 + castbarSize.X * castProgress;
+        var safeX = x1 + width * safeStartRatio;
+        var progressX = x1 + width * castProgress;
 
         var safeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0.1f, 0.9f, 0.3f, alpha));
         var activeSafeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0.15f, 1.0f, 0.35f, Math.Clamp(alpha + 0.2f, 0f, 1f)));
