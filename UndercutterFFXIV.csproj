@@ -2,7 +2,7 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <Version>1.1.46</Version>
+    <Version>1.1.47</Version>
     <AssemblyName>UndercutterFFXIV</AssemblyName>
     <RootNamespace>UndercutterFFXIV</RootNamespace>
     <Authors>Market Assistant Dev</Authors>
@@ -14,6 +14,12 @@
     <Compile Remove="ArmouryCleaner\**" />
     <EmbeddedResource Remove="ArmouryCleaner\**" />
     <None Remove="ArmouryCleaner\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="QuestNav\**" />
+    <EmbeddedResource Remove="QuestNav\**" />
+    <None Remove="QuestNav\**" />
   </ItemGroup>
 
   <ItemGroup>
