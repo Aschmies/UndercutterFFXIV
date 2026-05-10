@@ -129,25 +129,52 @@ namespace QuestNav.Windows
             if (quest.AllSteps == null || quest.AllSteps.Count == 0)
                 return quest;
 
-            // Prefer exact current sequence, then latest known step <= sequence, then any locatable step.
-            var step = quest.AllSteps.FirstOrDefault(s => s.StepIndex == quest.Sequence && HasStepLocation(s))
-                       ?? quest.AllSteps
-                           .Where(s => s.StepIndex <= quest.Sequence && HasStepLocation(s))
-                           .OrderByDescending(s => s.StepIndex)
-                           .FirstOrDefault()
-                       ?? quest.AllSteps.FirstOrDefault(HasStepLocation);
+            // Try to find a step that has valid location data.
+            // Match by sequence index first, then fall back to any available step.
+            QuestStep? targetStep = null;
 
-            if (step == null)
+            // First try to find a step at or just below the current sequence
+            if (quest.Sequence < quest.AllSteps.Count)
+            {
+                targetStep = quest.AllSteps[(int)quest.Sequence];
+                if (targetStep != null && !HasStepLocation(targetStep))
+                    targetStep = null;
+            }
+
+            // If no exact match, try nearby steps
+            if (targetStep == null)
+            {
+                for (int i = (int)quest.Sequence; i >= 0 && i >= (int)quest.Sequence - 2; i--)
+                {
+                    if (i >= 0 && i < quest.AllSteps.Count)
+                    {
+                        var step = quest.AllSteps[i];
+                        if (step != null && HasStepLocation(step))
+                        {
+                            targetStep = step;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // If still no match, use any step with location
+            if (targetStep == null)
+            {
+                targetStep = quest.AllSteps.FirstOrDefault(HasStepLocation);
+            }
+
+            if (targetStep == null)
                 return quest;
 
             return quest with
             {
-                TerritoryId = step.NpcTerritoryId ?? quest.TerritoryId,
-                MapId = step.NpcMapId ?? quest.MapId,
-                WorldX = step.NpcWorldX ?? quest.WorldX,
-                WorldZ = step.NpcWorldZ ?? quest.WorldZ,
-                MapX = step.NpcMapX ?? quest.MapX,
-                MapY = step.NpcMapY ?? quest.MapY,
+                TerritoryId = targetStep.NpcTerritoryId ?? quest.TerritoryId,
+                MapId = targetStep.NpcMapId ?? quest.MapId,
+                WorldX = targetStep.NpcWorldX ?? quest.WorldX,
+                WorldZ = targetStep.NpcWorldZ ?? quest.WorldZ,
+                MapX = targetStep.NpcMapX ?? quest.MapX,
+                MapY = targetStep.NpcMapY ?? quest.MapY,
             };
         }
 

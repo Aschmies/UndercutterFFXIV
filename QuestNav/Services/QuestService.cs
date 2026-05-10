@@ -152,12 +152,12 @@ namespace QuestNav.Services
                 var questSheet = dataManager.GetExcelSheet<Quest>();
                 if (questSheet == null) return steps;
 
-                // In FFXIV Lumina, quest steps are stored as sequential entries
-                // Each quest has multiple sheet rows (one per step, indexed by quest ID)
-                for (uint stepIdx = 0; stepIdx < 100; stepIdx++)  // Max reasonable quest steps
+                // In FFXIV Lumina, quest steps are stored as sequential entries in the Quest sheet.
+                // Each step is indexed via (questId | (stepIndex << 16))
+                bool foundAnySteps = false;
+                for (uint stepIdx = 0; stepIdx < 100; stepIdx++)
                 {
-                    // Try to get the quest row for this step
-                    var stepQuestId = (uint)questId + (stepIdx << 16);
+                    var stepQuestId = (uint)questId | (stepIdx << 16);
                     var stepRow = questSheet.GetRowOrDefault(stepQuestId);
                     
                     if (stepRow == null) break;
@@ -165,13 +165,13 @@ namespace QuestNav.Services
                     var qData = stepRow.Value;
                     if (qData.RowId == 0) break;
                     
+                    foundAnySteps = true;
+                    
                     var title = qData.Name.ToString();
-                    // For steps, description and objectives would need to come from related sheets
-                    // which may not have direct Lumina bindings yet
-                    var description = $"Quest Step {stepIdx}";
+                    var description = $"Step {stepIdx}";
                     var objectives = "Objectives unavailable";
                     
-                    // Get the target location for this step from IssuerLocation
+                    // Get target location from this step's IssuerLocation field
                     uint? npcTerritory = null;
                     uint? npcMapId = null;
                     float? npcWorldX = null;
@@ -181,17 +181,17 @@ namespace QuestNav.Services
 
                     try
                     {
-                        var targetLocRowId = qData.IssuerLocation.RowId;
-                        if (targetLocRowId != 0)
+                        var issuerLoc = qData.IssuerLocation;
+                        if (issuerLoc.RowId != 0)
                         {
-                            var targetLoc = qData.IssuerLocation.Value;
-                            npcTerritory = targetLoc.Territory.RowId;
+                            var locData = issuerLoc.Value;
+                            npcTerritory = locData.Territory.RowId;
                             if (npcTerritory != 0)
                             {
-                                npcWorldX = targetLoc.X;
-                                npcWorldZ = targetLoc.Z;
+                                npcWorldX = locData.X;
+                                npcWorldZ = locData.Z;
                                 
-                                var mapRow = targetLoc.Territory.Value.Map.Value;
+                                var mapRow = locData.Territory.Value.Map.Value;
                                 npcMapId = mapRow.RowId;
                                 (npcMapX, npcMapY) = WorldToMapCoord(npcWorldX.Value, npcWorldZ.Value, mapRow);
                             }

@@ -2,7 +2,7 @@
   "Author": "Market Assistant Dev",
   "Name": "QuestNav",
   "InternalName": "QuestNav",
-  "AssemblyVersion": "1.1.11.0",
+  "AssemblyVersion": "1.1.12.0",
   "Description": "QuestNav lists all your active quests and adds a Teleport button next to each one. Clicking it teleports you to the nearest unlocked aetheryte to the quest's location — no more hunting through the map.",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/Aschmies/AschyQOL",
