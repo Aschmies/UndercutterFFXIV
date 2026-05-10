@@ -2,7 +2,7 @@
   "Author": "Market Assistant Dev",
   "Name": "QuestNav",
   "InternalName": "QuestNav",
-  "AssemblyVersion": "1.1.7.0",
+  "AssemblyVersion": "1.1.8.0",
   "Description": "QuestNav lists all your active quests and adds a Teleport button next to each one. Clicking it teleports you to the nearest unlocked aetheryte to the quest's location — no more hunting through the map.",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/Aschmies/AschyQOL",
@@ -19,6 +19,6 @@
   "LoadPriority": 0,
   "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",
   "Punchline": "One-click teleport to the nearest aetheryte for each active quest.",
-  "Changelog": "v1.1.7: Major UI improvements � reduced row heights for compact display, quest info on single line with zone/cost details, smaller window (480x250), optimized spacing and buttons.\nv1.1.6: Fixed arrow pointing wrong direction; event-driven quest refresh.\nv1.1.5: UI redesign � sleeker 2-column layout, collapsible settings.\nv1.1.4: Fixed quest lookup with improved error handling.\nv1.1.3: Arrow background opacity slider.\nv1.1.2: Fix arrow overlay never appearing.\nv1.1.1: Fix crash on unknown quest IDs.\nv1.1.0: Arrow overlay, teleport cost, zone highlight, map flag, compact mode, auto-refresh.\nv1.0.0: Initial release.",
+  "Changelog": "v1.1.8: Fixed arrow direction formula — now correctly points towards quest target when player is facing it.\nv1.1.7: Major UI improvements — reduced row heights for compact display, quest info on single line with zone/cost details, smaller window (480x250), optimized spacing and buttons.\nv1.1.6: Fixed arrow pointing wrong direction; event-driven quest refresh.\nv1.1.5: UI redesign — sleeker 2-column layout, collapsible settings.\nv1.1.4: Fixed quest lookup with improved error handling.\nv1.1.3: Arrow background opacity slider.\nv1.1.2: Fix arrow overlay never appearing.\nv1.1.1: Fix crash on unknown quest IDs.\nv1.1.0: Arrow overlay, teleport cost, zone highlight, map flag, compact mode, auto-refresh.\nv1.0.0: Initial release.",
   "AcceptsFeedback": true
 }

@@ -23,6 +23,7 @@ namespace QuestNav.Windows
         private DateTime lastRefresh = DateTime.MinValue;
         private const float AutoRefreshSeconds = 30f;
         private bool showSettings = false;
+        private int activeFlagQuestId = 0;
 
         // Maps JournalGenre name keywords → badge label + colour
         private static readonly (string Keyword, string Badge, Vector4 Color)[] TypeRules =
@@ -51,10 +52,10 @@ namespace QuestNav.Windows
 
             SizeConstraints = new WindowSizeConstraints
             {
-                MinimumSize = new Vector2(380, 150),
-                MaximumSize = new Vector2(1000, 900),
+                MinimumSize = new Vector2(280, 110),
+                MaximumSize = new Vector2(900, 800),
             };
-            Size = new Vector2(480, 250);
+            Size = new Vector2(360, 160);
             SizeCondition = ImGuiCond.FirstUseEver;
         }
 
@@ -197,7 +198,7 @@ namespace QuestNav.Windows
 
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Quest",     ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("##actions", ImGuiTableColumnFlags.WidthFixed, config.CompactMode ? 75f : 115f);
+            ImGui.TableSetupColumn("##actions", ImGuiTableColumnFlags.WidthFixed, config.CompactMode ? 78f : 138f);
             ImGui.TableHeadersRow();
 
             if (quests.Count == 0)
@@ -260,9 +261,9 @@ namespace QuestNav.Windows
                 bool canTeleport = quest.NearestAetheryteId.HasValue;
                 bool isNavTarget = config.NavQuestId == quest.QuestId;
 
-                // Nav button (compact)
+                // Nav button
                 var navLabel = isNavTarget ? "✓" : "Nav";
-                var navWidth = isNavTarget ? 24f : (config.CompactMode ? 32f : 40f);
+                var navWidth = isNavTarget ? 28f : (config.CompactMode ? 36f : 44f);
                 if (ImGui.Button($"{navLabel}##{quest.QuestId}_nav", new Vector2(navWidth, 0)))
                 {
                     if (isNavTarget)
@@ -277,25 +278,47 @@ namespace QuestNav.Windows
                     }
                     config.Save();
                 }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(isNavTarget
+                        ? "Clear arrow navigation for this quest"
+                        : "Show arrow overlay pointing to this quest");
 
                 if (!config.CompactMode)
                 {
                     ImGui.SameLine();
-                    // Map flag button
+                    // Map flag button — toggles between set and clear
                     bool hasLocation = quest.TerritoryId != 0 && quest.MapId != 0;
+                    bool isFlagged   = activeFlagQuestId == quest.QuestId;
                     if (!hasLocation) ImGui.BeginDisabled();
-                    if (ImGui.Button($"📍##{quest.QuestId}_flag", new Vector2(32f, 0)))
-                        DoSetMapFlag(quest);
+                    var flagLabel = isFlagged ? "Unflag" : "Flag";
+                    if (ImGui.Button($"{flagLabel}##{quest.QuestId}_flag", new Vector2(50f, 0)))
+                    {
+                        if (isFlagged)
+                            ClearMapFlag();
+                        else
+                            DoSetMapFlag(quest);
+                    }
                     if (!hasLocation) ImGui.EndDisabled();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(isFlagged
+                            ? "Clear the map flag for this quest"
+                            : "Place a map flag at this quest's location");
                 }
 
-                // Teleport button (always last)
+                // Teleport button
                 ImGui.SameLine();
                 if (!canTeleport) ImGui.BeginDisabled();
-                if (ImGui.Button($"TP##{quest.QuestId}", new Vector2(config.CompactMode ? 32f : 40f, 0)))
+                if (ImGui.Button($"TP##{quest.QuestId}", new Vector2(config.CompactMode ? 36f : 44f, 0)))
                     DoTeleport(quest);
                 if (!canTeleport) ImGui.EndDisabled();
-                
+                if (ImGui.IsItemHovered())
+                {
+                    if (canTeleport)
+                        ImGui.SetTooltip($"Teleport to {quest.AetheryteName}\n({(quest.GilCost == 0 ? "Free" : $"{quest.GilCost}g")})");
+                    else
+                        ImGui.SetTooltip("No aetheryte near this quest");
+                }
+
                 ImGui.PopStyleVar(); // ItemSpacing
             }
 
@@ -316,12 +339,19 @@ namespace QuestNav.Windows
             {
                 var payload = new MapLinkPayload(quest.TerritoryId, quest.MapId, quest.MapX, quest.MapY);
                 gameGui.OpenMapWithMapLink(payload);
+                activeFlagQuestId = quest.QuestId;
                 statusMessage = $"Map flag set in {quest.ZoneName}.";
             }
             catch (Exception ex)
             {
                 statusMessage = $"Could not set map flag: {ex.Message}";
             }
+        }
+
+        private void ClearMapFlag()
+        {
+            activeFlagQuestId = 0;
+            statusMessage = "Map flag cleared.";
         }
 
         private static void DrawTypeBadge(string questType)
