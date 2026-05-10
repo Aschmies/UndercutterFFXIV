@@ -117,9 +117,44 @@ namespace QuestNav.Windows
                 return;
             }
             var target = quests.FirstOrDefault(q => q.QuestId == config.NavQuestId);
+            if (target != null)
+                target = ResolveCurrentObjectiveTarget(target);
+
             arrowOverlay.SetNavTarget(target);
             if (target == null) config.NavQuestId = 0;  // quest finished/abandoned
         }
+
+        private static QuestEntry ResolveCurrentObjectiveTarget(QuestEntry quest)
+        {
+            if (quest.AllSteps == null || quest.AllSteps.Count == 0)
+                return quest;
+
+            // Prefer exact current sequence, then latest known step <= sequence, then any locatable step.
+            var step = quest.AllSteps.FirstOrDefault(s => s.StepIndex == quest.Sequence && HasStepLocation(s))
+                       ?? quest.AllSteps
+                           .Where(s => s.StepIndex <= quest.Sequence && HasStepLocation(s))
+                           .OrderByDescending(s => s.StepIndex)
+                           .FirstOrDefault()
+                       ?? quest.AllSteps.FirstOrDefault(HasStepLocation);
+
+            if (step == null)
+                return quest;
+
+            return quest with
+            {
+                TerritoryId = step.NpcTerritoryId ?? quest.TerritoryId,
+                MapId = step.NpcMapId ?? quest.MapId,
+                WorldX = step.NpcWorldX ?? quest.WorldX,
+                WorldZ = step.NpcWorldZ ?? quest.WorldZ,
+                MapX = step.NpcMapX ?? quest.MapX,
+                MapY = step.NpcMapY ?? quest.MapY,
+            };
+        }
+
+        private static bool HasStepLocation(QuestStep step)
+            => step.NpcTerritoryId.HasValue && step.NpcMapId.HasValue &&
+               step.NpcWorldX.HasValue && step.NpcWorldZ.HasValue &&
+               step.NpcMapX.HasValue && step.NpcMapY.HasValue;
 
         private void DrawToolbar()
         {
@@ -213,6 +248,8 @@ namespace QuestNav.Windows
             
             foreach (var quest in quests)
             {
+                var objectiveTarget = ResolveCurrentObjectiveTarget(quest);
+
                 // More compact row - just one line of content
                 ImGui.TableNextRow(ImGuiTableRowFlags.None, textLineHeight + 4f);
                 bool inZone = quest.TerritoryId == currentTerr;
@@ -287,7 +324,7 @@ namespace QuestNav.Windows
                 {
                     ImGui.SameLine();
                     // Map flag button — toggles between set and clear
-                    bool hasLocation = quest.TerritoryId != 0 && quest.MapId != 0;
+                    bool hasLocation = objectiveTarget.TerritoryId != 0 && objectiveTarget.MapId != 0;
                     bool isFlagged   = activeFlagQuestId == quest.QuestId;
                     if (!hasLocation) ImGui.BeginDisabled();
                     var flagLabel = isFlagged ? "Unflag" : "Flag";
@@ -296,7 +333,7 @@ namespace QuestNav.Windows
                         if (isFlagged)
                             ClearMapFlag();
                         else
-                            DoSetMapFlag(quest);
+                            DoSetMapFlag(quest, objectiveTarget);
                     }
                     if (!hasLocation) ImGui.EndDisabled();
                     if (ImGui.IsItemHovered())
@@ -333,14 +370,14 @@ namespace QuestNav.Windows
                 : "Teleport failed — make sure you are not in combat.";
         }
 
-        private void DoSetMapFlag(QuestEntry quest)
+        private void DoSetMapFlag(QuestEntry quest, QuestEntry objectiveTarget)
         {
             try
             {
-                var payload = new MapLinkPayload(quest.TerritoryId, quest.MapId, quest.MapX, quest.MapY);
+                var payload = new MapLinkPayload(objectiveTarget.TerritoryId, objectiveTarget.MapId, objectiveTarget.MapX, objectiveTarget.MapY);
                 gameGui.OpenMapWithMapLink(payload);
                 activeFlagQuestId = quest.QuestId;
-                statusMessage = $"Map flag set in {quest.ZoneName}.";
+                statusMessage = $"Map flag set in {objectiveTarget.ZoneName}.";
             }
             catch (Exception ex)
             {

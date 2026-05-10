@@ -6,6 +6,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using QuestNav.Services;
 using QuestNav.Windows;
+using System.Linq;
 
 namespace QuestNav
 {
@@ -23,6 +24,7 @@ namespace QuestNav
         private const string CommandName = "/questnav";
 
         private int lastQuestCount = -1;
+        private string lastQuestStateSignature = string.Empty;
         private DateTime lastEventRefresh = DateTime.MinValue;
 
         public Configuration Configuration { get; }
@@ -64,13 +66,27 @@ namespace QuestNav
 
             var currentQuests = questService.GetActiveQuests();
             bool questsChanged = currentQuests.Count != lastQuestCount;
+            var currentStateSignature = BuildQuestStateSignature(currentQuests);
+            bool questStateChanged = !string.Equals(currentStateSignature, lastQuestStateSignature, StringComparison.Ordinal);
             lastQuestCount = currentQuests.Count;
+            lastQuestStateSignature = currentStateSignature;
 
-            if (questsChanged && (DateTime.UtcNow - lastEventRefresh).TotalMilliseconds > 500)
+            if ((questsChanged || questStateChanged) && (DateTime.UtcNow - lastEventRefresh).TotalMilliseconds > 500)
             {
                 mainWindow.TriggerRefresh();
                 lastEventRefresh = DateTime.UtcNow;
             }
+        }
+
+        private static string BuildQuestStateSignature(System.Collections.Generic.List<QuestEntry> quests)
+        {
+            if (quests.Count == 0)
+                return string.Empty;
+
+            // Track objective-relevant state so progression and target changes trigger a refresh.
+            return string.Join("|", quests
+                .OrderBy(q => q.QuestId)
+                .Select(q => $"{q.QuestId}:{q.Sequence}:{q.TerritoryId}:{q.WorldX:F2}:{q.WorldZ:F2}"));
         }
 
         private void DrawUI() => windowSystem.Draw();
