@@ -42,9 +42,9 @@ public sealed class Configuration : IPluginConfiguration
     public bool EnableProgressMarkerStartOffset { get; set; } = false;
     public float ProgressMarkerStartOffsetPx { get; set; } = 0f;
 
-    // Vertical pixel offset applied to the overlay's Y center. Negative values raise the overlay
-    // so it lines up with the visible cast progress bar rather than the addon's full bounding box.
-    public float OverlayYOffsetPx { get; set; } = -8f;
+    // Vertical pixel offset applied to the overlay's Y center. Use the slider in settings to tune
+    // until the overlay sits exactly on the visible cast progress bar.
+    public float OverlayYOffsetPx { get; set; } = 0f;
 
     // User-defined defaults snapshot.
     public int DefaultBaseSafeWindowMs { get; set; } = 500;
@@ -66,7 +66,7 @@ public sealed class Configuration : IPluginConfiguration
     public float DefaultLineHeightScale { get; set; } = 1.2f;
     public bool DefaultEnableProgressMarkerStartOffset { get; set; } = false;
     public float DefaultProgressMarkerStartOffsetPx { get; set; } = 0f;
-    public float DefaultOverlayYOffsetPx { get; set; } = -8f;
+    public float DefaultOverlayYOffsetPx { get; set; } = 0f;
 
     private IDalamudPluginInterface? pluginInterface;
 
@@ -149,7 +149,7 @@ public sealed class Configuration : IPluginConfiguration
         LineHeightScale = 1.2f;
         EnableProgressMarkerStartOffset = false;
         ProgressMarkerStartOffsetPx = 0f;
-        OverlayYOffsetPx = -8f;
+        OverlayYOffsetPx = 0f;
 
         // Overwrite the user-saved defaults snapshot with the same factory values.
         DefaultBaseSafeWindowMs = BaseSafeWindowMs;

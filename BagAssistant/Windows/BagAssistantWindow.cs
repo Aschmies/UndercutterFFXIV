@@ -893,6 +893,26 @@ public sealed class BagAssistantWindow : Window, IDisposable
             Config.MaxJunkVendorPrice = Math.Max(0, junkPrice);
             Config.Save();
         }
+
+        var junkIlvl = Config.JunkMaxItemLevel;
+        ImGui.SetNextItemWidth(120);
+        if (ImGui.InputInt("Max Item Level for Junk##junkIlvl", ref junkIlvl))
+        {
+            Config.JunkMaxItemLevel = Math.Max(0, junkIlvl);
+            Config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Hard ilvl ceiling. Items with ItemLevel above this are NEVER deleted.\nDefault 1 blocks every piece of equippable gear, every gathering tool, every weapon.\nLeave at 1 unless you know exactly what you're doing.");
+
+        ImGui.Spacing();
+        ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.55f, 0.95f, 0.55f, 1f));
+        ImGui.TextWrapped("Built-in safety locks (cannot be disabled):");
+        ImGui.PopStyleColor();
+        ImGui.BulletText("Only WHITE-rarity items can ever be deleted.");
+        ImGui.BulletText("Green / Blue / Purple / Pink gear is always safe.");
+        ImGui.BulletText("HQ and Collectable items are always safe.");
+        ImGui.BulletText("Any equippable item (gear, weapons, tools) is always safe.");
+        ImGui.BulletText("Items above \"Max Item Level for Junk\" are always safe.");
     }
 
     private void DrawBagToggle(string label, Func<Configuration, bool> get, Action<Configuration, bool> set)

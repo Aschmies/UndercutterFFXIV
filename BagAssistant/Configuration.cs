@@ -35,6 +35,13 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>If true, items that are food or medicine are excluded from Junk.</summary>
     public bool ExcludeConsumablesFromJunk { get; set; } = true;
 
+    /// <summary>
+    /// Hard ceiling on item level for junk deletion. Any item with ItemLevel above this is
+    /// NEVER considered junk regardless of vendor price. Default 1 effectively blocks every
+    /// piece of gear, tool, weapon, etc. — only true ilvl-0 vendor trash can be deleted.
+    /// </summary>
+    public int JunkMaxItemLevel { get; set; } = 1;
+
     /// <summary>If true, show visual zone overlays over the inventory slots.</summary>
     public bool ShowVisualZoneOverlay { get; set; } = false;
 

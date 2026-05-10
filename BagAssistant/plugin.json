@@ -1,5 +1,5 @@
 {
-  "Version": "1.0.20",
+  "Version": "1.0.21",
   "Author": "Aschy",
   "Name": "BagAssistant",
   "Description": "Rule-based inventory sorter with comprehensive filters (category, rarity, level, ilvl, job, HQ, name, price).",
