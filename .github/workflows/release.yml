@@ -94,19 +94,6 @@ jobs:
           $json = ConvertTo-Json -InputObject $arr -Depth 10
           [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $json, [System.Text.Encoding]::UTF8)
 
-      - name: Commit updated pluginmaster.json
-        shell: pwsh
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pluginmaster.json
-          git commit -m "chore: bump pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
-          # Rebase on any commits that landed on main while CI was building (e.g. a developer push)
-          git fetch origin main
-          git rebase origin/main
-          # Push to main regardless of whether we're on a detached HEAD during a tag build
-          git push origin HEAD:refs/heads/main
-
       # Rename latest.zip to UndercutterFFXIV-vX.X.X.zip so the asset has a
       # stable versioned name that matches the DownloadLinkInstall URL in pluginmaster.json.
       - name: Rename zip for release
@@ -131,6 +118,20 @@ jobs:
             **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
           files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
           fail_on_unmatched_files: true
+
+      - name: Commit updated pluginmaster.json
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pluginmaster.json
+          git commit -m "chore: bump pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          # Rebase on any commits that landed on main while CI was building (e.g. a developer push).
+          # -X theirs auto-resolves conflicts by preferring the replayed commit (CI's update).
+          git fetch origin main
+          git rebase -X theirs origin/main
+          # Push to main regardless of whether we're on a detached HEAD during a tag build
+          git push origin HEAD:refs/heads/main
 
   build-and-release-armoury:
     if: startsWith(github.ref_name, 'ac-v')
@@ -203,17 +204,6 @@ jobs:
           $json = ConvertTo-Json -InputObject $arr -Depth 10
           [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $json, [System.Text.Encoding]::UTF8)
 
-      - name: Commit updated pluginmaster.json
-        shell: pwsh
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pluginmaster.json
-          git commit -m "chore: bump ArmouryCleaner pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:refs/heads/main
-
       - name: Rename zip for release
         id: rename_zip
         shell: pwsh
@@ -236,6 +226,17 @@ jobs:
             **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
           files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
           fail_on_unmatched_files: true
+
+      - name: Commit updated pluginmaster.json
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pluginmaster.json
+          git commit -m "chore: bump ArmouryCleaner pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          git fetch origin main
+          git rebase -X theirs origin/main
+          git push origin HEAD:refs/heads/main
 
   build-and-release-questnav:
     if: startsWith(github.ref_name, 'qn-v')
@@ -308,17 +309,6 @@ jobs:
           $json = ConvertTo-Json -InputObject $arr -Depth 10
           [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $json, [System.Text.Encoding]::UTF8)
 
-      - name: Commit updated pluginmaster.json
-        shell: pwsh
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pluginmaster.json
-          git commit -m "chore: bump QuestNav pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:refs/heads/main
-
       - name: Rename zip for release
         id: rename_zip
         shell: pwsh
@@ -341,3 +331,14 @@ jobs:
             **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
           files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
           fail_on_unmatched_files: true
+
+      - name: Commit updated pluginmaster.json
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pluginmaster.json
+          git commit -m "chore: bump QuestNav pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          git fetch origin main
+          git rebase -X theirs origin/main
+          git push origin HEAD:refs/heads/main
