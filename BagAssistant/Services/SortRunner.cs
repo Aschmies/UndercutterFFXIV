@@ -41,7 +41,15 @@ public sealed class SortRunner(InventoryService inventoryService)
             var destIdx = System.Math.Clamp(matched.TargetBagIndex, 0, 3);
             if (!bagFlags[destIdx]) continue; // skip rules that target excluded bags
             var destBag = InventoryService.PlayerBags[destIdx];
-            if (item.Container == destBag) continue; // already in place
+            
+            if (item.Container == destBag)
+            {
+                // To support in-bag compaction, we skip ONLY if there is no free slot above this item
+                if (!inventoryService.TryFindFreeSlot(destBag, out var free) || free >= item.Slot)
+                {
+                    continue; // already compactly in place
+                }
+            }
 
             plan.Add(new SortPlanEntry { Item = item, Rule = matched, DestBag = destBag });
         }

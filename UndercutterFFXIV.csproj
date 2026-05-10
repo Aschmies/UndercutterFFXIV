@@ -2,10 +2,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <Version>1.1.48</Version>
+    <Version>1.1.49</Version>
     <AssemblyName>UndercutterFFXIV</AssemblyName>
     <RootNamespace>UndercutterFFXIV</RootNamespace>
-    <Authors>Market Assistant Dev</Authors>
+    <Authors>Aschy</Authors>
     <Description>Market Master Pro: manual market intelligence and arbitrage analytics for Dalamud</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>

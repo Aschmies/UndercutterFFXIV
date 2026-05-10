@@ -12,7 +12,7 @@ namespace BagAssistant.Services;
 /// </summary>
 public sealed class SortQueueService(InventoryService inventoryService, Configuration config)
 {
-    private readonly Queue<(InventoryItemInfo Item, InventoryType DestBag, int? DestSlot)> queue = new();
+    private readonly Queue<(InventoryItemInfo Item, InventoryType DestBag, int? DestSlot, int? SrcSlotOverride)> queue = new();
     private readonly List<(InventoryType SrcBag, int SrcSlot, InventoryType DestBag, int DestSlot)> moveHistory = new();
     private readonly Stopwatch timer = new();
     private int total;
@@ -25,7 +25,9 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
     public int Total => total;
     public bool CanUndo => moveHistory.Count > 0;
 
-    public void Enqueue(IEnumerable<(InventoryItemInfo Item, InventoryType DestBag, int? DestSlot)> items, string description)
+    public Action? OnComplete { get; set; }
+
+    public void Enqueue(IEnumerable<(InventoryItemInfo Item, InventoryType DestBag, int? DestSlot, int? SrcSlotOverride)> items, string description)
     {
         var added = 0;
         foreach (var entry in items)
@@ -123,3 +125,9 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
         StatusMessage = $"Undo complete: reversed {count} move(s).";
     }
 }
+
+
+
+
+
+

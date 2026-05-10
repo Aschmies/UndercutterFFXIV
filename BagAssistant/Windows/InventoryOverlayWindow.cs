@@ -59,7 +59,8 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
     public override void PreDraw()
     {
         // Pin position above the inventory addon. Width is auto-resize.
-        var pos = new Vector2(anchorPos.X, MathF.Max(0, anchorPos.Y - 36f));
+        var height = Config.ShowVisualZoneOverlay ? 200f : 36f;
+        var pos = new Vector2(anchorPos.X, MathF.Max(0, anchorPos.Y - height));
         ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
         // Slight transparency so it doesn't fight visually with the addon.
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(6, 4));
@@ -277,3 +278,6 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
         return false;
     }
 }
+
+
+

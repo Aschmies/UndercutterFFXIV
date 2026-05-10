@@ -98,7 +98,7 @@ public sealed class BagAssistantWindow : Window, IDisposable
                 DrawRunTab();
                 ImGui.EndTabItem();
             }
-            if (ImGui.BeginTabItem("Settings"))
+            if (ImGui.BeginTabItem("Junk & Settings"))
             {
                 DrawSettingsTab();
                 ImGui.EndTabItem();
@@ -334,7 +334,6 @@ public sealed class BagAssistantWindow : Window, IDisposable
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextDisabled("Need more control? Use the 'Custom Rules' tab to build your own multi-condition rules.");
     }
 
     // ─── Tab: Rules ──────────────────────────────────────────────────────────
@@ -802,20 +801,8 @@ public sealed class BagAssistantWindow : Window, IDisposable
             Config.ShowInventoryOverlay = showOverlay;
             Config.Save();
         }
-        ImGui.TextDisabled("When enabled, a 'Smart Sort' button (and an optional rule button) appears above the inventory addon while it is open.");
+        ImGui.TextDisabled("When enabled, a set of sorting buttons appears above the inventory addon while it is open.");
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Overlay rule button:");
-        var ruleNames = new List<string> { "(none)" };
-        ruleNames.AddRange(Config.Rules.Select(r => r.Name));
-        var idx = Math.Clamp(Config.OverlayRuleIndex + 1, 0, ruleNames.Count - 1);
-        ImGui.SetNextItemWidth(280);
-        if (ImGui.Combo("Rule##overlayrule", ref idx, string.Join("\0", ruleNames) + "\0"))
-        {
-            Config.OverlayRuleIndex = idx - 1;
-            Config.Save();
-        }
-        ImGui.TextDisabled("Pick which custom rule the overlay's second button runs. Build rules in the 'Custom Rules' tab.");
         ImGui.Separator();
         ImGui.TextUnformatted("Inventory Overlay Enhancements");
         

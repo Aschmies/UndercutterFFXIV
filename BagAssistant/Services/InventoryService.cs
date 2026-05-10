@@ -120,9 +120,19 @@ public sealed unsafe class InventoryService(IDataManager dataManager, IPluginLog
         {
             // Prefer free slot
             if (TryFindFreeSlot(destBag, out var free))
+            {
+                if (item.Container == destBag && free >= item.Slot)
+                    return (true, "Already in the best available slot.");
+                
                 destSlot = free;
+            }
             else
+            {
+                if (item.Container == destBag)
+                    return (true, "Bag is full, already inside.");
+                    
                 destSlot = 0; // forces a swap with the first slot
+            }
         }
 
         // No-op if already in place
@@ -204,3 +214,4 @@ public sealed unsafe class InventoryService(IDataManager dataManager, IPluginLog
         return jobs.ToArray();
     }
 }
+

@@ -10,15 +10,15 @@
 using System;
 using System.Reflection;
 
-[assembly: System.Reflection.AssemblyCompanyAttribute("Market Assistant Dev")]
+[assembly: System.Reflection.AssemblyCompanyAttribute("Aschy")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("ArmouryCleaner: filter and discard unwanted items from your armoury chest by job," +
     " level, and item level."))]
-[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.9.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.9+0e0398712fc26ecaa825961f50fd27cdf7dac19e")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.10.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.10+ce8bb251e3881af1adcb93d8712e6353d65314c6")]
 [assembly: System.Reflection.AssemblyProductAttribute("ArmouryCleaner")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ArmouryCleaner")]
-[assembly: System.Reflection.AssemblyVersionAttribute("1.0.9.0")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.10.0")]
 [assembly: System.Reflection.AssemblyMetadataAttribute("RepositoryUrl", "https://github.com/Aschmies/AschyQOL.git")]
 [assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
 [assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]

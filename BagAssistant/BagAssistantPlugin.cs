@@ -92,13 +92,27 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         Configuration.IncludeBag4,
     };
 
+    private void EnqueueWithIntraBagSort(List<QuickMove> moves, string label, bool[] bagFlags)
+    {
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot, m.SrcSlotOverride)), label);
+        
+        SortQueue.OnComplete = () => {
+            var items = InventoryService.ScanBags(bagFlags);
+            var intraMoves = QuickSortPresets.BuildIntraBagSort(items, bagFlags, Configuration);
+            if (intraMoves.Count > 0)
+            {
+                SortQueue.Enqueue(intraMoves.Select(m => (m.Item, m.DestBag, m.DestSlot, m.SrcSlotOverride)), $" (In-bag Sort)");
+            }
+        };
+    }
+
     public void RunSmartSort()
     {
         if (SortQueue.IsBusy) return;
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildSmartSortPlan(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Smart Sort");
+        EnqueueWithIntraBagSort(moves, "Smart Sort", bagFlags);
     }
 
     public void RunPreset(QuickPreset preset)
@@ -107,14 +121,14 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildPresetPlan(preset, items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), preset.Name);
+        EnqueueWithIntraBagSort(moves, preset.Name, bagFlags);
     }
 
     public void RunAllRules()
     {
         if (SortQueue.IsBusy) return;
         var plan = SortRunner.BuildPlan(Configuration);
-        SortQueue.Enqueue(plan.Select(p => (p.Item, p.DestBag, (int?)null)), "Custom rules");
+        SortQueue.Enqueue(plan.Select(p => (p.Item, p.DestBag, (int?)null, (int?)null)), "Custom rules");
     }
 
     public void RunSingleRule(SortRule rule)
@@ -133,7 +147,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
             if (item.Container == destBag) continue;
             moves.Add((item, destBag));
         }
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, (int?)null)), $"Rule: {rule.Name}");
+        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, (int?)null, (int?)null)), $"Rule: {rule.Name}");
     }
 
     // ─── Advanced Sorts ───────────────────────────────────────────────────────
@@ -144,7 +158,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildGathererSort(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "The Gatherer");
+        EnqueueWithIntraBagSort(moves, "The Gatherer", bagFlags);
     }
 
     public void RunRaiderSort()
@@ -153,7 +167,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildRaiderSort(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "The Raider");
+        EnqueueWithIntraBagSort(moves, "The Raider", bagFlags);
     }
 
     public void RunHoarderSort()
@@ -162,7 +176,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildHoarderSort(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "The Hoarder");
+        EnqueueWithIntraBagSort(moves, "The Hoarder", bagFlags);
     }
 
         public List<InventoryItemInfo> GetJunkItems()
@@ -228,7 +242,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildExtractMateria(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Extract Materia (100% spiritbond gear)");
+        EnqueueWithIntraBagSort(moves, "Extract Materia (100% spiritbond gear)", bagFlags);
     }
 
     public void MergeStacks()
@@ -237,7 +251,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildMergeStacks(items, bagFlags);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Merge Stacks");
+        EnqueueWithIntraBagSort(moves, "Merge Stacks", bagFlags);
     }
 
     public void GroupVendorTrash()
@@ -246,7 +260,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.BuildVendorTrashGroup(items, bagFlags, Configuration);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Group Vendor Trash");
+        EnqueueWithIntraBagSort(moves, "Group Vendor Trash", bagFlags);
     }
 
     public List<InventoryItemInfo> SearchByKeyword(string keyword)
@@ -269,7 +283,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.ApplyVisualZones(items, Configuration.VisualZoneLayout, bagFlags, Configuration);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), "Apply Visual Zones");
+        EnqueueWithIntraBagSort(moves, "Apply Visual Zones", bagFlags);
     }
 
     public void SyncLayoutToOtherBag(InventoryType sourceBag, InventoryType targetBag, List<uint?> template)
@@ -278,7 +292,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = QuickSortPresets.ApplyLayoutTemplate(items, template, sourceBag, targetBag);
-        SortQueue.Enqueue(moves.Select(m => (m.Item, m.DestBag, m.DestSlot)), $"Sync layout from {sourceBag} to {targetBag}");
+        EnqueueWithIntraBagSort(moves, $"Sync layout from {sourceBag} to {targetBag}", bagFlags);
     }
 
     public void Dispose()
@@ -290,3 +304,5 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         overlayWindow.Dispose();
     }
 }
+
+

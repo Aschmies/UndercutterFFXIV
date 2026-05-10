@@ -11,6 +11,7 @@ public sealed class QuickMove
     public required InventoryItemInfo Item { get; init; }
     public required InventoryType DestBag { get; init; }
     public int? DestSlot { get; init; }
+    public int? SrcSlotOverride { get; init; }
 }
 
 /// <summary>A one-click sort preset: a filter + destination bag with a friendly name and description.</summary>
@@ -405,10 +406,9 @@ public static class QuickSortPresets
             var targetSlots = kvp.Value;
             var matchedItems = itemsToMove.Where(i => tag switch
             {
-                "Gear" => i.IsEquippable && i.Rarity > 1,
-                "Materials" => i.IsStackable && !IsJunk(i, config) && i.UICategoryRowId != UICategoryMateria && i.UICategoryRowId != UICategoryCrystal,
-                "Consumables" => i.UICategoryRowId == 44 || i.UICategoryRowId == 45 || i.UICategoryRowId == 46, // Medicines, Meals
-                "Materia" => i.UICategoryRowId == UICategoryMateria || i.Name.ToString().Contains("Materia"),
+            "Gear" => i.IsEquippable,
+            "Crafting" => i.IsStackable && !IsJunk(i, config) && i.UICategoryRowId != UICategoryMateria && i.UICategoryRowId != UICategoryCrystal && i.UICategoryRowId != 44 && i.UICategoryRowId != 46 && i.UICategoryRowId != 47 && i.UICategoryRowId != 48,
+            "Gathering" => i.IsStackable && !IsJunk(i, config) && (i.UICategoryRowId == 47 || i.UICategoryRowId == 48 || i.UICategoryRowId == 38 || i.UICategoryRowId == 39 || i.UICategoryRowId == 40),
                 "Crystals" => i.UICategoryRowId == UICategoryCrystal,
                 "Junk" => IsJunk(i, config),
                 _ => false
@@ -449,7 +449,60 @@ public static class QuickSortPresets
 
         return result;
     }
+
+    public static List<QuickMove> BuildIntraBagSort(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags, Configuration config)
+    {
+        var moves = new List<QuickMove>();
+
+        for (int b = 0; b < 4; b++)
+        {
+            if (b >= bagFlags.Count || !bagFlags[b]) continue;
+            var bagType = InventoryService.PlayerBags[b];
+
+            var virtualSlots = new InventoryItemInfo[35];
+            foreach (var item in items.Where(i => i.Container == bagType))
+            {
+                virtualSlots[item.Slot] = item;
+            }
+
+            var bagItems = items.Where(i => i.Container == bagType).ToList();
+            var sorted = bagItems.OrderBy(i => i.IsEquippable ? 0 : 1)
+                                 .ThenBy(i => IsJunk(i, config) ? 1 : 0)
+                                 .ThenByDescending(i => i.ItemLevel)
+                                 .ThenByDescending(i => i.EquipLevel)
+                                 .ThenByDescending(i => i.Rarity)
+                                 .ThenByDescending(i => i.UICategoryRowId)
+                                 .ThenBy(i => i.ItemId)
+                                 .ThenByDescending(i => i.IsHQ)
+                                 .ToList();
+
+            for (int k = 0; k < sorted.Count; k++)
+            {
+                var targetItem = sorted[k];
+                if (virtualSlots[k] != targetItem)
+                {
+                    int currentIndex = -1;
+                    for (int s = 0; s < 35; s++)
+                    {
+                        if (virtualSlots[s] == targetItem)
+                        {
+                            currentIndex = s;
+                            break;
+                        }
+                    }
+
+                    if (currentIndex != -1)
+                    {
+                        moves.Add(new QuickMove { Item = targetItem, DestBag = bagType, DestSlot = k, SrcSlotOverride = currentIndex });
+                        
+                        var temp = virtualSlots[k];
+                        virtualSlots[k] = virtualSlots[currentIndex];
+                        virtualSlots[currentIndex] = temp;
+                    }
+                }
+            }
+        }
+        return moves;
+    }
 }
-
-
 
