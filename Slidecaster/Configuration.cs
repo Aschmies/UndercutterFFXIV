@@ -42,6 +42,10 @@ public sealed class Configuration : IPluginConfiguration
     public bool EnableProgressMarkerStartOffset { get; set; } = false;
     public float ProgressMarkerStartOffsetPx { get; set; } = 0f;
 
+    // Vertical pixel offset applied to the overlay's Y center. Negative values raise the overlay
+    // so it lines up with the visible cast progress bar rather than the addon's full bounding box.
+    public float OverlayYOffsetPx { get; set; } = -8f;
+
     // User-defined defaults snapshot.
     public int DefaultBaseSafeWindowMs { get; set; } = 500;
     public int DefaultLatencyCompensationMs { get; set; } = 0;
@@ -62,6 +66,7 @@ public sealed class Configuration : IPluginConfiguration
     public float DefaultLineHeightScale { get; set; } = 1.2f;
     public bool DefaultEnableProgressMarkerStartOffset { get; set; } = false;
     public float DefaultProgressMarkerStartOffsetPx { get; set; } = 0f;
+    public float DefaultOverlayYOffsetPx { get; set; } = -8f;
 
     private IDalamudPluginInterface? pluginInterface;
 
@@ -88,6 +93,7 @@ public sealed class Configuration : IPluginConfiguration
         DefaultLineHeightScale = LineHeightScale;
         DefaultEnableProgressMarkerStartOffset = EnableProgressMarkerStartOffset;
         DefaultProgressMarkerStartOffsetPx = ProgressMarkerStartOffsetPx;
+        DefaultOverlayYOffsetPx = OverlayYOffsetPx;
         Save();
     }
 
@@ -112,6 +118,60 @@ public sealed class Configuration : IPluginConfiguration
         LineHeightScale = DefaultLineHeightScale;
         EnableProgressMarkerStartOffset = DefaultEnableProgressMarkerStartOffset;
         ProgressMarkerStartOffsetPx = DefaultProgressMarkerStartOffsetPx;
+        OverlayYOffsetPx = DefaultOverlayYOffsetPx;
+        Save();
+    }
+
+    /// <summary>
+    /// Hard-resets every setting (current and the user-saved defaults snapshot) back to the
+    /// values shipped with the plugin. This overrides any "Save Current as Defaults" the user
+    /// has previously stored.
+    /// </summary>
+    public void ResetToFactoryDefaults()
+    {
+        // Live settings
+        BaseSafeWindowMs = 500;
+        LatencyCompensationMs = 0;
+        ShowSafeText = true;
+        PlaySafeMoveSound = false;
+        SafeCueVolume = 0.6f;
+        OverlayOpacity = 0.45f;
+        OverlayHeightScale = 1.0f;
+        SafeBarHeightScale = 1.0f;
+        ShowCastBarBorder = true;
+        OverlayColorR = 0.10f;
+        OverlayColorG = 0.90f;
+        OverlayColorB = 0.30f;
+        OverlayEndTrimPx = 0f;
+        RoundRightSide = false;
+        DrawAsLine = false;
+        LineThickness = 3.0f;
+        LineHeightScale = 1.2f;
+        EnableProgressMarkerStartOffset = false;
+        ProgressMarkerStartOffsetPx = 0f;
+        OverlayYOffsetPx = -8f;
+
+        // Overwrite the user-saved defaults snapshot with the same factory values.
+        DefaultBaseSafeWindowMs = BaseSafeWindowMs;
+        DefaultLatencyCompensationMs = LatencyCompensationMs;
+        DefaultShowSafeText = ShowSafeText;
+        DefaultPlaySafeMoveSound = PlaySafeMoveSound;
+        DefaultSafeCueVolume = SafeCueVolume;
+        DefaultOverlayOpacity = OverlayOpacity;
+        DefaultOverlayHeightScale = OverlayHeightScale;
+        DefaultSafeBarHeightScale = SafeBarHeightScale;
+        DefaultShowCastBarBorder = ShowCastBarBorder;
+        DefaultOverlayColorR = OverlayColorR;
+        DefaultOverlayColorG = OverlayColorG;
+        DefaultOverlayColorB = OverlayColorB;
+        DefaultOverlayEndTrimPx = OverlayEndTrimPx;
+        DefaultRoundRightSide = RoundRightSide;
+        DefaultDrawAsLine = DrawAsLine;
+        DefaultLineThickness = LineThickness;
+        DefaultLineHeightScale = LineHeightScale;
+        DefaultEnableProgressMarkerStartOffset = EnableProgressMarkerStartOffset;
+        DefaultProgressMarkerStartOffsetPx = ProgressMarkerStartOffsetPx;
+        DefaultOverlayYOffsetPx = OverlayYOffsetPx;
         Save();
     }
 

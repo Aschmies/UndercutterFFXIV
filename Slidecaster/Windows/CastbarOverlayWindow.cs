@@ -215,7 +215,7 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
 
         var width = x2 - x1;
         var overlayHeight = castbarSize.Y * Math.Clamp(configuration.OverlayHeightScale, 0.5f, 3.0f);
-        var overlayY1 = castbarPos.Y + (castbarSize.Y - overlayHeight) * 0.5f;
+        var overlayY1 = castbarPos.Y + (castbarSize.Y - overlayHeight) * 0.5f + configuration.OverlayYOffsetPx;
         var overlayY2 = overlayY1 + overlayHeight;
 
         var safeBarHeight = overlayHeight * Math.Clamp(configuration.SafeBarHeightScale, 0.2f, 3.0f);
