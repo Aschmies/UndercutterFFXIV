@@ -1,10 +1,10 @@
 {
-  "Version": "1.0.4",
+  "Version": "1.0.5",
   "Author": "Market Assistant Dev",
   "Name": "Armoury Cleaner",
   "Description": "Filter and discard unwanted gear from your armoury chest.",
   "InternalName": "ArmouryCleaner",
-  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+  "RepoUrl": "https://github.com/Aschmies/AschyQOL",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
   "LoadRequiredState": 0,
