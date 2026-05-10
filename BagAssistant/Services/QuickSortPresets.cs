@@ -321,8 +321,20 @@ public static class QuickSortPresets
     /// </summary>
         public static bool IsJunk(InventoryItemInfo i, Configuration config)
     {
+        // ─── HARD SAFETY LOCKS — these cannot be disabled by user toggles ───
+        // 1) Only white-rarity items can EVER be junk. Green / Blue / Purple / Pink gear and
+        //    HQ / collectable items are categorically excluded.
         if (i.Rarity != 1) return false;
-        if (config.ExcludeGearFromJunk && (i.IsEquippable || i.Name.EndsWith("Arms") || i.Name.EndsWith("Coffer") || i.Name.EndsWith("Attire") || i.Name.EndsWith("Weapon") || i.Name.EndsWith("Equipment"))) return false;
+        if (i.IsHQ || i.IsCollectable) return false;
+        // 2) Item level ceiling — anything with an ilvl above the configured floor is locked out.
+        //    Default = 1, which blocks every piece of equippable gear, every tool, etc.
+        if (i.ItemLevel > (uint)Math.Max(0, config.JunkMaxItemLevel)) return false;
+        // 3) Equippable items are always excluded as a redundant safety net even if the user
+        //    accidentally raises JunkMaxItemLevel above the gear they own.
+        if (i.IsEquippable) return false;
+
+        // ─── User-configurable filters ───
+        if (config.ExcludeGearFromJunk && (i.Name.EndsWith("Arms") || i.Name.EndsWith("Coffer") || i.Name.EndsWith("Attire") || i.Name.EndsWith("Weapon") || i.Name.EndsWith("Equipment"))) return false;
         if (i.UICategoryRowId == 59 || i.UICategoryRowId == 58) return false;
         if (config.ExcludeConsumablesFromJunk && (i.UICategoryRowId == 44 || i.UICategoryRowId == 46)) return false;
         if (config.ExcludeCraftingFromJunk && i.IsStackable) return false;
