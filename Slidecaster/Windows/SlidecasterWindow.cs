@@ -65,6 +65,13 @@ public sealed class SlidecasterWindow : Window
             configuration.Save();
         }
 
+        var showBorder = configuration.ShowCastBarBorder;
+        if (ImGui.Checkbox("Show cast bar frame border", ref showBorder))
+        {
+            configuration.ShowCastBarBorder = showBorder;
+            configuration.Save();
+        }
+
         var showSafeText = configuration.ShowSafeText;
         if (ImGui.Checkbox("Show SAFE TO MOVE text", ref showSafeText))
         {

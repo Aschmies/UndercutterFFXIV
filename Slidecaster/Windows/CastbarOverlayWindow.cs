@@ -156,7 +156,8 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
             : new Vector4(1.0f, 0.75f, 0.1f, 0.95f));
 
         drawList.AddRectFilled(new Vector2(safeX, y1), new Vector2(x2, y2), isCurrentlySafe ? activeSafeZoneColor : safeZoneColor);
-        drawList.AddRect(new Vector2(x1, y1), new Vector2(x2, y2), outlineColor, 0f, ImDrawFlags.None, 1.2f);
+        if (configuration.ShowCastBarBorder)
+            drawList.AddRect(new Vector2(x1, y1), new Vector2(x2, y2), outlineColor, 0f, ImDrawFlags.None, 1.2f);
 
         drawList.AddLine(
             new Vector2(progressX, y1 - 2f),
