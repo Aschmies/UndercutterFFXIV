@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -83,10 +84,22 @@ namespace QuestNav
             if (quests.Count == 0)
                 return string.Empty;
 
-            // Track objective-relevant state so progression and target changes trigger a refresh.
-            return string.Join("|", quests
-                .OrderBy(q => q.QuestId)
-                .Select(q => $"{q.QuestId}:{q.Sequence}:{q.TerritoryId}:{q.WorldX:F2}:{q.WorldZ:F2}"));
+            // Track objective-relevant state including current step location so progression triggers arrow update.
+            var parts = new List<string>();
+            foreach (var q in quests.OrderBy(q => q.QuestId))
+            {
+                var stepPart = "";
+                if (q.AllSteps != null && q.Sequence < q.AllSteps.Count)
+                {
+                    var currentStep = q.AllSteps[(int)q.Sequence];
+                    if (currentStep != null)
+                    {
+                        stepPart = $":{currentStep.NpcWorldX?.ToString("F2") ?? ""}:{currentStep.NpcWorldZ?.ToString("F2") ?? ""}";
+                    }
+                }
+                parts.Add($"{q.QuestId}:{q.Sequence}:{q.TerritoryId}:{q.WorldX:F2}:{q.WorldZ:F2}{stepPart}");
+            }
+            return string.Join("|", parts);
         }
 
         private void DrawUI() => windowSystem.Draw();

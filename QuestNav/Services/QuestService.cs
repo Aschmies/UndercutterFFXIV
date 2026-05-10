@@ -154,7 +154,6 @@ namespace QuestNav.Services
 
                 // In FFXIV Lumina, quest steps are stored as sequential entries in the Quest sheet.
                 // Each step is indexed via (questId | (stepIndex << 16))
-                bool foundAnySteps = false;
                 for (uint stepIdx = 0; stepIdx < 100; stepIdx++)
                 {
                     var stepQuestId = (uint)questId | (stepIdx << 16);
@@ -164,8 +163,6 @@ namespace QuestNav.Services
                     
                     var qData = stepRow.Value;
                     if (qData.RowId == 0) break;
-                    
-                    foundAnySteps = true;
                     
                     var title = qData.Name.ToString();
                     var description = $"Step {stepIdx}";
