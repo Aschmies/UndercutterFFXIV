@@ -106,15 +106,15 @@
     "Description": "Adds a cast-bar overlay that marks the slidecasting timeframe so you can start moving without interrupting the cast. Includes an optional audio cue when the safe window begins.",
     "Changelog": "v1.0.0: Initial release with cast-bar safe-zone overlay, configurable timing, and optional safe-move sound cue.",
     "InternalName": "Slidecaster",
-    "AssemblyVersion": "1.0.3.0",
-    "TestingAssemblyVersion": "1.0.3.0",
+    "AssemblyVersion": "1.0.4.0",
+    "TestingAssemblyVersion": "1.0.4.0",
     "IsHide": false,
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/AschyQOL",
     "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",
-    "DownloadLinkInstall": "https://github.com/Aschmies/AschyQOL/releases/download/sc-v1.0.3/Slidecaster-sc-v1.0.3.zip",
-    "DownloadLinkUpdate": "https://github.com/Aschmies/AschyQOL/releases/download/sc-v1.0.3/Slidecaster-sc-v1.0.3.zip",
-    "DownloadLinkTesting": "https://github.com/Aschmies/AschyQOL/releases/download/sc-v1.0.3/Slidecaster-sc-v1.0.3.zip",
+    "DownloadLinkInstall": "https://github.com/Aschmies/AschyQOL/releases/download/sc-v1.0.4/Slidecaster-sc-v1.0.4.zip",
+    "DownloadLinkUpdate": "https://github.com/Aschmies/AschyQOL/releases/download/sc-v1.0.4/Slidecaster-sc-v1.0.4.zip",
+    "DownloadLinkTesting": "https://github.com/Aschmies/AschyQOL/releases/download/sc-v1.0.4/Slidecaster-sc-v1.0.4.zip",
     "DalamudApiLevel": 15,
     "ApplicableVersion": "any",
     "LoadRequiredState": 0,
@@ -129,7 +129,7 @@
       "slidecast",
       "overlay"
     ],
-    "LastUpdated": 1778400315,
+    "LastUpdated": 1778400858,
     "DownloadCount": 0
   }
 ]
