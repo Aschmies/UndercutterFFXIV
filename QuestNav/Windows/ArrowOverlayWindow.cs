@@ -41,13 +41,19 @@ namespace QuestNav.Windows
             SizeCondition = ImGuiCond.Always;
         }
 
-        public void SetNavTarget(QuestEntry? entry) => navTarget = entry;
+        public void SetNavTarget(QuestEntry? entry)
+        {
+            navTarget = entry;
+            IsOpen = entry != null;
+        }
 
         public void Dispose() { }
 
         public override void PreDraw()
         {
-            IsOpen = config.ShowArrow && navTarget != null && clientState.IsLoggedIn;
+            // Close if arrow display disabled or logged out; SetNavTarget handles opening
+            if (!config.ShowArrow || !clientState.IsLoggedIn)
+                IsOpen = false;
         }
 
         public override unsafe void Draw()
