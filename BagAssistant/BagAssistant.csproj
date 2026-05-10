@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <AssemblyName>BagAssistant</AssemblyName>
+    <RootNamespace>BagAssistant</RootNamespace>
+    <Authors>Market Assistant Dev</Authors>
+    <Description>BagAssistant: rule-based inventory sorter with comprehensive filters (category, rarity, level, ilvl, job, HQ, name, price, etc.).</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+</Project>

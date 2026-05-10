@@ -1,0 +1,15 @@
+{
+  "Version": "1.0.0",
+  "Author": "Market Assistant Dev",
+  "Name": "BagAssistant",
+  "Description": "Rule-based inventory sorter with comprehensive filters (category, rarity, level, ilvl, job, HQ, name, price).",
+  "InternalName": "BagAssistant",
+  "RepoUrl": "https://github.com/Aschmies/AschyQOL",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "Tags": ["inventory", "sort", "organize", "filter", "bags"]
+}

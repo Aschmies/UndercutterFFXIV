@@ -8,13 +8,14 @@ on:
       - 'ac-v*'
       - 'qn-v*'
       - 'sc-v*'
+      - 'ba-v*'
 
 permissions:
   contents: write   # needed to create releases and push pluginmaster.json
 
 jobs:
   build-and-release:
-    if: "!startsWith(github.ref_name, 'ac-v') && !startsWith(github.ref_name, 'qn-v') && !startsWith(github.ref_name, 'sc-v')"
+    if: "!startsWith(github.ref_name, 'ac-v') && !startsWith(github.ref_name, 'qn-v') && !startsWith(github.ref_name, 'sc-v') && !startsWith(github.ref_name, 'ba-v')"
     runs-on: windows-latest
 
     steps:
@@ -486,6 +487,146 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pluginmaster.json
           git commit -m "chore: bump Slidecaster pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
+          git fetch origin main
+          git rebase -X theirs origin/main
+          git push origin HEAD:refs/heads/main
+
+
+  build-and-release-bag:
+    if: startsWith(github.ref_name, 'ba-v')
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          $out = "${{ github.workspace }}\dalamud"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip" `
+            -OutFile "$out\dalamud.zip"
+          Expand-Archive -Path "$out\dalamud.zip" -DestinationPath $out -Force
+          Remove-Item "$out\dalamud.zip"
+          echo "DALAMUD_HOME=$out" >> $env:GITHUB_ENV
+
+      - name: Restore dependencies
+        run: dotnet restore BagAssistant\BagAssistant.csproj
+
+      - name: Build Release
+        run: dotnet build BagAssistant\BagAssistant.csproj --configuration Release --no-restore
+
+      - name: Locate plugin zip
+        id: find_zip
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path "BagAssistant\bin\Release" -Recurse -Filter "latest.zip" |
+            Select-Object -First 1
+          if (-not $zip) { throw "Could not find latest.zip under BagAssistant\bin\Release" }
+          Write-Host "Found zip: $($zip.FullName)"
+          echo "ZIP_PATH=$($zip.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Parse version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"      # e.g. ba-v1.0.0
+          $ver = $tag -replace '^ba-v', ''      # e.g. 1.0.0
+          $parts = $ver.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $full = $parts -join '.'
+          echo "SHORT=$ver"   >> $env:GITHUB_OUTPUT
+          echo "FULL=$full"   >> $env:GITHUB_OUTPUT
+
+      - name: Update pluginmaster.json
+        shell: pwsh
+        run: |
+          $arr   = Get-Content pluginmaster.json -Raw | ConvertFrom-Json
+          $entry = $arr | Where-Object { $_.InternalName -eq "BagAssistant" }
+          $ver   = "${{ steps.version.outputs.FULL }}"
+          $tag   = "${{ github.ref_name }}"
+          $dlUrl = "https://github.com/Aschmies/AschyQOL/releases/download/$tag/BagAssistant-$tag.zip"
+
+          if (-not $entry) {
+            $entry = [pscustomobject]@{
+              Author                 = "Market Assistant Dev"
+              Name                   = "BagAssistant"
+              Punchline              = "Rule-based inventory sorter with comprehensive filters."
+              Description            = "Define a stack of sorting rules and BagAssistant will route items to the right bag every time. Filter by item category, rarity, level range, item level, class/job, HQ, tradeable, name match, vendor price, item ID and more."
+              Changelog              = "v${{ steps.version.outputs.SHORT }}: Initial release. Rule list with vast filter set and per-rule destination bag."
+              InternalName           = "BagAssistant"
+              AssemblyVersion        = $ver
+              TestingAssemblyVersion = $ver
+              IsHide                 = $false
+              IsTestingExclusive     = $false
+              RepoUrl                = "https://github.com/Aschmies/AschyQOL"
+              IconUrl                = "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png"
+              DownloadLinkInstall    = $dlUrl
+              DownloadLinkUpdate     = $dlUrl
+              DownloadLinkTesting    = $dlUrl
+              DalamudApiLevel        = 15
+              ApplicableVersion      = "any"
+              LoadRequiredState      = 0
+              LoadSync               = $false
+              CanUnloadAsync         = $false
+              LoadPriority           = 0
+              SupportsProfiles       = $false
+              AcceptsFeedback        = $true
+              Tags                   = @("inventory", "sort", "organize", "filter", "bags")
+              LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+              DownloadCount          = 0
+            }
+            $arr = @($arr + $entry)
+          } else {
+            $entry.AssemblyVersion        = $ver
+            $entry.TestingAssemblyVersion = $ver
+            $entry.LastUpdated            = [System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+            $entry.DownloadLinkInstall    = $dlUrl
+            $entry.DownloadLinkUpdate     = $dlUrl
+            $entry.DownloadLinkTesting    = $dlUrl
+          }
+
+          $json = ConvertTo-Json -InputObject $arr -Depth 10
+          [System.IO.File]::WriteAllText("$PWD\pluginmaster.json", $json, [System.Text.Encoding]::UTF8)
+
+      - name: Rename zip for release
+        id: rename_zip
+        shell: pwsh
+        run: |
+          $src  = "${{ steps.find_zip.outputs.ZIP_PATH }}"
+          $dest = Join-Path (Split-Path $src) "BagAssistant-${{ github.ref_name }}.zip"
+          Rename-Item $src $dest
+          Write-Host "Renamed to: $dest"
+          echo "RELEASE_ZIP=$dest" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            ### BagAssistant ${{ steps.version.outputs.SHORT }}
+
+            **Install:** Add the custom repo URL to Dalamud (see README), then install "BagAssistant".
+            **Update:** Click the Update button next to the plugin in the Dalamud plugin installer.
+          files: ${{ steps.rename_zip.outputs.RELEASE_ZIP }}
+          fail_on_unmatched_files: true
+
+      - name: Commit updated pluginmaster.json
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pluginmaster.json
+          git commit -m "chore: bump BagAssistant pluginmaster.json to ${{ steps.version.outputs.SHORT }}"
           git fetch origin main
           git rebase -X theirs origin/main
           git push origin HEAD:refs/heads/main
