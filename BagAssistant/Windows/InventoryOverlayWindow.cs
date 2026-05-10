@@ -294,9 +294,22 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
             var tag = Config.VisualZoneLayout?[globalIndex] ?? "None";
             if (string.IsNullOrEmpty(tag) || tag == "None") continue;
 
+            // Inset slightly so adjacent zone cells don't visually merge into a single blob.
+            var inset = 1.5f * scale;
+            var rectMin = new Vector2(min.X + inset, min.Y + inset);
+            var rectMax = new Vector2(max.X - inset, max.Y - inset);
+            var rounding = 4f * scale;
+
             var color = TagColor(tag);
-            color.W *= Config.VisualZoneOverlayOpacity;
-            drawList.AddRectFilled(min, max, ImGui.ColorConvertFloat4ToU32(color), 4f * scale);
+            // Fill: very subtle wash so item icons remain fully readable.
+            var fill = color;
+            fill.W = Config.VisualZoneOverlayOpacity * 0.35f;
+            drawList.AddRectFilled(rectMin, rectMax, ImGui.ColorConvertFloat4ToU32(fill), rounding);
+
+            // Border: full requested opacity, gives a crisp zone outline.
+            var border = color;
+            border.W = MathF.Min(1f, Config.VisualZoneOverlayOpacity * 1.4f);
+            drawList.AddRect(rectMin, rectMax, ImGui.ColorConvertFloat4ToU32(border), rounding, ImDrawFlags.None, 1.4f * scale);
 
             if (Config.ShowVisualZoneNumbers)
             {
