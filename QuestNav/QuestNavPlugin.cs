@@ -21,6 +21,7 @@ namespace QuestNav
         [PluginService] internal static IGameGui GameGui                      { get; private set; } = null!;
         [PluginService] internal static IPluginLog Log                        { get; private set; } = null!;
         [PluginService] internal static IFramework Framework                  { get; private set; } = null!;
+        [PluginService] internal static IObjectTable ObjectTable              { get; private set; } = null!;
 
         private const string CommandName = "/questnav";
 
@@ -40,7 +41,7 @@ namespace QuestNav
             Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
             Configuration.Initialize(PluginInterface);
 
-            questService  = new QuestService(DataManager, AetheryteList, Log);
+            questService  = new QuestService(DataManager, AetheryteList, ObjectTable, Log);
             arrowOverlay  = new ArrowOverlayWindow(Configuration, ClientState);
             mainWindow    = new QuestNavWindow(questService, ClientState, GameGui, Configuration, arrowOverlay);
 

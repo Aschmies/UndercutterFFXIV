@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace QuestNav.Services
 {
@@ -47,6 +48,7 @@ namespace QuestNav.Services
     public sealed unsafe class QuestService(
         IDataManager dataManager,
         IAetheryteList aetheryteList,
+        IObjectTable objectTable,
         IPluginLog log)
     {
         public List<QuestEntry> GetActiveQuests()
@@ -379,6 +381,34 @@ namespace QuestNav.Services
             var mx = 41f / scale * ((worldX + mapRow.OffsetX) / 2048f + 1f) / 2f + 1f;
             var my = 41f / scale * ((worldZ + mapRow.OffsetY) / 2048f + 1f) / 2f + 1f;
             return (mx, my);
+        }
+
+        /// <summary>
+        /// Attempts to find an NPC by name in the current object table and returns their coordinates.
+        /// Useful for resolving objective targets when Lumina data doesn't have precise step locations.
+        /// </summary>
+        public (float? WorldX, float? WorldZ)? FindNpcCoordinates(string npcName)
+        {
+            if (string.IsNullOrWhiteSpace(npcName) || objectTable == null)
+                return null;
+
+            try
+            {
+                // Search object table for an NPC with matching name
+                var npc = objectTable
+                    .FirstOrDefault(o => o?.Name?.TextValue == npcName);
+
+                if (npc != null)
+                {
+                    return (npc.Position.X, npc.Position.Z);
+                }
+            }
+            catch (Exception ex)
+            {
+                log?.Debug(ex, $"[QuestNav] Failed to find NPC '{npcName}' in object table");
+            }
+
+            return null;
         }
     }
 }

@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Text.RegularExpressions;
 
 namespace QuestNav.Windows
 {
@@ -124,7 +125,7 @@ namespace QuestNav.Windows
             if (target == null) config.NavQuestId = 0;  // quest finished/abandoned
         }
 
-        private static QuestEntry ResolveCurrentObjectiveTarget(QuestEntry quest)
+        private QuestEntry ResolveCurrentObjectiveTarget(QuestEntry quest)
         {
             if (quest.AllSteps == null || quest.AllSteps.Count == 0)
                 return quest;
@@ -164,6 +165,31 @@ namespace QuestNav.Windows
                 targetStep = quest.AllSteps.FirstOrDefault(HasStepLocation);
             }
 
+            // If we found a step but the location is just the quest giver, try to find the NPC
+            // mentioned in the objective text (e.g., "Speak with Yellow Moon")
+            if (targetStep != null && HasStepLocation(targetStep))
+            {
+                // Try to extract NPC name from objective and look them up in the current zone
+                var objectives = targetStep.Objectives;
+                if (!string.IsNullOrWhiteSpace(objectives))
+                {
+                    var npcName = ExtractNpcNameFromObjective(objectives);
+                    if (!string.IsNullOrWhiteSpace(npcName))
+                    {
+                        var npcCoords = questService.FindNpcCoordinates(npcName);
+                        if (npcCoords.HasValue && npcCoords.Value.WorldX.HasValue && npcCoords.Value.WorldZ.HasValue)
+                        {
+                            // Found the NPC! Update the target to use their position
+                            targetStep = targetStep with
+                            {
+                                NpcWorldX = npcCoords.Value.WorldX,
+                                NpcWorldZ = npcCoords.Value.WorldZ,
+                            };
+                        }
+                    }
+                }
+            }
+
             if (targetStep == null)
                 return quest;
 
@@ -176,6 +202,34 @@ namespace QuestNav.Windows
                 MapX = targetStep.NpcMapX ?? quest.MapX,
                 MapY = targetStep.NpcMapY ?? quest.MapY,
             };
+        }
+
+        private static string? ExtractNpcNameFromObjective(string objective)
+        {
+            // Look for "Speak with <NPC Name>" or "Talk to <NPC Name>" pattern
+            var patterns = new[] { 
+                @"[Ss]peak with (.+?)(?:\.|$| in )",
+                @"[Tt]alk to (.+?)(?:\.|$| in )",
+                @"Meet with (.+?)(?:\.|$| in )",
+                @"Return to (.+?)(?:\.|$| in )"
+            };
+
+            foreach (var pattern in patterns)
+            {
+                var match = Regex.Match(objective, pattern);
+                if (match.Success && match.Groups.Count > 1)
+                {
+                    var name = match.Groups[1].Value.Trim();
+                    // Filter out common words that aren't names
+                    if (!string.IsNullOrWhiteSpace(name) && name.Length > 1 && 
+                        !name.Equals("the") && !name.Equals("a"))
+                    {
+                        return name;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private static bool HasStepLocation(QuestStep step)
