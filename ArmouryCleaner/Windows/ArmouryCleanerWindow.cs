@@ -16,13 +16,15 @@ namespace ArmouryCleaner.Windows
         private Configuration Config => plugin.Configuration;
 
         private List<ArmouryItem> scanResults = [];
-        private bool confirmingMoveAll;
+        private bool confirmingMoveToInventory;
+        private bool confirmingDiscardAll;
         private string statusMessage = string.Empty;
 
-        // Discard queue — processes one item per Draw() tick with a random 800-1100ms delay
-        private readonly Queue<ArmouryItem> discardQueue = new();
-        private int discardTotal;
-        private readonly Stopwatch discardTimer = new();
+        // Discard/Move queue — processes one item per Draw() tick with a random 800-1100ms delay
+        private readonly Queue<ArmouryItem> processQueue = new();
+        private int queueTotal;
+        private bool queueIsDiscard; // true = discard, false = move to inventory
+        private readonly Stopwatch queueTimer = new();
         private int nextDelayMs;
         private static readonly Random Rng = new();
 
@@ -44,6 +46,7 @@ namespace ArmouryCleaner.Windows
         {
             this.plugin = plugin;
             this.armouryService = armouryService;
+            IsOpen = false;
             SizeConstraints = new WindowSizeConstraints
             {
                 MinimumSize = new Vector2(560, 420),
@@ -67,29 +70,31 @@ namespace ArmouryCleaner.Windows
 
         private void TickDiscardQueue()
         {
-            if (discardQueue.Count == 0) return;
-            if (discardTimer.IsRunning && discardTimer.ElapsedMilliseconds < nextDelayMs) return;
+            if (processQueue.Count == 0) return;
+            if (queueTimer.IsRunning && queueTimer.ElapsedMilliseconds < nextDelayMs) return;
 
-            var item = discardQueue.Dequeue();
-            var (success, msg) = DiscardWithFallback(item);
-            var done = discardTotal - discardQueue.Count;
+            var item = processQueue.Dequeue();
+            var (success, msg) = queueIsDiscard ? DiscardWithFallback(item) : armouryService.MoveToInventory(item);
+            var done = queueTotal - processQueue.Count;
             if (success)
                 scanResults.Remove(item);
 
-            if (discardQueue.Count == 0)
+            if (processQueue.Count == 0)
             {
-                discardTimer.Stop();
-                statusMessage = $"Discarded {done}/{discardTotal} item(s).";
+                queueTimer.Stop();
+                var action = queueIsDiscard ? "Discarded" : "Moved";
+                statusMessage = $"{action} {done}/{queueTotal} item(s).";
             }
             else
             {
                 nextDelayMs = Rng.Next(800, 1101);
-                discardTimer.Restart();
-                statusMessage = $"Discarding... {done}/{discardTotal} (next in {nextDelayMs}ms)";
+                queueTimer.Restart();
+                var action = queueIsDiscard ? "Discarding" : "Moving";
+                statusMessage = $"{action}... {done}/{queueTotal} (next in {nextDelayMs}ms)";
             }
 
             if (!success)
-                statusMessage = $"[{done}/{discardTotal}] {msg}";
+                statusMessage = $"[{done}/{queueTotal}] {msg}";
         }
 
         private static void DrawInstructions()
@@ -230,7 +235,8 @@ namespace ArmouryCleaner.Windows
             if (ImGui.Button("Scan Armoury##scan"))
             {
                 scanResults = armouryService.ScanCandidates(Config);
-                confirmingMoveAll = false;
+                confirmingMoveToInventory = false;
+                confirmingDiscardAll = false;
                 statusMessage = scanResults.Count == 0
                     ? "No matching items found."
                     : $"Found {scanResults.Count} candidate item(s).";
@@ -250,38 +256,9 @@ namespace ArmouryCleaner.Windows
                 return;
             }
 
-            // Auto-discard toggle
-            var autoDiscard = Config.AutoDiscard;
-            if (ImGui.Checkbox("Auto-Discard (skip inventory step)##autodiscard", ref autoDiscard))
-            {
-                Config.AutoDiscard = autoDiscard;
-                Config.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("When enabled, items are moved to a free inventory slot and immediately discarded.\nWhen disabled, items are only moved to your inventory so you can review them first.");
-            if (Config.AutoDiscard)
-            {
-                ImGui.SameLine();
-                var direct = Config.DiscardDirectlyFromArmoury;
-                if (ImGui.Checkbox("Discard from armoury directly##directdiscard", ref direct))
-                {
-                    Config.DiscardDirectlyFromArmoury = direct;
-                    Config.Save();
-                }
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Skip the move-to-inventory step entirely — discard directly from the armoury slot.\nFaster and avoids touching your bags. Falls back to move+discard if the game rejects it.");
-            }
-            if (Config.AutoDiscard)
-            {
-                ImGui.SameLine();
-                ImGui.TextColored(new Vector4(1f, 0.4f, 0.2f, 1f), "WARNING: items will be permanently deleted!");
-            }
-
             ImGui.TextUnformatted($"{scanResults.Count} item(s) matched.");
-            var actionLabel = Config.AutoDiscard ? "Discard" : "Move";
-            var actionTooltip = Config.AutoDiscard
-                ? "Permanently discard this item immediately."
-                : "Move this item to your inventory so you can right-click → Discard it.";
+            var actionLabel = "Move to Inventory";
+            var actionTooltip = "Move this item to your inventory so you can manually discard or keep it.";
 
             if (ImGui.BeginTable("##armouryResults", 6,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit,
@@ -314,9 +291,7 @@ namespace ArmouryCleaner.Windows
                     ImGui.TableNextColumn();
                     if (ImGui.SmallButton($"{actionLabel}##act{i}"))
                     {
-                        var (success, msg) = Config.AutoDiscard
-                            ? DiscardWithFallback(item)
-                            : armouryService.MoveToInventory(item);
+                        var (success, msg) = armouryService.MoveToInventory(item);
                         statusMessage = msg;
                         if (success)
                         {
@@ -332,71 +307,79 @@ namespace ArmouryCleaner.Windows
             }
 
             ImGui.Spacing();
-            var bulkLabel = Config.AutoDiscard
-                ? $"Discard All {scanResults.Count}##discardall"
-                : $"Move All {scanResults.Count} to Inventory##moveall";
+            var moveLabel = $"Move To Inventory {scanResults.Count}##moveall";
+            var discardLabel = $"Discard All {scanResults.Count}##discardall";
 
-            // While a queued discard is in progress, show progress instead of the normal buttons
-            if (discardQueue.Count > 0)
+            // While a queued operation is in progress, show progress instead of the normal buttons
+            if (processQueue.Count > 0)
             {
-                var done = discardTotal - discardQueue.Count;
-                ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1f), $"Discarding {done}/{discardTotal}...");
+                var done = queueTotal - processQueue.Count;
+                var action = queueIsDiscard ? "Discarding" : "Moving";
+                ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1f), $"{action} {done}/{queueTotal}...");
                 ImGui.SameLine();
                 if (ImGui.Button("Cancel Queue##cancelQueue"))
                 {
-                    discardQueue.Clear();
-                    discardTimer.Stop();
-                    statusMessage = $"Cancelled — {done} item(s) already discarded.";
+                    processQueue.Clear();
+                    queueTimer.Stop();
+                    statusMessage = $"Cancelled — {done} item(s) already processed.";
                 }
             }
-            else if (!confirmingMoveAll)
+            else if (!confirmingMoveToInventory && !confirmingDiscardAll)
             {
-                if (ImGui.Button(bulkLabel))
-                    confirmingMoveAll = true;
+                if (ImGui.Button(moveLabel))
+                    confirmingMoveToInventory = true;
+                ImGui.SameLine();
+                if (ImGui.Button(discardLabel))
+                    confirmingDiscardAll = true;
             }
             else
             {
-                var warningText = Config.AutoDiscard
-                    ? $"PERMANENTLY DISCARD all {scanResults.Count} items? This cannot be undone!"
-                    : $"Move all {scanResults.Count} items to your inventory?";
-                ImGui.TextColored(new Vector4(1f, 0.4f, 0.2f, 1f), warningText);
-                ImGui.SameLine();
-                if (ImGui.Button("Confirm##confirmAll"))
+                if (confirmingMoveToInventory)
                 {
-                    if (Config.AutoDiscard)
+                    ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1f), $"Move all {scanResults.Count} items to your inventory?");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Confirm##confirmMove"))
                     {
-                        // Enqueue all — TickDiscardQueue() fires one per frame with 800-1100ms random delay
-                        discardQueue.Clear();
+                        // Enqueue move operations with delays
+                        processQueue.Clear();
                         foreach (var item in scanResults)
-                            discardQueue.Enqueue(item);
-                        discardTotal = discardQueue.Count;
+                            processQueue.Enqueue(item);
+                        queueTotal = processQueue.Count;
+                        queueIsDiscard = false;
                         nextDelayMs = Rng.Next(800, 1101);
-                        discardTimer.Restart();
-                        statusMessage = $"Discarding 0/{discardTotal}...";
+                        queueTimer.Restart();
+                        statusMessage = $"Moving 0/{queueTotal}...";
+                        confirmingMoveToInventory = false;
                     }
-                    else
-                    {
-                        // Move All is instant — no ban risk for moving
-                        var processed = 0;
-                        for (var i = scanResults.Count - 1; i >= 0; i--)
-                        {
-                            var (success, _) = armouryService.MoveToInventory(scanResults[i]);
-                            if (success) { scanResults.RemoveAt(i); processed++; }
-                        }
-                        statusMessage = $"Moved {processed} item(s). Right-click each in your inventory to Discard.";
-                    }
-                    confirmingMoveAll = false;
+                    ImGui.SameLine();
+                    if (ImGui.Button("Cancel##cancelMove"))
+                        confirmingMoveToInventory = false;
                 }
-                ImGui.SameLine();
-                if (ImGui.Button("Cancel##cancelAll"))
-                    confirmingMoveAll = false;
+                else if (confirmingDiscardAll)
+                {
+                    ImGui.TextColored(new Vector4(1f, 0.4f, 0.2f, 1f), $"PERMANENTLY DISCARD all {scanResults.Count} items? This cannot be undone!");
+                    ImGui.SameLine();
+                    if (ImGui.Button("Confirm##confirmDiscard"))
+                    {
+                        // Enqueue discard operations with delays
+                        processQueue.Clear();
+                        foreach (var item in scanResults)
+                            processQueue.Enqueue(item);
+                        queueTotal = processQueue.Count;
+                        queueIsDiscard = true;
+                        nextDelayMs = Rng.Next(800, 1101);
+                        queueTimer.Restart();
+                        statusMessage = $"Discarding 0/{queueTotal}...";
+                        confirmingDiscardAll = false;
+                    }
+                    ImGui.SameLine();
+                    if (ImGui.Button("Cancel##cancelDiscard"))
+                        confirmingDiscardAll = false;
+                }
             }
 
-            if (!Config.AutoDiscard)
-            {
-                ImGui.Spacing();
-                ImGui.TextDisabled("Items moved to inventory can be discarded via right-click → Discard.");
-            }
+            ImGui.Spacing();
+            ImGui.TextDisabled("Items moved to inventory can be discarded via right-click → Discard. Discard All removes items directly from the armoury.");
         }
 
         private (bool Success, string Message) DiscardWithFallback(ArmouryItem item)
