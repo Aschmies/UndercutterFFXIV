@@ -55,30 +55,43 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
 
     public override void PreDraw()
     {
-        // Always anchor the button strip just above the inventory addon, regardless of the
-        // layout-zone toggle. The zone overlay is drawn directly on top of the addon's slot
-        // grid via the background draw list, so it doesn't affect the strip's height.
-        const float StripHeight = 36f;
-        var pos = new Vector2(anchorPos.X, MathF.Max(0, anchorPos.Y - StripHeight));
+        // Always anchor the button strip just above the inventory addon. The strip is constrained
+        // to the inventory's width so its buttons wrap onto multiple rows rather than running off
+        // the screen — the floating window itself acts as a single bordered container.
+        var pos = new Vector2(anchorPos.X, MathF.Max(0, anchorPos.Y - 80f));
         ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(6, 4));
+        // Cap window width to the inventory addon's width; height is auto via AlwaysAutoResize.
+        var maxW = MathF.Max(220f, anchorSize.X);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(220, 0), new Vector2(maxW, 9999));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(6, 6));
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(6, 4));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 6f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
     }
 
     public override void PostDraw()
     {
-        ImGui.PopStyleVar(3);
+        ImGui.PopStyleVar(4);
+    }
+
+    /// <summary>
+    /// Returns to the same line for the next button if it fits within the strip's width budget;
+    /// otherwise lets ImGui flow onto the next line, producing a wrapping button row.
+    /// </summary>
+    private void WrapSameLine(float nextWidth = 92f)
+    {
+        var prevMaxX = ImGui.GetItemRectMax().X;
+        var winStartX = ImGui.GetWindowPos().X;
+        var winRightX = winStartX + ImGui.GetWindowWidth() - 8f; // 8 = right padding
+        if (prevMaxX + 6f + nextWidth <= winRightX)
+            ImGui.SameLine();
     }
 
     public override void Draw()
     {
-        // Draw the zone overlay first (background draw list = behind windows but on top of the
-        // game), so painted zones show up whether the user is interacting with the strip or not.
-        if (Config.ShowVisualZoneOverlay)
-        {
-            DrawZoneOverlay();
-        }
+        // Live "Layout Zones over the inventory" overlay was removed in 1.0.20 — it could not be
+        // pixel-aligned reliably across the various inventory addons. The Layout Zones painter and
+        // Apply Zones sort still use Config.VisualZoneLayout; only the live tinting is gone.
 
         if (plugin.IsSortQueueBusy)
         {
@@ -98,7 +111,7 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Sort everything: Gear -> Bag1, Food/Medicine -> Bag2,\nMaterials -> Bag3, Crystals/Materia -> Bag4.");
 
-        ImGui.SameLine();
+        WrapSameLine(80);
         var rule = ResolveOverlayRule();
         if (rule != null)
         {
@@ -117,7 +130,7 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
                 ImGui.SetTooltip("Pick a rule for the overlay button\nin Settings tab.");
         }
 
-        ImGui.SameLine();
+        WrapSameLine(60);
         if (plugin.CanUndo)
         {
             if (ImGui.SmallButton("Undo##ov_undo")) plugin.UndoLastSort();
@@ -131,7 +144,7 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
         }
 
         // Delete Junk + presets
-        ImGui.SameLine();
+        WrapSameLine(80);
         if (ImGui.Button("Delete Junk##ov_junk", new Vector2(80, 0)))
         {
             ImGui.OpenPopup("Confirm Delete Junk##ov");
@@ -168,35 +181,35 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
             ImGui.EndPopup();
         }
 
-        ImGui.SameLine();
+        WrapSameLine(70);
         if (ImGui.SmallButton("Gatherer")) plugin.RunGathererSort();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Crystals & Materia top priority,\nmaterials next, rest in Bag2.");
 
-        ImGui.SameLine();
+        WrapSameLine(60);
         if (ImGui.SmallButton("Raider")) plugin.RunRaiderSort();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("High ilvl gear + consumables\nfor combat readiness.");
 
-        ImGui.SameLine();
+        WrapSameLine(60);
         if (ImGui.SmallButton("Hoarder")) plugin.RunHoarderSort();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Group by rarity (white/green/blue/purple)\nto find junk easily.");
 
-        ImGui.SameLine();
+        WrapSameLine(110);
         if (ImGui.SmallButton("Extract Materia##ov_materia")) plugin.ExtractMateria();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Move all gear at 100% spiritbond to\nBag 1 for materia extraction.");
 
-        ImGui.SameLine();
+        WrapSameLine(100);
         if (ImGui.SmallButton("Merge Stacks##ov_merge")) plugin.MergeStacks();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Consolidate duplicate items\ninto single stacks.");
 
-        ImGui.SameLine();
+        WrapSameLine(95);
         if (ImGui.SmallButton("Apply Zones##ov_zones")) plugin.ApplyVisualZones();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Rebuild inventory into your painted Layout Zones.");
 
-        ImGui.SameLine();
+        WrapSameLine(100);
         if (ImGui.SmallButton("Vendor Trash##ov_trash")) plugin.GroupVendorTrash();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Group all vendor trash (grey items)\ninto Bag 4 for easy discard.");
 
-        ImGui.SameLine();
+        WrapSameLine(40);
         if (ImGui.SmallButton("BA##ov_open")) plugin.ToggleMainUi();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open Bag Assistant");
     }

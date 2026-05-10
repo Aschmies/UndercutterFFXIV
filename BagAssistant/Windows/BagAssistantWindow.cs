@@ -813,33 +813,7 @@ public sealed class BagAssistantWindow : Window, IDisposable
         ImGui.TextDisabled("When enabled, a set of sorting buttons appears above the inventory addon while it is open.");
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Inventory Overlay Enhancements");
-        
-        var showVisualOverlay = Config.ShowVisualZoneOverlay;
-        if (ImGui.Checkbox("Draw Layout Zones over the Inventory window", ref showVisualOverlay))
-        {
-            Config.ShowVisualZoneOverlay = showVisualOverlay;
-            Config.Save();
-        }
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Draws colored boxes directly over the native in-game inventory slots to represent your painted zones.");
-
-        if (Config.ShowVisualZoneOverlay)
-        {
-            var overlayOpacity = Config.VisualZoneOverlayOpacity;
-            ImGui.SetNextItemWidth(200f);
-            if (ImGui.SliderFloat("Zone Overlay Opacity", ref overlayOpacity, 0.05f, 1f, "%.2f"))
-            {
-                Config.VisualZoneOverlayOpacity = overlayOpacity;
-                Config.Save();
-            }
-        }
-        
-        var showVisualNumbers = Config.ShowVisualZoneNumbers;
-        if (ImGui.Checkbox("Show Slot Numbers on overlay", ref showVisualNumbers))
-        {
-            Config.ShowVisualZoneNumbers = showVisualNumbers;
-            Config.Save();
-        }
+        ImGui.TextUnformatted("Apply Zones Behavior");
 
         var applyZonesMerge = Config.ApplyZonesAutoMerge;
         if (ImGui.Checkbox("Enable Auto-Merge for Apply Zones", ref applyZonesMerge))
@@ -853,6 +827,43 @@ public sealed class BagAssistantWindow : Window, IDisposable
         ImGui.Separator();
         ImGui.Spacing();
         ImGui.TextUnformatted("Junk Filtering Logic");
+
+        // ── How to set up junk deletion (clear examples) ─────────────────
+        if (ImGui.CollapsingHeader("How do I set up Junk deletion? (examples)"))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.85f, 0.85f, 0.85f, 1f));
+            ImGui.TextWrapped("\"Junk\" = items whose single-item vendor price is at or below \"Max Vendor Price for Junk\", with the exclusions you tick below.");
+            ImGui.Spacing();
+            ImGui.TextUnformatted("Example 1 — Strict (only true vendor trash):");
+            ImGui.BulletText("Max Vendor Price for Junk: 10");
+            ImGui.BulletText("Exclude Gear: ON");
+            ImGui.BulletText("Exclude Potions/Food: ON");
+            ImGui.BulletText("Exclude crafting materials: ON");
+            ImGui.TextDisabled("Catches grey 'sells for ~5 gil' items, leaves all gear / consumables / mats alone.");
+            ImGui.Spacing();
+            ImGui.TextUnformatted("Example 2 — Aggressive cleanup of cheap clutter:");
+            ImGui.BulletText("Max Vendor Price for Junk: 100");
+            ImGui.BulletText("Exclude Gear: ON  (always recommended)");
+            ImGui.BulletText("Exclude Potions/Food: ON");
+            ImGui.BulletText("Exclude crafting materials: OFF");
+            ImGui.TextDisabled("Will also delete cheap white-rarity mats. Useful when bags are full of low-tier crafting drops.");
+            ImGui.Spacing();
+            ImGui.TextUnformatted("Example 3 — Full sweep (use with care):");
+            ImGui.BulletText("Max Vendor Price for Junk: 500");
+            ImGui.BulletText("Exclude Gear: ON");
+            ImGui.BulletText("Exclude Potions/Food: OFF");
+            ImGui.BulletText("Exclude crafting materials: OFF");
+            ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(1f, 0.55f, 0.35f, 1f));
+            ImGui.TextWrapped("Warning: this can delete cheap potions and low-tier mats. Run \"Vendor Trash\" first to preview the items in Bag 4 before clicking Delete Junk.");
+            ImGui.PopStyleColor();
+            ImGui.Spacing();
+            ImGui.TextUnformatted("Recommended workflow:");
+            ImGui.BulletText("Click \"Vendor Trash\" first — moves matching items to Bag 4 so you can eyeball them.");
+            ImGui.BulletText("Click \"Delete Junk\" only after confirming Bag 4 contents look right.");
+            ImGui.BulletText("Deletion is permanent — there is no Undo for deleted items.");
+            ImGui.PopStyleColor();
+            ImGui.Spacing();
+        }
         
                 var excGear = Config.ExcludeGearFromJunk;
         if (ImGui.Checkbox("Exclude Gear from Junk", ref excGear))
