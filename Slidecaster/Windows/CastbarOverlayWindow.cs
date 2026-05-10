@@ -240,7 +240,21 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
             ? new Vector4(activeR, activeG, activeB, 0.95f)
             : new Vector4(1.0f, 0.75f, 0.1f, 0.95f));
 
-        drawList.AddRectFilled(new Vector2(safeX, y1), new Vector2(x2, y2), isCurrentlySafe ? activeSafeZoneColor : safeZoneColor);
+        var drawColor = isCurrentlySafe ? activeSafeZoneColor : safeZoneColor;
+
+        if (configuration.DrawAsLine)
+        {
+            var lineY1 = overlayY1 + (overlayHeight - (overlayHeight * configuration.LineHeightScale)) * 0.5f;
+            var lineY2 = lineY1 + (overlayHeight * configuration.LineHeightScale);
+            drawList.AddLine(new Vector2(safeX, lineY1), new Vector2(safeX, lineY2), drawColor, configuration.LineThickness);
+        }
+        else
+        {
+            float rounding = configuration.RoundRightSide ? Math.Min((y2 - y1) * 0.5f, 6f) : 0f;
+            ImDrawFlags flags = configuration.RoundRightSide ? ImDrawFlags.RoundCornersRight : ImDrawFlags.None;
+            drawList.AddRectFilled(new Vector2(safeX, y1), new Vector2(x2, y2), drawColor, rounding, flags);
+        }
+
         if (configuration.ShowCastBarBorder)
             drawList.AddRect(new Vector2(x1, y1), new Vector2(x2, y2), outlineColor, 0f, ImDrawFlags.None, 1.2f);
 

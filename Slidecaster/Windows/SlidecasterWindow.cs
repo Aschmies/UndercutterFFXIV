@@ -147,6 +147,42 @@ public sealed class SlidecasterWindow : Window
             }
         }
 
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.Text("Styling Settings");
+        ImGui.Spacing();
+
+        var roundRightSide = configuration.RoundRightSide;
+        if (ImGui.Checkbox("Round right side of shape", ref roundRightSide))
+        {
+            configuration.RoundRightSide = roundRightSide;
+            configuration.Save();
+        }
+
+        var drawAsLine = configuration.DrawAsLine;
+        if (ImGui.Checkbox("Draw as line (instead of block)", ref drawAsLine))
+        {
+            configuration.DrawAsLine = drawAsLine;
+            configuration.Save();
+        }
+
+        if (configuration.DrawAsLine)
+        {
+            var lineThickness = configuration.LineThickness;
+            if (ImGui.SliderFloat("Line Thickness", ref lineThickness, 1f, 10f, "%.1f"))
+            {
+                configuration.LineThickness = lineThickness;
+                configuration.Save();
+            }
+            var lineHeightScale = configuration.LineHeightScale;
+            if (ImGui.SliderFloat("Line Height Scale", ref lineHeightScale, 0.5f, 3.0f, "%.2f"))
+            {
+                configuration.LineHeightScale = lineHeightScale;
+                configuration.Save();
+            }
+        }
+
         var showSafeText = configuration.ShowSafeText;
         if (ImGui.Checkbox("Show SAFE TO MOVE text", ref showSafeText))
         {

@@ -254,40 +254,40 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
     }
 
 private void DrawOverlayOnAddon()
+    {
+        Dalamud.Game.NativeWrapper.AtkUnitBasePtr activeAddon = default;
+        string addonName = "";
+
+        foreach (var name in InventoryAddons)
         {
-            unsafe 
+            var ptr = gameGui.GetAddonByName(name, 1);
+            if (!ptr.IsNull && ptr.IsVisible)
             {
-                FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase* activeAddon = null;
-                foreach (var name in InventoryAddons)
-                {
-                    var ptr = (FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase*)gameGui.GetAddonByName(name, 1);
-                    if (ptr != null && ptr->IsVisible)
-                    {
-                        activeAddon = ptr;
-                        break;
-                    }
-                }
+                activeAddon = ptr;
+                addonName = name;
+                break;
+            }
+        }
 
-                if (activeAddon == null) return;
+        if (activeAddon.IsNull) return;
 
-                var drawList = ImGui.GetBackgroundDrawList();
-                Vector2 addonPos = new Vector2(activeAddon->X, activeAddon->Y);
-                float scale = activeAddon->Scale;
+        var drawList = ImGui.GetBackgroundDrawList();
+        System.Numerics.Vector2 addonPos = activeAddon.Position;
+        float scale = activeAddon.Scale;
 
-                float startX = 17f * scale; // Experimental X
-                float startY = 84f * scale; // Experimental Y
-                float slotSize = 42f * scale;
-                float spacingX = 4f * scale;
-                float spacingY = 4f * scale;
-                float bagGapX = 15f * scale; 
+        float startX = 17f * scale; // Experimental X
+        float startY = 84f * scale; // Experimental Y
+        float slotSize = 42f * scale;
+        float spacingX = 4f * scale;
+        float spacingY = 4f * scale;
+        float bagGapX = 15f * scale; 
 
-                int visibleBags = 1;
-                string addonName = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((IntPtr)activeAddon->Name);
-                if (addonName == "InventoryExpansion") visibleBags = 2;
-                if (addonName == "InventoryLarge") visibleBags = 4;
+        int visibleBags = 1;
+        if (addonName == "InventoryExpansion") visibleBags = 2;
+        if (addonName == "InventoryLarge") visibleBags = 4;
 
-                for (int b = 0; b < visibleBags; b++)
-                {
+        for (int b = 0; b < visibleBags; b++)
+        {
                     float bagStartX = addonPos.X + startX + b * (5 * (slotSize + spacingX) + bagGapX);
                     
                     for (int r = 0; r < 7; r++)
@@ -330,7 +330,6 @@ private void DrawOverlayOnAddon()
                         }
                     }
                 }
-            }
     }
 
     private bool TryGetInventoryRect(out Vector2 position, out Vector2 size)
@@ -353,6 +352,7 @@ private void DrawOverlayOnAddon()
         return false;
     }
 }
+
 
 
 

@@ -33,6 +33,11 @@ public sealed class Configuration : IPluginConfiguration
     // Trim only the right edge of the overlay so it can align exactly with cast bar visuals.
     public float OverlayEndTrimPx { get; set; } = 0f;
 
+    public bool RoundRightSide { get; set; } = false;
+    public bool DrawAsLine { get; set; } = false;
+    public float LineThickness { get; set; } = 3.0f;
+    public float LineHeightScale { get; set; } = 1.2f;
+
     // Visual-only adjustment for where the moving progress marker starts.
     public bool EnableProgressMarkerStartOffset { get; set; } = false;
     public float ProgressMarkerStartOffsetPx { get; set; } = 0f;
@@ -51,6 +56,10 @@ public sealed class Configuration : IPluginConfiguration
     public float DefaultOverlayColorG { get; set; } = 0.90f;
     public float DefaultOverlayColorB { get; set; } = 0.30f;
     public float DefaultOverlayEndTrimPx { get; set; } = 0f;
+    public bool DefaultRoundRightSide { get; set; } = false;
+    public bool DefaultDrawAsLine { get; set; } = false;
+    public float DefaultLineThickness { get; set; } = 3.0f;
+    public float DefaultLineHeightScale { get; set; } = 1.2f;
     public bool DefaultEnableProgressMarkerStartOffset { get; set; } = false;
     public float DefaultProgressMarkerStartOffsetPx { get; set; } = 0f;
 
@@ -73,6 +82,10 @@ public sealed class Configuration : IPluginConfiguration
         DefaultOverlayColorG = OverlayColorG;
         DefaultOverlayColorB = OverlayColorB;
         DefaultOverlayEndTrimPx = OverlayEndTrimPx;
+        DefaultRoundRightSide = RoundRightSide;
+        DefaultDrawAsLine = DrawAsLine;
+        DefaultLineThickness = LineThickness;
+        DefaultLineHeightScale = LineHeightScale;
         DefaultEnableProgressMarkerStartOffset = EnableProgressMarkerStartOffset;
         DefaultProgressMarkerStartOffsetPx = ProgressMarkerStartOffsetPx;
         Save();
@@ -93,6 +106,10 @@ public sealed class Configuration : IPluginConfiguration
         OverlayColorG = DefaultOverlayColorG;
         OverlayColorB = DefaultOverlayColorB;
         OverlayEndTrimPx = DefaultOverlayEndTrimPx;
+        RoundRightSide = DefaultRoundRightSide;
+        DrawAsLine = DefaultDrawAsLine;
+        LineThickness = DefaultLineThickness;
+        LineHeightScale = DefaultLineHeightScale;
         EnableProgressMarkerStartOffset = DefaultEnableProgressMarkerStartOffset;
         ProgressMarkerStartOffsetPx = DefaultProgressMarkerStartOffsetPx;
         Save();
