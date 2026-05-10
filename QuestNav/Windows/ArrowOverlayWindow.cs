@@ -39,6 +39,7 @@ namespace QuestNav.Windows
 
             Size = WindowSize;
             SizeCondition = ImGuiCond.Always;
+            IsOpen = false; // Start closed; will be opened when nav target is set
         }
 
         public void SetNavTarget(QuestEntry? entry)
