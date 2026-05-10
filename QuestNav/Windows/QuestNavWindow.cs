@@ -51,10 +51,10 @@ namespace QuestNav.Windows
 
             SizeConstraints = new WindowSizeConstraints
             {
-                MinimumSize = new Vector2(400, 200),
+                MinimumSize = new Vector2(380, 150),
                 MaximumSize = new Vector2(1000, 900),
             };
-            Size = new Vector2(550, 300);
+            Size = new Vector2(480, 250);
             SizeCondition = ImGuiCond.FirstUseEver;
         }
 
@@ -78,7 +78,8 @@ namespace QuestNav.Windows
                 Refresh();
 
             DrawToolbar();
-            ImGui.Separator();
+            if (!showSettings)
+                ImGui.Spacing();
             DrawQuestTable();
 
             if (!string.IsNullOrEmpty(statusMessage))
@@ -132,7 +133,7 @@ namespace QuestNav.Windows
             ImGui.TextDisabled($"({quests.Count})");
 
             ImGui.SameLine();
-            float availWidth = ImGui.GetContentRegionAvail().X - 80;
+            float availWidth = ImGui.GetContentRegionAvail().X - 35;
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + availWidth);
 
             // Settings gear button (collapsible)
@@ -141,18 +142,20 @@ namespace QuestNav.Windows
 
             if (showSettings)
             {
-                ImGui.Spacing();
+                ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(4f, 2f));
+                ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f));
+                
                 bool arrow = config.ShowArrow;
-                if (ImGui.Checkbox("Arrow overlay##arrow", ref arrow))
+                if (ImGui.Checkbox("Arrow##arrow", ref arrow))
                 {
                     config.ShowArrow = arrow;
                     config.Save();
                     SyncArrowTarget();
                 }
                 ImGui.SameLine();
-                ImGui.SetNextItemWidth(100);
+                ImGui.SetNextItemWidth(80);
                 float bgOpacity = config.ArrowBgOpacity;
-                if (ImGui.SliderFloat("opacity##arrowbg", ref bgOpacity, 0f, 1f, "%.0f%%"))
+                if (ImGui.SliderFloat("##opacity", ref bgOpacity, 0f, 1f, "%.0f%%"))
                 {
                     config.ArrowBgOpacity = bgOpacity;
                     config.Save();
@@ -166,11 +169,13 @@ namespace QuestNav.Windows
                 }
 
                 bool compact = config.CompactMode;
-                if (ImGui.Checkbox("Compact mode##compact", ref compact))
+                if (ImGui.Checkbox("Compact##compact", ref compact))
                 {
                     config.CompactMode = compact;
                     config.Save();
                 }
+                
+                ImGui.PopStyleVar(2); // FramePadding, ItemSpacing
             }
         }
 
@@ -179,9 +184,10 @@ namespace QuestNav.Windows
             var tableFlags = ImGuiTableFlags.Borders
                            | ImGuiTableFlags.RowBg
                            | ImGuiTableFlags.ScrollY
-                           | ImGuiTableFlags.NoHostExtendX;
+                           | ImGuiTableFlags.NoHostExtendX
+                           | ImGuiTableFlags.SizingFixedFit;
 
-            float footerHeight = 30f + (string.IsNullOrEmpty(statusMessage) ? 0f : 20f);
+            float footerHeight = 22f + (string.IsNullOrEmpty(statusMessage) ? 0f : 18f);
             var tableHeight = ImGui.GetContentRegionAvail().Y - footerHeight;
             if (tableHeight < 40f) tableHeight = 40f;
 
@@ -191,7 +197,7 @@ namespace QuestNav.Windows
 
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Quest",     ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("##actions", ImGuiTableColumnFlags.WidthFixed, config.CompactMode ? 80f : 120f);
+            ImGui.TableSetupColumn("##actions", ImGuiTableColumnFlags.WidthFixed, config.CompactMode ? 75f : 115f);
             ImGui.TableHeadersRow();
 
             if (quests.Count == 0)
@@ -202,14 +208,17 @@ namespace QuestNav.Windows
             }
 
             var currentTerr = (uint)clientState.TerritoryType;
-
+            var textLineHeight = ImGui.GetTextLineHeight();
+            
             foreach (var quest in quests)
             {
-                ImGui.TableNextRow(ImGuiTableRowFlags.None, 40f);
+                // More compact row - just one line of content
+                ImGui.TableNextRow(ImGuiTableRowFlags.None, textLineHeight + 4f);
                 bool inZone = quest.TerritoryId == currentTerr;
 
-                // ── Quest Info ────────────────────────────────────────────────
+                // ── Quest Info (condensed to one line) ────────────────────────
                 ImGui.TableSetColumnIndex(0);
+                ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetColumnWidth() - 8f);
 
                 // Quest name with zone highlighting
                 if (inZone)
@@ -217,42 +226,44 @@ namespace QuestNav.Windows
                 else
                     ImGui.TextUnformatted(quest.Name);
 
-                // Zone and aetheryte info on next line (smaller, dimmer)
-                ImGui.TextDisabled($"{quest.ZoneName}");
+                // Zone/aetheryte on same line, small text
                 ImGui.SameLine();
-                ImGui.TextDisabled("·");
+                ImGui.TextDisabled(" · ");
                 ImGui.SameLine();
+                ImGui.TextDisabled(quest.ZoneName);
+
                 if (quest.NearestAetheryteId.HasValue)
                 {
-                    ImGui.TextDisabled($"{quest.AetheryteName}");
                     ImGui.SameLine();
-                    ImGui.TextDisabled(quest.GilCost == 0 ? "(Free)" : $"({quest.GilCost:N0}g)");
+                    ImGui.TextDisabled($" ({(quest.GilCost == 0 ? "Free" : $"{quest.GilCost}g")})");
                 }
-                else
-                    ImGui.TextDisabled("No aetheryte");
 
-                // Hover tooltip with more details
+                ImGui.PopTextWrapPos();
+
+                // Hover tooltip with full details
                 if (ImGui.IsItemHovered())
                 {
                     ImGui.BeginTooltip();
                     ImGui.TextColored(new Vector4(0.9f, 0.9f, 0.9f, 1f), quest.Name);
+                    ImGui.TextDisabled($"Zone: {quest.ZoneName}");
                     if (!config.CompactMode)
                         ImGui.TextDisabled($"Step: {quest.Sequence}");
-                    ImGui.TextDisabled($"Zone: {quest.ZoneName}");
                     if (quest.NearestAetheryteId.HasValue)
-                        ImGui.TextDisabled($"Nearest: {quest.AetheryteName}");
+                        ImGui.TextDisabled($"Teleport: {quest.AetheryteName} ({(quest.GilCost == 0 ? "Free" : $"{quest.GilCost}g")})");
                     ImGui.EndTooltip();
                 }
 
                 // ── Actions ───────────────────────────────────────────────────
                 ImGui.TableSetColumnIndex(1);
+                ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(3f, 0f)); // Reduce button spacing
 
                 bool canTeleport = quest.NearestAetheryteId.HasValue;
                 bool isNavTarget = config.NavQuestId == quest.QuestId;
 
-                // Nav button
-                var navLabel = isNavTarget ? "✓ Nav" : "Nav";
-                if (ImGui.Button($"{navLabel}##{quest.QuestId}_nav", new Vector2(config.CompactMode ? 35 : 50, 0)))
+                // Nav button (compact)
+                var navLabel = isNavTarget ? "✓" : "Nav";
+                var navWidth = isNavTarget ? 24f : (config.CompactMode ? 32f : 40f);
+                if (ImGui.Button($"{navLabel}##{quest.QuestId}_nav", new Vector2(navWidth, 0)))
                 {
                     if (isNavTarget)
                     {
@@ -273,17 +284,19 @@ namespace QuestNav.Windows
                     // Map flag button
                     bool hasLocation = quest.TerritoryId != 0 && quest.MapId != 0;
                     if (!hasLocation) ImGui.BeginDisabled();
-                    if (ImGui.Button($"Flag##{quest.QuestId}_flag", new Vector2(50, 0)))
+                    if (ImGui.Button($"📍##{quest.QuestId}_flag", new Vector2(32f, 0)))
                         DoSetMapFlag(quest);
                     if (!hasLocation) ImGui.EndDisabled();
                 }
 
-                // Teleport button
+                // Teleport button (always last)
                 ImGui.SameLine();
                 if (!canTeleport) ImGui.BeginDisabled();
-                if (ImGui.Button($"TP##{quest.QuestId}", new Vector2(config.CompactMode ? 35 : 50, 0)))
+                if (ImGui.Button($"TP##{quest.QuestId}", new Vector2(config.CompactMode ? 32f : 40f, 0)))
                     DoTeleport(quest);
                 if (!canTeleport) ImGui.EndDisabled();
+                
+                ImGui.PopStyleVar(); // ItemSpacing
             }
 
             ImGui.EndTable();
@@ -333,7 +346,7 @@ namespace QuestNav.Windows
 
         private void DrawFootnote()
         {
-            ImGui.TextDisabled("Green text = you're in that zone. Hover for details.");
+            ImGui.TextDisabled("Green = current zone");
         }
     }
 }
