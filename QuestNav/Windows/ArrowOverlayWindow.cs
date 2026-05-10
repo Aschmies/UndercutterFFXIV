@@ -83,11 +83,26 @@ namespace QuestNav.Windows
                 float dz = navTarget.WorldZ - player->Position.Z;
                 float dist = MathF.Sqrt(dx * dx + dz * dz);
 
-                // World bearing relative to north (0 = north, π/2 = east)
-                // FFXIV: Z increases southward, X increases eastward
-                double worldBearing = Math.Atan2(dx, -dz);
-                // Convert world bearing to screen-relative bearing (player rotation as reference frame)
-                float angle = (float)(worldBearing - player->Rotation);
+                // FFXIV coordinate system & rotation:
+                //   World axes:   +X = east, +Z = south
+                //   player.Rotation: 0 = facing south, π/2 = east, π = north, -π/2 = west
+                //                    (rotation increases counter-clockwise viewed from above)
+                //
+                // Project the target offset (dx, dz) onto the player's local axes:
+                //   forward unit  = ( sin R,  cos R )    // direction player is looking
+                //   right unit    = (-cos R,  sin R )    // 90° clockwise (player's right hand)
+                //
+                // Then the on-screen arrow angle (clockwise from "up") is
+                //   atan2(rightComp, forwardComp).
+                float r = player->Rotation;
+                float fwdX  =  MathF.Sin(r);
+                float fwdZ  =  MathF.Cos(r);
+                float rgtX  = -MathF.Cos(r);
+                float rgtZ  =  MathF.Sin(r);
+
+                float forwardComp = dx * fwdX + dz * fwdZ;
+                float rightComp   = dx * rgtX + dz * rgtZ;
+                float angle = MathF.Atan2(rightComp, forwardComp);
 
                 // Arrow color: gold when in range (<30y), green otherwise
                 var arrowCol = dist < 30f
