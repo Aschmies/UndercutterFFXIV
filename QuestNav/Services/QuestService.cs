@@ -43,12 +43,13 @@ namespace QuestNav.Services
                 var questId = questWork.QuestId;
                 if (questId == 0) continue;
 
-                var questRow = questSheet.GetRow(questId);
-                if (questRow.RowId == 0)
-                    questRow = questSheet.GetRow((uint)(questId | 0x10000));
-                if (questRow.RowId == 0) continue;
+                var questRow = questSheet.GetRowOrDefault(questId);
+                if (questRow == null || questRow.Value.RowId == 0)
+                    questRow = questSheet.GetRowOrDefault((uint)(questId | 0x10000));
+                if (questRow == null || questRow.Value.RowId == 0) continue;
+                var quest = questRow.Value;
 
-                var name = questRow.Name.ToString();
+                var name = quest.Name.ToString();
                 if (string.IsNullOrWhiteSpace(name)) continue;
 
                 var sequence = QuestManager.GetQuestSequence(questId);
@@ -57,7 +58,7 @@ namespace QuestNav.Services
                 var questType = string.Empty;
                 try
                 {
-                    var genre = questRow.JournalGenre.Value;
+                    var genre = quest.JournalGenre.Value;
                     if (genre.RowId != 0)
                         questType = genre.Name.ToString();
                 }
@@ -69,10 +70,10 @@ namespace QuestNav.Services
                 uint mapId = 0;
                 float worldX = 0f, worldZ = 0f, mapX = 0f, mapY = 0f;
 
-                var levelRowId = questRow.IssuerLocation.RowId;
+                var levelRowId = quest.IssuerLocation.RowId;
                 if (levelRowId != 0)
                 {
-                    var levelRow = questRow.IssuerLocation.Value;
+                    var levelRow = quest.IssuerLocation.Value;
                     territoryId = levelRow.Territory.RowId;
                     if (territoryId != 0)
                     {
