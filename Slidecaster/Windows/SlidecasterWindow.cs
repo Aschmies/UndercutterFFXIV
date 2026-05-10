@@ -122,6 +122,21 @@ public sealed class SlidecasterWindow : Window
             configuration.Save();
         }
 
+        var yOffset = configuration.OverlayYOffsetPx;
+        if (ImGui.SliderFloat("Overlay Y Offset (px)", ref yOffset, -40f, 40f, "%.1f"))
+        {
+            configuration.OverlayYOffsetPx = yOffset;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        var yOffsetExact = configuration.OverlayYOffsetPx;
+        ImGui.SetNextItemWidth(90f);
+        if (ImGui.InputFloat("##overlay-y-offset-exact", ref yOffsetExact, 1f, 5f, "%.1f"))
+        {
+            configuration.OverlayYOffsetPx = Math.Clamp(yOffsetExact, -40f, 40f);
+            configuration.Save();
+        }
+
         var enableMarkerStartOffset = configuration.EnableProgressMarkerStartOffset;
         if (ImGui.Checkbox("Adjust moving bar start", ref enableMarkerStartOffset))
         {
@@ -218,6 +233,30 @@ public sealed class SlidecasterWindow : Window
         {
             configuration.ApplySavedDefaults();
             statusMessage = "Restored settings from saved defaults.";
+        }
+        ImGui.SameLine();
+        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.55f, 0.18f, 0.18f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.70f, 0.22f, 0.22f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.45f, 0.14f, 0.14f, 1f));
+        if (ImGui.Button("Reset to Factory Defaults"))
+            ImGui.OpenPopup("##slidecaster-factory-reset");
+        ImGui.PopStyleColor(3);
+
+        if (ImGui.BeginPopupModal("##slidecaster-factory-reset", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.TextWrapped("This will reset every Slidecaster setting to the original factory values AND overwrite your \"Save Current as Defaults\" snapshot.");
+            ImGui.TextWrapped("This cannot be undone. Continue?");
+            ImGui.Spacing();
+            if (ImGui.Button("Yes, reset everything", new Vector2(180f, 0f)))
+            {
+                configuration.ResetToFactoryDefaults();
+                statusMessage = "All settings reset to factory defaults.";
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel", new Vector2(80f, 0f)))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
         }
 
         if (!string.IsNullOrEmpty(statusMessage))
