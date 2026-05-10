@@ -304,7 +304,7 @@ public static class QuickSortPresets
         if (i.IsEquippable) return false;
         if (i.UICategoryRowId == UICategoryCrystal || i.UICategoryRowId == UICategoryMateria) return false;
         if (i.VendorPrice > maxVendorPrice) return false;
-        if (excludeCrafting && i.IsStackable && SearchByKeyword(new[] { i }.ToList(), "craft").Count > 0) return false;
+        if (excludeCrafting && i.IsStackable) return false; // Any stackable item is highly likely a crafting material or consumable
         return true;
     }
 
