@@ -20,9 +20,12 @@ public sealed class BagAssistantWindow : Window, IDisposable
     private string statusMessage = string.Empty;
     private List<InventoryItemInfo> previewItems = new();
     private bool confirmingSort;
+    private QuickPreset? confirmingPreset;
+    private bool confirmingSmartSort;
 
-    // Sort execution queue (one move per tick, paced).
-    private readonly Queue<SortPlanEntry> moveQueue = new();
+    // Sort execution queue (one move per tick, paced). Items are uniform — both rule-based and
+    // quick-sort flows enqueue (item, destBag) tuples.
+    private readonly Queue<(InventoryItemInfo Item, FFXIVClientStructs.FFXIV.Client.Game.InventoryType DestBag)> moveQueue = new();
     private int queueTotal;
     private readonly Stopwatch queueTimer = new();
     private int nextDelayMs;
@@ -83,7 +86,12 @@ public sealed class BagAssistantWindow : Window, IDisposable
 
         if (ImGui.BeginTabBar("##BAQTabs"))
         {
-            if (ImGui.BeginTabItem("Rules"))
+            if (ImGui.BeginTabItem("Quick Sort"))
+            {
+                DrawQuickSortTab();
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Custom Rules"))
             {
                 DrawRulesTab();
                 ImGui.EndTabItem();
@@ -111,6 +119,119 @@ public sealed class BagAssistantWindow : Window, IDisposable
             ImGui.Separator();
             ImGui.TextColored(new Vector4(0.7f, 0.9f, 1f, 1f), statusMessage);
         }
+    }
+
+    // ─── Tab: Quick Sort ─────────────────────────────────────────────────────
+
+    private void DrawQuickSortTab()
+    {
+        ImGui.TextWrapped("One-click sorts. Pick a preset and BagAssistant will move every matching item into the named bag. No rules, no setup.");
+        ImGui.Spacing();
+
+        var queueBusy = moveQueue.Count > 0;
+
+        // ── Smart Sort Everything ───────────────────────────────────────────
+        ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "★ Smart Sort Everything");
+        ImGui.TextWrapped("Gear → Bag 1 · Food/Medicine → Bag 2 · Crafting Materials → Bag 3 · Crystals/Materia → Bag 4. Anything that doesn't match stays where it is.");
+
+        if (queueBusy) ImGui.BeginDisabled();
+        var smartLabel = Config.RequireConfirmation && !confirmingSmartSort ? "Smart Sort Everything..." : "Confirm Smart Sort";
+        if (ImGui.Button($"{smartLabel}##smartsort", new Vector2(220, 30)))
+        {
+            if (Config.RequireConfirmation && !confirmingSmartSort)
+            {
+                confirmingSmartSort = true;
+                confirmingPreset = null;
+            }
+            else
+            {
+                RunSmartSort();
+                confirmingSmartSort = false;
+            }
+        }
+        if (queueBusy) ImGui.EndDisabled();
+
+        if (confirmingSmartSort)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel##cancelsmart")) confirmingSmartSort = false;
+            ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "Click 'Confirm Smart Sort' to begin.");
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // ── Individual presets ──────────────────────────────────────────────
+        ImGui.TextUnformatted("Targeted presets:");
+        ImGui.Spacing();
+
+        foreach (var preset in QuickSortPresets.All)
+        {
+            ImGui.PushID($"preset_{preset.Name}");
+
+            if (queueBusy) ImGui.BeginDisabled();
+            var label = (Config.RequireConfirmation && confirmingPreset == preset) ? "Confirm" : "Run";
+            if (ImGui.Button($"{label}##run", new Vector2(80, 0)))
+            {
+                if (Config.RequireConfirmation && confirmingPreset != preset)
+                {
+                    confirmingPreset = preset;
+                    confirmingSmartSort = false;
+                }
+                else
+                {
+                    RunPreset(preset);
+                    confirmingPreset = null;
+                }
+            }
+            if (queueBusy) ImGui.EndDisabled();
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted(preset.Name);
+            if (confirmingPreset == preset)
+            {
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Cancel##cancelp")) confirmingPreset = null;
+            }
+            ImGui.Indent(90);
+            ImGui.TextDisabled(preset.Description);
+            ImGui.Unindent(90);
+            ImGui.Spacing();
+
+            ImGui.PopID();
+        }
+
+        if (queueBusy)
+        {
+            ImGui.Separator();
+            if (ImGui.Button("Stop Sort##stopquick"))
+            {
+                moveQueue.Clear();
+                queueTimer.Stop();
+                statusMessage = "Sort stopped by user.";
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextDisabled("Need more control? Use the 'Custom Rules' tab to build your own multi-condition rules.");
+    }
+
+    private void RunSmartSort()
+    {
+        var bagFlags = GetBagFlags();
+        var items = plugin.InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildSmartSortPlan(items, bagFlags);
+        EnqueueQuickMoves(moves, "Smart Sort");
+    }
+
+    private void RunPreset(QuickPreset preset)
+    {
+        var bagFlags = GetBagFlags();
+        var items = plugin.InventoryService.ScanBags(bagFlags);
+        var moves = QuickSortPresets.BuildPresetPlan(preset, items, bagFlags);
+        EnqueueQuickMoves(moves, preset.Name);
     }
 
     // ─── Tab: Rules ──────────────────────────────────────────────────────────
@@ -554,11 +675,25 @@ public sealed class BagAssistantWindow : Window, IDisposable
             statusMessage = "Nothing to do — every item is already in place (or no rule has a destination).";
             return;
         }
-        foreach (var entry in plan) moveQueue.Enqueue(entry);
+        foreach (var entry in plan) moveQueue.Enqueue((entry.Item, entry.DestBag));
         queueTotal = plan.Count;
         nextDelayMs = 0;
         queueTimer.Restart();
         statusMessage = $"Sorting {queueTotal} item(s)...";
+    }
+
+    private void EnqueueQuickMoves(IReadOnlyList<QuickMove> moves, string description)
+    {
+        if (moves.Count == 0)
+        {
+            statusMessage = $"{description}: nothing to move.";
+            return;
+        }
+        foreach (var m in moves) moveQueue.Enqueue((m.Item, m.DestBag));
+        queueTotal = moves.Count;
+        nextDelayMs = 0;
+        queueTimer.Restart();
+        statusMessage = $"{description}: moving {queueTotal} item(s)...";
     }
 
     private void TickMoveQueue()
@@ -631,15 +766,13 @@ public sealed class BagAssistantWindow : Window, IDisposable
 
     private void DrawHelpTab()
     {
-        ImGui.TextWrapped("Bag Assistant lets you build a stack of rules that decide where each inventory item belongs.");
+        ImGui.TextWrapped("Bag Assistant gives you two ways to organise your inventory.");
         ImGui.Spacing();
-        ImGui.TextWrapped("Workflow:");
-        ImGui.BulletText("Add rules in the Rules tab. Each rule has filters (category, rarity, level, ilvl, job, HQ, name, price, etc.) and a destination bag.");
-        ImGui.BulletText("Rules are evaluated top-to-bottom — the first matching rule wins. Reorder with the up/down arrows.");
-        ImGui.BulletText("Use Run / Preview to see exactly which items will move where, then click Sort Now.");
-        ImGui.BulletText("Items that don't match any rule are left where they are.");
+        ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "Quick Sort (recommended)");
+        ImGui.TextWrapped("One-click presets. 'Smart Sort Everything' covers the common case: gear -> Bag 1, food/medicine -> Bag 2, crafting materials -> Bag 3, crystals/materia -> Bag 4. Or pick a single targeted preset (e.g. 'HQ Gear -> Bag 1').");
         ImGui.Spacing();
-        ImGui.TextWrapped("Tip: 'Add Common Presets' creates a starter set: HQ gear -> Bag1, materia/crystals -> Bag4, food/potions -> Bag3, everything else stays put.");
+        ImGui.TextColored(new Vector4(0.7f, 0.9f, 1f, 1f), "Custom Rules (advanced)");
+        ImGui.TextWrapped("Build your own rule list with detailed filters (category, rarity, level, ilvl, job, HQ, name, vendor price, item ID, etc.). Rules are evaluated top-to-bottom, first match wins.");
         ImGui.Spacing();
         ImGui.TextWrapped("Commands:");
         ImGui.BulletText("/bagassistant or /ba — open this window.");
