@@ -15,13 +15,13 @@
 
 # Nuget personal use only message
 # build folder
-/build/
-/bld/
-/obj/
-/out/
-/bin/
-/Bin/
-/packages/
+build/
+bld/
+obj/
+out/
+bin/
+Bin/
+packages/
 .nupkg
 
 # ReSharper is a .NET coding add-in
