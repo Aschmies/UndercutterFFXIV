@@ -53,6 +53,23 @@ public sealed class SlidecasterWindow : Window
             configuration.Save();
         }
 
+        var color = new Vector3(configuration.OverlayColorR, configuration.OverlayColorG, configuration.OverlayColorB);
+        if (ImGui.ColorEdit3("Overlay Color", ref color, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoAlpha))
+        {
+            configuration.OverlayColorR = color.X;
+            configuration.OverlayColorG = color.Y;
+            configuration.OverlayColorB = color.Z;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Reset Color##resetColor"))
+        {
+            configuration.OverlayColorR = 0.10f;
+            configuration.OverlayColorG = 0.90f;
+            configuration.OverlayColorB = 0.30f;
+            configuration.Save();
+        }
+
         var overlayHeightScale = configuration.OverlayHeightScale;
         if (ImGui.SliderFloat("Overlay Height Scale", ref overlayHeightScale, 0.5f, 2.5f, "%.2f"))
         {
@@ -143,6 +160,16 @@ public sealed class SlidecasterWindow : Window
             configuration.PlaySafeMoveSound = playCue;
             configuration.Save();
         }
+
+        var cueVolume = configuration.SafeCueVolume;
+        if (ImGui.SliderFloat("Sound Cue Volume", ref cueVolume, 0f, 1f, "%.2f"))
+        {
+            configuration.SafeCueVolume = Math.Clamp(cueVolume, 0f, 1f);
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Test##testCue"))
+            overlayWindow.PlaySafeCuePreview();
 
         ImGui.Spacing();
         if (ImGui.Button("Save Current as Defaults"))

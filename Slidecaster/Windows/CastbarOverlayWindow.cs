@@ -4,6 +4,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using System;
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Slidecaster.Windows;
 
@@ -96,15 +97,19 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
     {
         try
         {
+            var volume = Math.Clamp(configuration.SafeCueVolume, 0f, 1f);
+            if (volume <= 0.001f)
+                return;
+
             _ = System.Threading.Tasks.Task.Run(() =>
             {
                 try
                 {
-                    Console.Beep(1200, 90);
+                    PlayBeepTone(1200, 90, volume);
                 }
                 catch
                 {
-                    // Beep support depends on host audio capabilities.
+                    // Audio device may be unavailable; silently ignore.
                 }
             });
         }
@@ -113,6 +118,67 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
             log.Warning(ex, "Slidecaster failed to play sound cue.");
         }
     }
+
+    /// <summary>
+    /// Plays the safe-move cue immediately at the configured volume, regardless of cast state.
+    /// Used by the settings UI Test button.
+    /// </summary>
+    public void PlaySafeCuePreview() => PlaySafeCue();
+
+    /// <summary>
+    /// Genethe Win32 PlaySound API. Unlike Console.Beep this honors a volume setting because the
+    /// PCM samples themselves are scaled.
+    /// </summary>
+    private static void PlayBeepTone(int frequencyHz, int durationMs, float volume)
+    {
+        const int sampleRate = 22050;
+        const short bitsPerSample = 16;
+        const short channels = 1;
+        var sampleCount = sampleRate * durationMs / 1000;
+        var dataBytes = sampleCount * 2;
+
+        using var ms = new System.IO.MemoryStream(44 + dataBytes);
+        using (var bw = new System.IO.BinaryWriter(ms, System.Text.Encoding.ASCII, leaveOpen: true))
+        {
+            // RIFF header
+            bw.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));
+            bw.Write(36 + dataBytes);
+            bw.Write(System.Text.Encoding.ASCII.GetBytes("WAVE"));
+            // fmt chunk
+            bw.Write(System.Text.Encoding.ASCII.GetBytes("fmt "));
+            bw.Write(16);
+            bw.Write((short)1); // PCM
+            bw.Write(channels);
+            bw.Write(sampleRate);
+            bw.Write(sampleRate * channels * bitsPerSample / 8);
+            bw.Write((short)(channels * bitsPerSample / 8));
+            bw.Write(bitsPerSample);
+            // data chunk
+            bw.Write(System.Text.Encoding.ASCII.GetBytes("data"));
+            bw.Write(dataBytes);
+
+            var amplitude = (short)(short.MaxValue * Math.Clamp(volume, 0f, 1f) * 0.6f);
+            // Short fade in/out (5ms each) to avoid clicks.
+            var fadeSamples = Math.Min(sampleCount / 4, sampleRate * 5 / 1000);
+            for (var i = 0; i < sampleCount; i++)
+            {
+                var t = (double)i / sampleRate;
+                var env = 1.0;
+                if (i < fadeSamples) env = (double)i / fadeSamples;
+                else if (i > sampleCount - fadeSamples) env = (double)(sampleCount - i) / fadeSamples;
+                var sample = (short)(amplitude * env * Math.Sin(2 * Math.PI * frequencyHz * t));
+                bw.Write(sample);
+            }
+        }
+
+        var wavBytes = ms.ToArray();
+        // SND_MEMORY | SND_ASYNC | SND_NODEFAULT — play raw WAV from memory without blocking.
+        const uint flags = 0x0004u | 0x0001u | 0x0002u;
+        PlaySound(wavBytes, IntPtr.Zero, flags);
+    }
+
+    [DllImport("winmm.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool PlaySound(byte[] pszSound, IntPtr hMod, uint fdwSound);
 
     public void Dispose()
     {
@@ -134,6 +200,13 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         var safeStartRatio = 1f - safeWindowRatio;
 
         var alpha = Math.Clamp(configuration.OverlayOpacity, 0.1f, 1f);
+        var baseR = Math.Clamp(configuration.OverlayColorR, 0f, 1f);
+        var baseG = Math.Clamp(configuration.OverlayColorG, 0f, 1f);
+        var baseB = Math.Clamp(configuration.OverlayColorB, 0f, 1f);
+        // Slightly brighter accent when the safe window is active.
+        var activeR = Math.Clamp(baseR + 0.10f, 0f, 1f);
+        var activeG = Math.Clamp(baseG + 0.10f, 0f, 1f);
+        var activeB = Math.Clamp(baseB + 0.10f, 0f, 1f);
 
         var x1 = castbarPos.X;
         var x2 = castbarPos.X + castbarSize.X - configuration.OverlayEndTrimPx;
@@ -160,11 +233,11 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         var progressTrackWidth = MathF.Max(6f, x2 - progressStartX);
         var progressX = progressStartX + progressTrackWidth * castProgress;
 
-        var safeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0.1f, 0.9f, 0.3f, alpha));
-        var activeSafeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0.15f, 1.0f, 0.35f, Math.Clamp(alpha + 0.2f, 0f, 1f)));
+        var safeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(baseR, baseG, baseB, alpha));
+        var activeSafeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(activeR, activeG, activeB, Math.Clamp(alpha + 0.2f, 0f, 1f)));
         var outlineColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0.0f, 0.0f, 0.0f, 0.7f));
         var markerColor = ImGui.ColorConvertFloat4ToU32(isCurrentlySafe
-            ? new Vector4(0.0f, 1.0f, 0.2f, 0.95f)
+            ? new Vector4(activeR, activeG, activeB, 0.95f)
             : new Vector4(1.0f, 0.75f, 0.1f, 0.95f));
 
         drawList.AddRectFilled(new Vector2(safeX, y1), new Vector2(x2, y2), isCurrentlySafe ? activeSafeZoneColor : safeZoneColor);
@@ -181,7 +254,7 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         {
             var label = isCurrentlySafe ? "SAFE TO MOVE" : "CASTING";
             var textColor = ImGui.ColorConvertFloat4ToU32(isCurrentlySafe
-                ? new Vector4(0.2f, 1f, 0.2f, 0.95f)
+                ? new Vector4(activeR, activeG, activeB, 0.95f)
                 : new Vector4(1f, 0.9f, 0.25f, 0.95f));
             var textSize = ImGui.CalcTextSize(label);
             var textPos = new Vector2((x1 + x2 - textSize.X) * 0.5f, y1 - textSize.Y - 4f);
