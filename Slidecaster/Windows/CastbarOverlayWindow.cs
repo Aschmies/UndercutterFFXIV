@@ -136,9 +136,14 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         var alpha = Math.Clamp(configuration.OverlayOpacity, 0.1f, 1f);
 
         var x1 = castbarPos.X;
-        var y1 = castbarPos.Y;
         var x2 = castbarPos.X + castbarSize.X;
-        var y2 = castbarPos.Y + castbarSize.Y;
+        var overlayHeight = castbarSize.Y * Math.Clamp(configuration.OverlayHeightScale, 0.5f, 3.0f);
+        var overlayY1 = castbarPos.Y + (castbarSize.Y - overlayHeight) * 0.5f;
+        var overlayY2 = overlayY1 + overlayHeight;
+
+        var safeBarHeight = overlayHeight * Math.Clamp(configuration.SafeBarHeightScale, 0.2f, 3.0f);
+        var y1 = overlayY1 + (overlayHeight - safeBarHeight) * 0.5f;
+        var y2 = y1 + safeBarHeight;
 
         var safeX = x1 + castbarSize.X * safeStartRatio;
         var progressX = x1 + castbarSize.X * castProgress;

@@ -18,6 +18,8 @@ public sealed class Configuration : IPluginConfiguration
 
     // Overlay styling
     public float OverlayOpacity { get; set; } = 0.45f;
+    public float OverlayHeightScale { get; set; } = 1.0f;
+    public float SafeBarHeightScale { get; set; } = 1.0f;
 
     private IDalamudPluginInterface? pluginInterface;
 

@@ -1,21 +1,27 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
+using System.Reflection;
 using System.Numerics;
 
 namespace Slidecaster.Windows;
 
 public sealed class SlidecasterWindow : Window
 {
+    private static readonly string DisplayVersion =
+        Assembly.GetExecutingAssembly().GetName().Version is { } v
+            ? $"{v.Major}.{v.Minor}.{v.Build}"
+            : "1.0.0";
+
     private readonly Configuration configuration;
     private readonly CastbarOverlayWindow overlayWindow;
 
     public SlidecasterWindow(Configuration configuration, CastbarOverlayWindow overlayWindow)
-        : base("Slidecaster Settings##window")
+        : base($"Slidecaster v{DisplayVersion} Settings##window")
     {
         this.configuration = configuration;
         this.overlayWindow = overlayWindow;
 
-        Size = new Vector2(460f, 250f);
+        Size = new Vector2(460f, 320f);
         SizeCondition = ImGuiCond.FirstUseEver;
     }
 
@@ -42,6 +48,20 @@ public sealed class SlidecasterWindow : Window
         if (ImGui.SliderFloat("Overlay Opacity", ref opacity, 0.15f, 0.90f, "%.2f"))
         {
             configuration.OverlayOpacity = opacity;
+            configuration.Save();
+        }
+
+        var overlayHeightScale = configuration.OverlayHeightScale;
+        if (ImGui.SliderFloat("Overlay Height Scale", ref overlayHeightScale, 0.5f, 2.5f, "%.2f"))
+        {
+            configuration.OverlayHeightScale = overlayHeightScale;
+            configuration.Save();
+        }
+
+        var safeBarHeightScale = configuration.SafeBarHeightScale;
+        if (ImGui.SliderFloat("Safe Bar Height Scale", ref safeBarHeightScale, 0.3f, 2.5f, "%.2f"))
+        {
+            configuration.SafeBarHeightScale = safeBarHeightScale;
             configuration.Save();
         }
 
