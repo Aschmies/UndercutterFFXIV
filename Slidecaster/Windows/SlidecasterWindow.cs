@@ -46,10 +46,20 @@ public sealed class SlidecasterWindow : Window
             configuration.Save();
         }
 
+
         var opacity = configuration.OverlayOpacity;
+        ImGui.SetNextItemWidth(180f);
         if (ImGui.SliderFloat("Overlay Opacity", ref opacity, 0.15f, 0.90f, "%.2f"))
         {
             configuration.OverlayOpacity = opacity;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        var opacityExact = configuration.OverlayOpacity;
+        ImGui.SetNextItemWidth(70f);
+        if (ImGui.InputFloat("##overlay-opacity-exact", ref opacityExact, 0.01f, 0.05f, "%.2f"))
+        {
+            configuration.OverlayOpacity = Math.Clamp(opacityExact, 0.15f, 0.90f);
             configuration.Save();
         }
 
@@ -71,6 +81,7 @@ public sealed class SlidecasterWindow : Window
         }
 
         var overlayHeightScale = configuration.OverlayHeightScale;
+        ImGui.SetNextItemWidth(180f);
         if (ImGui.SliderFloat("Overlay Height Scale", ref overlayHeightScale, 0.5f, 2.5f, "%.2f"))
         {
             configuration.OverlayHeightScale = overlayHeightScale;
@@ -78,7 +89,7 @@ public sealed class SlidecasterWindow : Window
         }
         ImGui.SameLine();
         var overlayHeightExact = configuration.OverlayHeightScale;
-        ImGui.SetNextItemWidth(90f);
+        ImGui.SetNextItemWidth(70f);
         if (ImGui.InputFloat("##overlay-height-exact", ref overlayHeightExact, 0.05f, 0.20f, "%.2f"))
         {
             configuration.OverlayHeightScale = Math.Clamp(overlayHeightExact, 0.5f, 2.5f);
@@ -86,6 +97,7 @@ public sealed class SlidecasterWindow : Window
         }
 
         var safeBarHeightScale = configuration.SafeBarHeightScale;
+        ImGui.SetNextItemWidth(180f);
         if (ImGui.SliderFloat("Safe Bar Height Scale", ref safeBarHeightScale, 0.3f, 2.5f, "%.2f"))
         {
             configuration.SafeBarHeightScale = safeBarHeightScale;
@@ -93,7 +105,7 @@ public sealed class SlidecasterWindow : Window
         }
         ImGui.SameLine();
         var safeBarHeightExact = configuration.SafeBarHeightScale;
-        ImGui.SetNextItemWidth(90f);
+        ImGui.SetNextItemWidth(70f);
         if (ImGui.InputFloat("##safe-bar-height-exact", ref safeBarHeightExact, 0.05f, 0.20f, "%.2f"))
         {
             configuration.SafeBarHeightScale = Math.Clamp(safeBarHeightExact, 0.3f, 2.5f);

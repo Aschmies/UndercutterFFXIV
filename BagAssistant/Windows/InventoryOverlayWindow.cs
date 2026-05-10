@@ -55,10 +55,17 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
 
     public override void PreDraw()
     {
-        // Anchor the button strip with its TOP edge inline with the top of the inventory addon,
-        // sitting just to the left of the inventory window. This keeps it visually attached to
-        // the inventory rather than floating high above it.
-        var pos = new Vector2(anchorPos.X, anchorPos.Y);
+        // Anchor the button strip so its BOTTOM edge sits just above the top of the inventory addon.
+        // This keeps the button box visually attached to the inventory, with its bottom edge aligned.
+        var windowHeight = 0f;
+        var ctx = (ImGuiContext*)ImGui.GetCurrentContext();
+        if (ctx != null)
+        {
+            // Estimate window height using previous frame or fallback to a default.
+            windowHeight = ImGui.GetWindowHeight() > 0 ? ImGui.GetWindowHeight() : 52f;
+        }
+        // Position so the bottom of the overlay is just above the inventory window.
+        var pos = new Vector2(anchorPos.X, anchorPos.Y - windowHeight - 2f); // 2px gap
         ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
         // Cap window width to the inventory addon's width; height is auto via AlwaysAutoResize.
         var maxW = MathF.Max(220f, anchorSize.X);

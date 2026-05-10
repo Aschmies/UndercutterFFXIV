@@ -21,8 +21,8 @@ public sealed class Configuration : IPluginConfiguration
 
     // Overlay styling
     public float OverlayOpacity { get; set; } = 0.45f;
-    public float OverlayHeightScale { get; set; } = 1.0f;
-    public float SafeBarHeightScale { get; set; } = 1.0f;
+    public float OverlayHeightScale { get; set; } = 0.50f;
+    public float SafeBarHeightScale { get; set; } = 0.45f;
     public bool ShowCastBarBorder { get; set; } = true;
 
     // Overlay safe-zone fill color (linear 0..1).
@@ -31,7 +31,7 @@ public sealed class Configuration : IPluginConfiguration
     public float OverlayColorB { get; set; } = 0.30f;
 
     // Trim only the right edge of the overlay so it can align exactly with cast bar visuals.
-    public float OverlayEndTrimPx { get; set; } = 0f;
+    public float OverlayEndTrimPx { get; set; } = 26.5f;
 
     public bool RoundRightSide { get; set; } = false;
     public bool DrawAsLine { get; set; } = false;
@@ -44,7 +44,7 @@ public sealed class Configuration : IPluginConfiguration
 
     // Vertical pixel offset applied to the overlay's Y center. Use the slider in settings to tune
     // until the overlay sits exactly on the visible cast progress bar.
-    public float OverlayYOffsetPx { get; set; } = 0f;
+    public float OverlayYOffsetPx { get; set; } = -2.0f;
 
     // User-defined defaults snapshot.
     public int DefaultBaseSafeWindowMs { get; set; } = 500;
@@ -53,20 +53,20 @@ public sealed class Configuration : IPluginConfiguration
     public bool DefaultPlaySafeMoveSound { get; set; } = false;
     public float DefaultSafeCueVolume { get; set; } = 0.6f;
     public float DefaultOverlayOpacity { get; set; } = 0.45f;
-    public float DefaultOverlayHeightScale { get; set; } = 1.0f;
-    public float DefaultSafeBarHeightScale { get; set; } = 1.0f;
+    public float DefaultOverlayHeightScale { get; set; } = 0.50f;
+    public float DefaultSafeBarHeightScale { get; set; } = 0.45f;
     public bool DefaultShowCastBarBorder { get; set; } = true;
     public float DefaultOverlayColorR { get; set; } = 0.10f;
     public float DefaultOverlayColorG { get; set; } = 0.90f;
     public float DefaultOverlayColorB { get; set; } = 0.30f;
-    public float DefaultOverlayEndTrimPx { get; set; } = 0f;
+    public float DefaultOverlayEndTrimPx { get; set; } = 26.5f;
     public bool DefaultRoundRightSide { get; set; } = false;
     public bool DefaultDrawAsLine { get; set; } = false;
     public float DefaultLineThickness { get; set; } = 3.0f;
     public float DefaultLineHeightScale { get; set; } = 1.2f;
     public bool DefaultEnableProgressMarkerStartOffset { get; set; } = false;
     public float DefaultProgressMarkerStartOffsetPx { get; set; } = 0f;
-    public float DefaultOverlayYOffsetPx { get; set; } = 0f;
+    public float DefaultOverlayYOffsetPx { get; set; } = -2.0f;
 
     private IDalamudPluginInterface? pluginInterface;
 
@@ -136,20 +136,20 @@ public sealed class Configuration : IPluginConfiguration
         PlaySafeMoveSound = false;
         SafeCueVolume = 0.6f;
         OverlayOpacity = 0.45f;
-        OverlayHeightScale = 1.0f;
-        SafeBarHeightScale = 1.0f;
+        OverlayHeightScale = 0.50f;
+        SafeBarHeightScale = 0.45f;
         ShowCastBarBorder = true;
         OverlayColorR = 0.10f;
         OverlayColorG = 0.90f;
         OverlayColorB = 0.30f;
-        OverlayEndTrimPx = 0f;
+        OverlayEndTrimPx = 26.5f;
         RoundRightSide = false;
         DrawAsLine = false;
         LineThickness = 3.0f;
         LineHeightScale = 1.2f;
         EnableProgressMarkerStartOffset = false;
         ProgressMarkerStartOffsetPx = 0f;
-        OverlayYOffsetPx = 0f;
+        OverlayYOffsetPx = -2.0f;
 
         // Overwrite the user-saved defaults snapshot with the same factory values.
         DefaultBaseSafeWindowMs = BaseSafeWindowMs;
