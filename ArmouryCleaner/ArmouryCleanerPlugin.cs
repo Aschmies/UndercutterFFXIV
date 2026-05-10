@@ -18,7 +18,8 @@ namespace ArmouryCleaner
         [PluginService] internal static IClientState ClientState { get; private set; } = null!;
         [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
-        private const string CommandName = "/ac";
+        private const string CommandName = "/acplugin";
+        private const string LegacyCommandName = "/ac";
 
         public Configuration Configuration { get; }
 
@@ -37,7 +38,12 @@ namespace ArmouryCleaner
 
             CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Open Armoury Cleaner | /ac"
+                HelpMessage = "Open Armoury Cleaner | /acplugin"
+            });
+
+            CommandManager.AddHandler(LegacyCommandName, new CommandInfo(OnCommand)
+            {
+                HelpMessage = "Open Armoury Cleaner | /acplugin"
             });
 
             PluginInterface.UiBuilder.Draw += DrawUI;
@@ -53,6 +59,7 @@ namespace ArmouryCleaner
         public void Dispose()
         {
             CommandManager.RemoveHandler(CommandName);
+            CommandManager.RemoveHandler(LegacyCommandName);
             windowSystem.RemoveAllWindows();
             mainWindow.Dispose();
         }
