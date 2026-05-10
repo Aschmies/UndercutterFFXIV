@@ -22,7 +22,7 @@ namespace QuestNav.Windows
         private QuestEntry? navTarget;
 
         // Fixed window size — user can drag but not resize
-        private static readonly Vector2 WindowSize = new(110f, 130f);
+        private static readonly Vector2 WindowSize = new(160f, 160f);
 
         public ArrowOverlayWindow(Configuration config, IClientState clientState)
             : base("##questnav_arrow",
@@ -143,11 +143,11 @@ namespace QuestNav.Windows
                 ImGui.TextColored(new Vector4(0.4f, 0.8f, 1f, 0.9f), label);
             }
 
-            // Quest name (truncated) at very top, centred
-            var display = navTarget.Name.Length > 14 ? navTarget.Name[..13] + "…" : navTarget.Name;
-            var nameW = ImGui.CalcTextSize(display).X;
-            ImGui.SetCursorPos(new Vector2((winSize.X - nameW) * 0.5f, 3f));
-            ImGui.TextColored(new Vector4(0.9f, 0.9f, 0.9f, 0.75f), display);
+            // Quest name at top with text wrapping
+            ImGui.SetCursorPos(new Vector2(5f, 3f));
+            ImGui.PushTextWrapPos(winSize.X - 10f);
+            ImGui.TextColored(new Vector4(0.9f, 0.9f, 0.9f, 0.75f), navTarget.Name);
+            ImGui.PopTextWrapPos();
         }
     }
 }
