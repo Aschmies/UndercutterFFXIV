@@ -1,6 +1,6 @@
 [
     {
-        "Author":  "Market Assistant Dev",
+        "Author":  "Aschy",
         "Name":  "Market Master Pro",
         "InternalName":  "UndercutterFFXIV",
         "Punchline":  "Manual market intelligence and arbitrage scanner for FFXIV.",
@@ -34,7 +34,7 @@
         "DownloadCount":  0
     },
     {
-        "Author":  "Market Assistant Dev",
+        "Author":  "Aschy",
         "Name":  "Armoury Cleaner",
         "Punchline":  "Filter and discard unwanted gear from your armoury chest.",
         "Description":  "Define filters by job, minimum/maximum level, and item level. Armoury Cleaner will scan each gear slot and safely discard only items that match all active filters.",
@@ -67,7 +67,7 @@
         "DownloadCount":  0
     },
     {
-        "Author":  "Market Assistant Dev",
+        "Author":  "Aschy",
         "Name":  "QuestNav",
         "Punchline":  "One-click teleport to the nearest aetheryte for each active quest.",
         "Description":  "QuestNav lists all your active quests and adds a Teleport button next to each one. Clicking it teleports you to the nearest unlocked aetheryte to the quest's location — no more hunting through the map.",

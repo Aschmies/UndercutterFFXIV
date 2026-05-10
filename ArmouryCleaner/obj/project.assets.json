@@ -76,7 +76,7 @@
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
-    "version": "1.0.10",
+    "version": "1.0.14",
     "restore": {
       "projectUniqueName": "C:\\Users\\David\\Projects\\UndercutterFFXIV\\ArmouryCleaner\\ArmouryCleaner.csproj",
       "projectName": "ArmouryCleaner",

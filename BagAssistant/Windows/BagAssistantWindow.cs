@@ -812,6 +812,18 @@ public sealed class BagAssistantWindow : Window, IDisposable
             Config.ShowVisualZoneOverlay = showVisualOverlay;
             Config.Save();
         }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Draws colored boxes directly over the native in-game inventory slots to represent your painted zones.");
+
+        if (Config.ShowVisualZoneOverlay)
+        {
+            var overlayOpacity = Config.VisualZoneOverlayOpacity;
+            ImGui.SetNextItemWidth(200f);
+            if (ImGui.SliderFloat("Zone Overlay Opacity", ref overlayOpacity, 0.05f, 1f, "%.2f"))
+            {
+                Config.VisualZoneOverlayOpacity = overlayOpacity;
+                Config.Save();
+            }
+        }
         
         var showVisualNumbers = Config.ShowVisualZoneNumbers;
         if (ImGui.Checkbox("Show Slot Numbers on overlay", ref showVisualNumbers))
@@ -1014,6 +1026,23 @@ public sealed class BagAssistantWindow : Window, IDisposable
                 activeZoneTagIndex = i;
             }
             ImGui.PopStyleColor();
+            
+            if (ImGui.IsItemHovered())
+            {
+                var tooltip = zoneTags[i] switch
+                {
+                    "Gear" => "Includes all equippable weapons and armor.",
+                    "Materia" => "Includes all combat, crafting, and gathering materia.",
+                    "Consumables" => "Includes meals (food) and medicine (potions/tinctures).",
+                    "Crafting" => "Includes all stackable materials that aren't gear or consumables.",
+                    "Gathering" => "Includes fish, bait, and raw gathering node materials.",
+                    "Crystals" => "Includes elemental shards, crystals, and clusters.",
+                    "Junk" => "Low-value items that can be safely vendored.",
+                    "None" => "Erase layout zone for this slot.",
+                    _ => ""
+                };
+                ImGui.SetTooltip(tooltip);
+            }
         }
 
         ImGui.Spacing();

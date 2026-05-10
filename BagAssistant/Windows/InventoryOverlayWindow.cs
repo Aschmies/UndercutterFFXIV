@@ -204,6 +204,11 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
             plugin.ToggleMainUi();
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Open Bag Assistant");
+            
+        if (Config.ShowVisualZoneOverlay)
+        {
+            DrawVisualZoneMinimap();
+        }
     }
 
     private SortRule? ResolveOverlayRule()
@@ -248,10 +253,20 @@ public sealed class InventoryOverlayWindow : Window, IDisposable
                     else if (tag == "Crystals") color = new Vector4(0.4f, 0.8f, 0.9f, 1f);
                     else if (tag == "Junk") color = new Vector4(0.5f, 0.5f, 0.5f, 1f);
 
+                    color.W *= Config.VisualZoneOverlayOpacity;
+
                     var slotRectMin = bagPos + new Vector2(c * (slotSize + spacing), r * (slotSize + spacing));
                     var slotRectMax = slotRectMin + new Vector2(slotSize, slotSize);
                     
                     drawList.AddRectFilled(slotRectMin, slotRectMax, ImGui.ColorConvertFloat4ToU32(color), 2f);
+
+                    if (Config.ShowVisualZoneNumbers)
+                    {
+                        var text = (slotIndex + 1).ToString();
+                        var textSize = ImGui.CalcTextSize(text);
+                        var textPos = slotRectMin + (new Vector2(slotSize, slotSize) - textSize) / 2f;
+                        drawList.AddText(textPos, ImGui.ColorConvertFloat4ToU32(new Vector4(1, 1, 1, Config.VisualZoneOverlayOpacity)), text);
+                    }
                 }
             }
         }

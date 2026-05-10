@@ -1,5 +1,5 @@
 {
-  "Author": "Market Assistant Dev",
+  "Author": "Aschy",
   "Name": "BagAssistant",
   "Punchline": "Rule-based inventory sorter with comprehensive filters.",
   "Description": "Define a stack of sorting rules and BagAssistant will route items to the right bag every time. Filter by item category, rarity, level range, item level, class/job, HQ, tradeable, name match, vendor price, item ID and more. Rules are evaluated top-to-bottom (first match wins), making it easy to model anything from 'all HQ gear -> Bag 1' to 'all crafting materials below ilvl 600 -> Bag 4'.",

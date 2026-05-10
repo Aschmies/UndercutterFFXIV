@@ -1,5 +1,5 @@
 {
-  "Author": "Market Assistant Dev",
+  "Author": "Aschy",
   "Name": "Slidecaster",
   "Punchline": "Highlights the final safe-move window while casting.",
   "Description": "Adds a cast-bar overlay that marks the slidecasting timeframe so you can start moving without interrupting the cast. Includes an optional audio cue when the safe window begins.",

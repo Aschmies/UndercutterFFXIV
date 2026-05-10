@@ -24,7 +24,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool RequireConfirmation { get; set; } = true;
 
     /// <summary>Maximum vendor price for an item to be considered Junk.</summary>
-    public int MaxJunkVendorPrice { get; set; } = 50;
+    public int MaxJunkVendorPrice { get; set; } = 10;
 
     /// <summary>If true, items flagged as stackable/crafting materials are excluded from Junk.</summary>
     public bool ExcludeCraftingFromJunk { get; set; } = true;
@@ -37,6 +37,9 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>If true, show visual zone overlays over the inventory slots.</summary>
     public bool ShowVisualZoneOverlay { get; set; } = false;
+
+    /// <summary>Opacity of the colored zone overlays over the inventory slots (0.0 to 1.0).</summary>
+    public float VisualZoneOverlayOpacity { get; set; } = 0.3f;
 
     /// <summary>If true, show slot numbers on the visual zone overlay.</summary>
     public bool ShowVisualZoneNumbers { get; set; } = false;

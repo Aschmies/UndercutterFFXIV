@@ -1,5 +1,5 @@
 {
-  "Author": "Market Assistant Dev",
+  "Author": "Aschy",
   "Name": "Armoury Cleaner",
   "Punchline": "Filter and discard unwanted gear from your armoury chest.",
   "Description": "Define filters by job, minimum/maximum level, and item level. Armoury Cleaner will scan each gear slot and safely discard only items that match all active filters.",

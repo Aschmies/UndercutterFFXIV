@@ -246,12 +246,21 @@ public static class QuickSortPresets
         if (!bagFlags[0]) return new List<QuickMove>();
         var destBag = InventoryService.PlayerBags[0];
         
-        return items
+        var extractables = items
             .Where(i => i.IsEquippable && i.SpiritbondPercent >= 100)
             .OrderByDescending(i => i.ItemLevel)
-            .Where(i => i.Container != destBag)
-            .Select(i => new QuickMove { Item = i, DestBag = destBag })
             .ToList();
+
+        var moves = new List<QuickMove>();
+        for (int i = 0; i < extractables.Count && i < 35; i++)
+        {
+            var item = extractables[i];
+            if (item.Container != destBag || item.Slot != i)
+            {
+                moves.Add(new QuickMove { Item = item, DestBag = destBag, DestSlot = i });
+            }
+        }
+        return moves;
     }
 
     /// <summary>
@@ -261,18 +270,18 @@ public static class QuickSortPresets
     public static List<QuickMove> BuildMergeStacks(IReadOnlyList<InventoryItemInfo> items, IReadOnlyList<bool> bagFlags)
     {
         var result = new List<QuickMove>();
-        var grouped = items.GroupBy(i => i.ItemId).Where(g => g.Count() > 1);
+        // Important: we group by ItemId and HQ flag to only merge exact matches
+        var grouped = items.GroupBy(i => new { i.ItemId, i.IsHQ }).Where(g => g.Count() > 1);
 
         foreach (var group in grouped)
         {
-            var first = group.First();
-            var targetBag = first.Container;
+            var stacks = group.ToList();
+            var target = stacks.First(); // Pick the first stack to merge into
 
-            // Move all duplicates to the first item's bag (triggers consolidation)
-            foreach (var item in group.Skip(1))
+            // Move all other stacks directly onto the primary stack's slot to trigger a merge
+            foreach (var item in stacks.Skip(1))
             {
-                if (item.Container != targetBag)
-                    result.Add(new QuickMove { Item = item, DestBag = targetBag });
+                 result.Add(new QuickMove { Item = item, DestBag = target.Container, DestSlot = target.Slot });
             }
         }
 
@@ -287,10 +296,21 @@ public static class QuickSortPresets
         if (!bagFlags[3]) return new List<QuickMove>();
         var destBag = InventoryService.PlayerBags[3];
         
-        return items
-            .Where(i => IsJunk(i, config) && i.Container != destBag)
-            .Select(i => new QuickMove { Item = i, DestBag = destBag })
+        var trash = items
+            .Where(i => IsJunk(i, config))
+            .OrderBy(i => i.ItemId)
             .ToList();
+
+        var moves = new List<QuickMove>();
+        for (int i = 0; i < trash.Count && i < 35; i++)
+        {
+            var item = trash[i];
+            if (item.Container != destBag || item.Slot != i)
+            {
+                moves.Add(new QuickMove { Item = item, DestBag = destBag, DestSlot = i });
+            }
+        }
+        return moves;
     }
 
     // ─── Natural Language Search Helpers ───────────────────────────────────────
@@ -406,10 +426,12 @@ public static class QuickSortPresets
             var targetSlots = kvp.Value;
             var matchedItems = itemsToMove.Where(i => tag switch
             {
-            "Gear" => i.IsEquippable,
-            "Crafting" => i.IsStackable && !IsJunk(i, config) && i.UICategoryRowId != UICategoryMateria && i.UICategoryRowId != UICategoryCrystal && i.UICategoryRowId != 44 && i.UICategoryRowId != 46 && i.UICategoryRowId != 47 && i.UICategoryRowId != 48,
-            "Gathering" => i.IsStackable && !IsJunk(i, config) && (i.UICategoryRowId == 47 || i.UICategoryRowId == 48 || i.UICategoryRowId == 38 || i.UICategoryRowId == 39 || i.UICategoryRowId == 40),
-                "Crystals" => i.UICategoryRowId == UICategoryCrystal,
+                "Gear" => i.IsEquippable,
+                "Materia" => i.UICategoryRowId == 58,
+                "Consumables" => i.UICategoryRowId == 44 || i.UICategoryRowId == 46,
+                "Crafting" => i.IsStackable && !IsJunk(i, config) && i.UICategoryRowId != 58 && i.UICategoryRowId != 59 && i.UICategoryRowId != 44 && i.UICategoryRowId != 46 && i.UICategoryRowId != 47 && i.UICategoryRowId != 48,
+                "Gathering" => i.IsStackable && !IsJunk(i, config) && (i.UICategoryRowId == 47 || i.UICategoryRowId == 48 || i.UICategoryRowId == 38 || i.UICategoryRowId == 39 || i.UICategoryRowId == 40),
+                "Crystals" => i.UICategoryRowId == 59,
                 "Junk" => IsJunk(i, config),
                 _ => false
             }).ToList();
