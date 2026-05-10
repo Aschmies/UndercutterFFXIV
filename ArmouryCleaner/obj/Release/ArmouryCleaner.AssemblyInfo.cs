@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("ArmouryCleaner: filter and discard unwanted items from your armoury chest by job," +
     " level, and item level."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.6.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.6+30634b428645c3c5670cd9b64c3a3d198dc1a322")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.6+826e0ca2b013256f2ab235516c4a8b9ee131acea")]
 [assembly: System.Reflection.AssemblyProductAttribute("ArmouryCleaner")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ArmouryCleaner")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.6.0")]
