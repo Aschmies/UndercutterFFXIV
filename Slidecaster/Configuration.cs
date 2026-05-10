@@ -25,6 +25,10 @@ public sealed class Configuration : IPluginConfiguration
     // Trim only the right edge of the overlay so it can align exactly with cast bar visuals.
     public float OverlayEndTrimPx { get; set; } = 0f;
 
+    // Visual-only adjustment for where the moving progress marker starts.
+    public bool EnableProgressMarkerStartOffset { get; set; } = false;
+    public float ProgressMarkerStartOffsetPx { get; set; } = 0f;
+
     // User-defined defaults snapshot.
     public int DefaultBaseSafeWindowMs { get; set; } = 500;
     public int DefaultLatencyCompensationMs { get; set; } = 0;
@@ -35,6 +39,8 @@ public sealed class Configuration : IPluginConfiguration
     public float DefaultSafeBarHeightScale { get; set; } = 1.0f;
     public bool DefaultShowCastBarBorder { get; set; } = true;
     public float DefaultOverlayEndTrimPx { get; set; } = 0f;
+    public bool DefaultEnableProgressMarkerStartOffset { get; set; } = false;
+    public float DefaultProgressMarkerStartOffsetPx { get; set; } = 0f;
 
     private IDalamudPluginInterface? pluginInterface;
 
@@ -51,6 +57,8 @@ public sealed class Configuration : IPluginConfiguration
         DefaultSafeBarHeightScale = SafeBarHeightScale;
         DefaultShowCastBarBorder = ShowCastBarBorder;
         DefaultOverlayEndTrimPx = OverlayEndTrimPx;
+        DefaultEnableProgressMarkerStartOffset = EnableProgressMarkerStartOffset;
+        DefaultProgressMarkerStartOffsetPx = ProgressMarkerStartOffsetPx;
         Save();
     }
 
@@ -65,6 +73,8 @@ public sealed class Configuration : IPluginConfiguration
         SafeBarHeightScale = DefaultSafeBarHeightScale;
         ShowCastBarBorder = DefaultShowCastBarBorder;
         OverlayEndTrimPx = DefaultOverlayEndTrimPx;
+        EnableProgressMarkerStartOffset = DefaultEnableProgressMarkerStartOffset;
+        ProgressMarkerStartOffsetPx = DefaultProgressMarkerStartOffsetPx;
         Save();
     }
 

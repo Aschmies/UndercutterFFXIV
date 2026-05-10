@@ -150,7 +150,15 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         var y2 = y1 + safeBarHeight;
 
         var safeX = x1 + width * safeStartRatio;
-        var progressX = x1 + width * castProgress;
+        var progressStartX = x1;
+        if (configuration.EnableProgressMarkerStartOffset)
+            progressStartX += configuration.ProgressMarkerStartOffsetPx;
+
+        if (progressStartX > x2 - 6f)
+            progressStartX = x2 - 6f;
+
+        var progressTrackWidth = MathF.Max(6f, x2 - progressStartX);
+        var progressX = progressStartX + progressTrackWidth * castProgress;
 
         var safeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0.1f, 0.9f, 0.3f, alpha));
         var activeSafeZoneColor = ImGui.ColorConvertFloat4ToU32(new Vector4(0.15f, 1.0f, 0.35f, Math.Clamp(alpha + 0.2f, 0f, 1f)));

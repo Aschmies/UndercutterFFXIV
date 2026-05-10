@@ -105,6 +105,31 @@ public sealed class SlidecasterWindow : Window
             configuration.Save();
         }
 
+        var enableMarkerStartOffset = configuration.EnableProgressMarkerStartOffset;
+        if (ImGui.Checkbox("Adjust moving bar start", ref enableMarkerStartOffset))
+        {
+            configuration.EnableProgressMarkerStartOffset = enableMarkerStartOffset;
+            configuration.Save();
+        }
+
+        if (configuration.EnableProgressMarkerStartOffset)
+        {
+            var markerStartOffset = configuration.ProgressMarkerStartOffsetPx;
+            if (ImGui.SliderFloat("Moving Bar Start Offset (px)", ref markerStartOffset, -40f, 160f, "%.1f"))
+            {
+                configuration.ProgressMarkerStartOffsetPx = markerStartOffset;
+                configuration.Save();
+            }
+            ImGui.SameLine();
+            var markerStartOffsetExact = configuration.ProgressMarkerStartOffsetPx;
+            ImGui.SetNextItemWidth(90f);
+            if (ImGui.InputFloat("##moving-bar-start-offset-exact", ref markerStartOffsetExact, 1f, 5f, "%.1f"))
+            {
+                configuration.ProgressMarkerStartOffsetPx = Math.Clamp(markerStartOffsetExact, -40f, 160f);
+                configuration.Save();
+            }
+        }
+
         var showSafeText = configuration.ShowSafeText;
         if (ImGui.Checkbox("Show SAFE TO MOVE text", ref showSafeText))
         {
