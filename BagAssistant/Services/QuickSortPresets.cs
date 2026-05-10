@@ -404,7 +404,7 @@ public static class QuickSortPresets
     /// Crystals / Junk / Misc. Junk takes precedence over its underlying category so that
     /// painted "Junk" zones receive the right items even when the item is also stackable.
     /// </summary>
-    private static string CategorizeForZone(InventoryItemInfo i, Configuration config)
+    public static string CategorizeForZone(InventoryItemInfo i, Configuration config)
     {
         if (IsJunk(i, config)) return "Junk";
         if (i.IsEquippable) return "Gear";
@@ -434,23 +434,39 @@ public static class QuickSortPresets
     };
 
     /// <summary>
-    /// Build a full-rebuild Apply-Zones plan. Treats the inventory as a blank canvas:
-    /// every item is categorised, sorted within its category, and assigned to the painted
-    /// layout slots in order. Overflow items (and items whose category has no zone) are
-    /// placed into any remaining "None"-tagged slots. Move operations are then computed
-    /// using a virtual-swap simulator so the live inventory is rewritten safely.
+    /// Generic full-rebuild engine. Used by every Bag Assistant sort.
+    ///
+    /// Algorithm:
+    /// 1. Read every item in the active bags.
+    /// 2. Categorise each item via <paramref name="itemCategorizer"/>.
+    /// 3. Sort items inside each category via <paramref name="sorter"/> (deterministic).
+    /// 4. For every active bag slot, ask <paramref name="slotTagger"/> for a category tag.
+    /// 5. Place sorted items into matching tagged slots in slot order.
+    /// 6. Spill overflow (items whose category has no zone, or whose zone is full) into any
+    ///    remaining unfilled slots in slot order.
+    /// 7. Run a virtual swap simulator over (current → target) and emit minimal
+    ///    <see cref="QueuedMove"/>s. Each move corresponds to one
+    ///    <c>InventoryManager.MoveItemSlot</c> call (atomic swap).
+    ///
+    /// The simulator guarantees safety: every emitted move sees the post-state of all
+    /// previous moves, so items are never overwritten.
     /// </summary>
-    public static List<QueuedMove> BuildApplyVisualZonesPlan(
+    public static List<QueuedMove> BuildFullRebuildPlan(
         IReadOnlyList<InventoryItemInfo> items,
-        string[] layoutMap,
+        Func<int, string?> slotTagger,
+        Func<InventoryItemInfo, string> itemCategorizer,
         bool[] bagFlags,
-        Configuration config)
+        Func<string, IEnumerable<InventoryItemInfo>, IOrderedEnumerable<InventoryItemInfo>>? sorter = null)
     {
-        // 1) Categorise every item and group.
-        var byCategory = new Dictionary<string, List<InventoryItemInfo>>();
+        sorter ??= SortForCategory;
+
+        // 1) Group items in active bags by their category.
+        var byCategory = new Dictionary<string, List<InventoryItemInfo>>(StringComparer.Ordinal);
         foreach (var item in items)
         {
-            var cat = CategorizeForZone(item, config);
+            var bagIdx = Array.IndexOf(InventoryService.PlayerBags, item.Container);
+            if (bagIdx < 0 || bagIdx >= bagFlags.Length || !bagFlags[bagIdx]) continue;
+            var cat = itemCategorizer(item);
             if (!byCategory.TryGetValue(cat, out var list))
             {
                 list = new List<InventoryItemInfo>();
@@ -461,34 +477,27 @@ public static class QuickSortPresets
 
         // 2) Sort each category deterministically.
         foreach (var key in byCategory.Keys.ToList())
-            byCategory[key] = SortForCategory(key, byCategory[key]).ToList();
+            byCategory[key] = sorter(key, byCategory[key]).ToList();
 
-        // 3) Walk the layout in slot order to build per-tag slot lists + a free-slot list.
-        var zoneSlots = new Dictionary<string, List<(InventoryType bag, int slot)>>();
-        var freeSlots = new List<(InventoryType bag, int slot)>();
+        // 3) Walk the layout in slot order; collect per-tag slot lists.
+        var zoneSlots = new Dictionary<string, List<(InventoryType bag, int slot)>>(StringComparer.Ordinal);
         for (int g = 0; g < 140; g++)
         {
             int bagIdx = g / 35;
             int slotIdx = g % 35;
             if (bagIdx >= bagFlags.Length || !bagFlags[bagIdx]) continue;
+            var tag = slotTagger(g);
+            if (string.IsNullOrEmpty(tag) || tag == "None") continue;
             var bag = InventoryService.PlayerBags[bagIdx];
-            var tag = (layoutMap != null && g < layoutMap.Length ? layoutMap[g] : null) ?? "None";
-            if (string.IsNullOrEmpty(tag) || tag == "None")
+            if (!zoneSlots.TryGetValue(tag, out var list))
             {
-                freeSlots.Add((bag, slotIdx));
+                list = new List<(InventoryType, int)>();
+                zoneSlots[tag] = list;
             }
-            else
-            {
-                if (!zoneSlots.TryGetValue(tag, out var list))
-                {
-                    list = new List<(InventoryType, int)>();
-                    zoneSlots[tag] = list;
-                }
-                list.Add((bag, slotIdx));
-            }
+            list.Add((bag, slotIdx));
         }
 
-        // 4) Assign sorted items to their zone slots; overflow goes to free-slot pool.
+        // 4) Assign sorted items to their zone slots; collect overflow.
         var target = new Dictionary<(InventoryType bag, int slot), InventoryItemInfo>();
         var overflow = new List<InventoryItemInfo>();
         foreach (var (cat, list) in byCategory)
@@ -505,17 +514,21 @@ public static class QuickSortPresets
             }
         }
 
-        // 5) Spill overflow into the unzoned ("None") slots in slot-order.
-        int freeIdx = 0;
-        foreach (var item in overflow)
+        // 5) Spill overflow into ANY remaining unfilled active slot, in slot order.
+        for (int g = 0; g < 140 && overflow.Count > 0; g++)
         {
-            while (freeIdx < freeSlots.Count && target.ContainsKey(freeSlots[freeIdx])) freeIdx++;
-            if (freeIdx >= freeSlots.Count) break; // no remaining capacity – will be left in place
-            target[freeSlots[freeIdx]] = item;
-            freeIdx++;
+            int bagIdx = g / 35;
+            int slotIdx = g % 35;
+            if (bagIdx >= bagFlags.Length || !bagFlags[bagIdx]) continue;
+            var bag = InventoryService.PlayerBags[bagIdx];
+            var key = (bag, slotIdx);
+            if (target.ContainsKey(key)) continue;
+            target[key] = overflow[0];
+            overflow.RemoveAt(0);
         }
 
-        // 6) Virtual swap simulator: walk target slots in deterministic order and emit moves.
+        // 6) Virtual swap simulator: emit minimal moves while applying each change to a
+        //    shadow model so subsequent moves see the up-to-date state.
         var current = new Dictionary<(InventoryType bag, int slot), InventoryItemInfo>();
         var locOf = new Dictionary<InventoryItemInfo, (InventoryType bag, int slot)>();
         foreach (var item in items)
@@ -539,7 +552,6 @@ public static class QuickSortPresets
 
             moves.Add(new QueuedMove(srcKey.bag, srcKey.slot, key.bag, key.slot, false, desired.Name));
 
-            // Apply the swap to our virtual model so later moves see the correct state.
             current.TryGetValue(key, out var displaced);
             current[key] = desired;
             locOf[desired] = key;
@@ -555,6 +567,212 @@ public static class QuickSortPresets
         }
 
         return moves;
+    }
+
+    /// <summary>
+    /// Build a full-rebuild Apply-Zones plan. Categorises every item, sorts within each
+    /// category, then assigns items to the painted layout slots.
+    /// </summary>
+    public static List<QueuedMove> BuildApplyVisualZonesPlan(
+        IReadOnlyList<InventoryItemInfo> items,
+        string[] layoutMap,
+        bool[] bagFlags,
+        Configuration config)
+    {
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => (layoutMap != null && g >= 0 && g < layoutMap.Length) ? layoutMap[g] : "None",
+            itemCategorizer: i => CategorizeForZone(i, config),
+            bagFlags: bagFlags);
+    }
+
+    // ─── Preset planners (all routed through BuildFullRebuildPlan) ────────────
+
+    /// <summary>Tag every slot of a bag (35 slots) with the same tag, leaving others "None".</summary>
+    private static string? UniformBagTag(int globalSlotIndex, int bagIndex, string tag)
+        => globalSlotIndex / 35 == bagIndex ? tag : "None";
+
+    /// <summary>Tag bags from a (bagIndex → tag) map.</summary>
+    private static string? MultiBagTag(int globalSlotIndex, IReadOnlyDictionary<int, string> tagsByBag)
+    {
+        var bagIdx = globalSlotIndex / 35;
+        return tagsByBag.TryGetValue(bagIdx, out var tag) ? tag : "None";
+    }
+
+    /// <summary>
+    /// Smart Sort: Gear → Bag 1, Consumables → Bag 2, Crafting/Gathering → Bag 3,
+    /// Crystals/Materia → Bag 4. Junk and Misc spill into remaining capacity.
+    /// </summary>
+    public static List<QueuedMove> BuildSmartSortPlanV2(IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        var slotTags = new Dictionary<int, string>();
+        if (bagFlags.Length > 0 && bagFlags[0]) slotTags[0] = "Gear";
+        if (bagFlags.Length > 1 && bagFlags[1]) slotTags[1] = "Consumables";
+        if (bagFlags.Length > 2 && bagFlags[2]) slotTags[2] = "Crafting";
+        if (bagFlags.Length > 3 && bagFlags[3]) slotTags[3] = "Crystals";
+
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => MultiBagTag(g, slotTags),
+            itemCategorizer: i => SmartCategorize(i, config),
+            bagFlags: bagFlags);
+    }
+
+    /// <summary>Smart Sort categoriser: collapses Materia→Crystals and Gathering→Crafting so
+    /// they share their respective destination bags.</summary>
+    private static string SmartCategorize(InventoryItemInfo i, Configuration config)
+    {
+        var raw = CategorizeForZone(i, config);
+        return raw switch
+        {
+            "Materia" => "Crystals",
+            "Gathering" => "Crafting",
+            _ => raw,
+        };
+    }
+
+    /// <summary>Gatherer: Crystals/Materia → Bag 4, raw materials → Bag 3, everything else → Bag 2.</summary>
+    public static List<QueuedMove> BuildGathererSortPlan(IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        var slotTags = new Dictionary<int, string>();
+        if (bagFlags.Length > 1 && bagFlags[1]) slotTags[1] = "Other";
+        if (bagFlags.Length > 2 && bagFlags[2]) slotTags[2] = "Mats";
+        if (bagFlags.Length > 3 && bagFlags[3]) slotTags[3] = "Crystals";
+
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => MultiBagTag(g, slotTags),
+            itemCategorizer: i =>
+            {
+                if (i.UICategoryRowId == UICategoryCrystal || i.UICategoryRowId == UICategoryMateria) return "Crystals";
+                if (i.IsStackable && !i.IsEquippable) return "Mats";
+                return "Other";
+            },
+            bagFlags: bagFlags);
+    }
+
+    /// <summary>Raider: Gear → Bag 1, Consumables → Bag 2, Crafting/Mats → Bag 3, Crystals/Materia → Bag 4.</summary>
+    public static List<QueuedMove> BuildRaiderSortPlan(IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        var slotTags = new Dictionary<int, string>();
+        if (bagFlags.Length > 0 && bagFlags[0]) slotTags[0] = "Gear";
+        if (bagFlags.Length > 1 && bagFlags[1]) slotTags[1] = "Cons";
+        if (bagFlags.Length > 2 && bagFlags[2]) slotTags[2] = "Mats";
+        if (bagFlags.Length > 3 && bagFlags[3]) slotTags[3] = "Crystals";
+
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => MultiBagTag(g, slotTags),
+            itemCategorizer: i =>
+            {
+                if (i.IsEquippable) return "Gear";
+                if (i.UICategoryRowId == UICategoryMeal || i.UICategoryRowId == UICategoryMedicine) return "Cons";
+                if (i.UICategoryRowId == UICategoryCrystal || i.UICategoryRowId == UICategoryMateria) return "Crystals";
+                return "Mats";
+            },
+            bagFlags: bagFlags,
+            sorter: (cat, list) => cat == "Gear"
+                ? list.OrderByDescending(i => i.ItemLevel).ThenByDescending(i => i.IsHQ).ThenBy(i => i.Name)
+                : SortForCategory(cat, list));
+    }
+
+    /// <summary>Hoarder: Group by rarity. Purple/Blue gear → Bag 1, Purple/Blue non-gear → Bag 2,
+    /// Green → Bag 3, White → Bag 4.</summary>
+    public static List<QueuedMove> BuildHoarderSortPlan(IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        var slotTags = new Dictionary<int, string>();
+        if (bagFlags.Length > 0 && bagFlags[0]) slotTags[0] = "RareGear";
+        if (bagFlags.Length > 1 && bagFlags[1]) slotTags[1] = "RareOther";
+        if (bagFlags.Length > 2 && bagFlags[2]) slotTags[2] = "Green";
+        if (bagFlags.Length > 3 && bagFlags[3]) slotTags[3] = "White";
+
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => MultiBagTag(g, slotTags),
+            itemCategorizer: i =>
+            {
+                if (i.Rarity == 1) return "White";
+                if (i.Rarity == 2) return "Green";
+                return i.IsEquippable ? "RareGear" : "RareOther";
+            },
+            bagFlags: bagFlags,
+            sorter: (cat, list) => list.OrderByDescending(i => i.ItemLevel).ThenBy(i => i.ItemId));
+    }
+
+    /// <summary>Single-preset rebuild: matched items fill the target bag (sorted), everything
+    /// else displaces naturally to the remaining bags.</summary>
+    public static List<QueuedMove> BuildPresetRebuildPlan(QuickPreset preset, IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        var idx = Math.Clamp(preset.DestBagIndex, 0, 3);
+        if (idx >= bagFlags.Length || !bagFlags[idx]) return new List<QueuedMove>();
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => g / 35 == idx ? "Match" : "None",
+            itemCategorizer: i => preset.Match(i) ? "Match" : "Other",
+            bagFlags: bagFlags);
+    }
+
+    /// <summary>Single-rule rebuild: items matching the rule fill the rule's target bag in sorted order.</summary>
+    public static List<QueuedMove> BuildSingleRuleRebuildPlan(SortRule rule, IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        if (rule.Target != SortTarget.SpecificBag) return new List<QueuedMove>();
+        var idx = Math.Clamp(rule.TargetBagIndex, 0, 3);
+        if (idx >= bagFlags.Length || !bagFlags[idx]) return new List<QueuedMove>();
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => g / 35 == idx ? "Match" : "None",
+            itemCategorizer: i => RuleMatcher.Matches(rule, i) ? "Match" : "Other",
+            bagFlags: bagFlags);
+    }
+
+    /// <summary>All-rules rebuild: each item is bucketed into the first matching rule's target bag.</summary>
+    public static List<QueuedMove> BuildAllRulesRebuildPlan(IReadOnlyList<SortRule> rules, IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        var slotTags = new Dictionary<int, string>();
+        for (int b = 0; b < 4; b++)
+        {
+            if (b < bagFlags.Length && bagFlags[b]) slotTags[b] = $"Bag{b}";
+        }
+
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => MultiBagTag(g, slotTags),
+            itemCategorizer: i =>
+            {
+                foreach (var rule in rules)
+                {
+                    if (!rule.Enabled) continue;
+                    if (rule.Target != SortTarget.SpecificBag) continue;
+                    if (!RuleMatcher.Matches(rule, i)) continue;
+                    var idx = Math.Clamp(rule.TargetBagIndex, 0, 3);
+                    return $"Bag{idx}";
+                }
+                return "Unsorted";
+            },
+            bagFlags: bagFlags);
+    }
+
+    /// <summary>Extract Materia: gear at 100% spiritbond fills Bag 1 (sorted by ilvl desc).</summary>
+    public static List<QueuedMove> BuildExtractMateriaPlan(IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        if (bagFlags.Length == 0 || !bagFlags[0]) return new List<QueuedMove>();
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => g / 35 == 0 ? "Spiritbond" : "None",
+            itemCategorizer: i => i.IsEquippable && i.SpiritbondPercent >= 100 ? "Spiritbond" : "Other",
+            bagFlags: bagFlags,
+            sorter: (cat, list) => list.OrderByDescending(i => i.ItemLevel).ThenBy(i => i.Name));
+    }
+
+    /// <summary>Vendor Trash: junk fills Bag 4 (sorted).</summary>
+    public static List<QueuedMove> BuildVendorTrashPlan(IReadOnlyList<InventoryItemInfo> items, bool[] bagFlags, Configuration config)
+    {
+        if (bagFlags.Length < 4 || !bagFlags[3]) return new List<QueuedMove>();
+        return BuildFullRebuildPlan(
+            items,
+            slotTagger: g => g / 35 == 3 ? "Junk" : "None",
+            itemCategorizer: i => IsJunk(i, config) ? "Junk" : "Other",
+            bagFlags: bagFlags);
     }
 
     /// <summary>
