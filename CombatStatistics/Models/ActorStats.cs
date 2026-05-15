@@ -92,6 +92,21 @@ public sealed class ActorStats
 
     public double Dps => DamageTotal / ActiveTimeSeconds;
     public double Hps => HealingTotal / ActiveTimeSeconds;
+    public double Dpm => DamageTotal / ActiveTimeSeconds * 60d;
+    public double Hpm => HealingTotal / ActiveTimeSeconds * 60d;
+
+    public double GetDamagePerSecond(double encounterSeconds)
+        => DamageTotal / Math.Max(0.001d, encounterSeconds);
+
+    public double GetHealingPerSecond(double encounterSeconds)
+        => HealingTotal / Math.Max(0.001d, encounterSeconds);
+
+    public double GetDamagePerMinute(double encounterSeconds)
+        => GetDamagePerSecond(encounterSeconds) * 60d;
+
+    public double GetHealingPerMinute(double encounterSeconds)
+        => GetHealingPerSecond(encounterSeconds) * 60d;
+
     public double OverhealPercent => HealingTotal + OverhealTotal <= 0 ? 0d : (double)OverhealTotal / (HealingTotal + OverhealTotal) * 100d;
     public double RaidContribution => 0d;
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CombatStatistics.Models;
+using Dalamud.Game.Chat;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
@@ -12,12 +13,14 @@ public sealed class ActorTracker
 {
     private readonly Dictionary<uint, ActorIdentity> actorsByObjectId = new();
     private readonly Dictionary<ulong, ActorIdentity> actorsByContentId = new();
+    private readonly Dictionary<string, List<ActorIdentity>> actorsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<uint, uint> petOwners = new();
 
     public void Reset()
     {
         actorsByObjectId.Clear();
         actorsByContentId.Clear();
+        actorsByName.Clear();
         petOwners.Clear();
     }
 
@@ -81,6 +84,19 @@ public sealed class ActorTracker
         if (actor.ContentId is { } contentId)
             actorsByContentId[contentId] = actor;
 
+        var nameKey = actor.Name.Trim();
+        if (!string.IsNullOrWhiteSpace(nameKey))
+        {
+            if (!actorsByName.TryGetValue(nameKey, out var actors))
+            {
+                actors = new List<ActorIdentity>();
+                actorsByName[nameKey] = actors;
+            }
+
+            if (!actors.Any(existing => existing.ActorKey == actor.ActorKey))
+                actors.Add(actor);
+        }
+
         return actor;
     }
 
@@ -89,6 +105,27 @@ public sealed class ActorTracker
 
     public bool TryGetByContentId(ulong contentId, out ActorIdentity? actor)
         => actorsByContentId.TryGetValue(contentId, out actor);
+
+    public ActorIdentity ResolveFromLogEntity(ILogMessageEntity? entity, ActorType fallbackType, bool preferPartyActor = false)
+    {
+        if (entity == null)
+            return new ActorIdentity { Name = string.Empty, Type = ActorType.Unknown };
+
+        var name = entity.Name.ExtractText().Trim();
+        if (!string.IsNullOrWhiteSpace(name) && actorsByName.TryGetValue(name, out var matches))
+        {
+            var resolved = matches
+                .OrderByDescending(actor => actor.Type == ActorType.Player)
+                .ThenByDescending(actor => preferPartyActor && actor.Type != ActorType.Enemy)
+                .FirstOrDefault();
+
+            if (resolved != null)
+                return resolved;
+        }
+
+        var type = entity.IsPlayer ? ActorType.Player : fallbackType;
+        return ActorIdentity.FromLogEntity(entity, type);
+    }
 
     private static ActorType DetermineActorType(IGameObject obj)
     {

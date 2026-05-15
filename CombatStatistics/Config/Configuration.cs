@@ -14,6 +14,7 @@ public sealed class Configuration : IPluginConfiguration
     public int OverlayRowCount { get; set; } = 6;
     public float OverlayOpacity { get; set; } = 0.78f;
     public float OverlayFontSize { get; set; } = 14f;
+    public bool OverlayUsePerMinuteMetrics { get; set; } = false;
 
     public float OverlayWindowX { get; set; } = 80f;
     public float OverlayWindowY { get; set; } = 180f;
@@ -37,6 +38,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool DefaultMergePetsWithOwner { get; set; } = true;
     public bool DefaultShowOverlay { get; set; } = true;
     public bool DefaultShowMainWindowOnStart { get; set; } = true;
+    public bool DefaultOverlayUsePerMinuteMetrics { get; set; } = false;
     public float DefaultOverlayWindowX { get; set; } = 80f;
     public float DefaultOverlayWindowY { get; set; } = 180f;
     public float DefaultMainWindowX { get; set; } = 240f;
@@ -63,6 +65,7 @@ public sealed class Configuration : IPluginConfiguration
         DefaultOverlayRowCount = OverlayRowCount;
         DefaultOverlayOpacity = OverlayOpacity;
         DefaultOverlayFontSize = OverlayFontSize;
+        DefaultOverlayUsePerMinuteMetrics = OverlayUsePerMinuteMetrics;
         DefaultOverlayWindowX = OverlayWindowX;
         DefaultOverlayWindowY = OverlayWindowY;
         DefaultMainWindowX = MainWindowX;
@@ -87,6 +90,7 @@ public sealed class Configuration : IPluginConfiguration
         OverlayRowCount = DefaultOverlayRowCount;
         OverlayOpacity = DefaultOverlayOpacity;
         OverlayFontSize = DefaultOverlayFontSize;
+        OverlayUsePerMinuteMetrics = DefaultOverlayUsePerMinuteMetrics;
         OverlayWindowX = DefaultOverlayWindowX;
         OverlayWindowY = DefaultOverlayWindowY;
         MainWindowX = DefaultMainWindowX;
@@ -111,6 +115,7 @@ public sealed class Configuration : IPluginConfiguration
         OverlayRowCount = 6;
         OverlayOpacity = 0.78f;
         OverlayFontSize = 14f;
+        OverlayUsePerMinuteMetrics = false;
         OverlayWindowX = 80f;
         OverlayWindowY = 180f;
         MainWindowX = 240f;

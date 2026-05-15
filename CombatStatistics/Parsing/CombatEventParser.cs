@@ -1,23 +1,14 @@
 using CombatStatistics.Models;
 using Dalamud.Game.Chat;
 using System;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace CombatStatistics.Parsing;
 
 public sealed class CombatEventParser
 {
-    private static readonly Regex DamageRegexes = new(
-        @"(?:(?<source>.+?) )?(?:hits|deals damage to|deals) (?<target>.+?) (?:for )?(?<amount>[0-9,]+) (?:damage|points of damage)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    private static readonly Regex HealRegexes = new(
-        @"(?:(?<source>.+?) )?(?:heals|restores) (?<target>.+?) (?:for )?(?<amount>[0-9,]+) (?:HP|health)(?: \((?<overheal>[0-9,]+) overheal\))?",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    private static readonly Regex ShieldRegexes = new(
-        @"(?<target>.+?) (?:gains|receives) (?<amount>[0-9,]+) (?:point|points) of barrier",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex AmountRegex = new(@"[0-9][0-9,]*", RegexOptions.Compiled);
 
     public CombatEvent CreateDamageEvent(
         ActorIdentity source,
@@ -83,25 +74,51 @@ public sealed class CombatEventParser
         return false;
     }
 
+    public ActorType DetermineSourceType(ILogMessage message, CombatEventType eventType)
+    {
+        if (message.SourceEntity?.IsPlayer == true)
+            return ActorType.Player;
+
+        return eventType switch
+        {
+            CombatEventType.Heal or CombatEventType.HoTTick or CombatEventType.Shield => ActorType.Player,
+            _ => ActorType.Enemy,
+        };
+    }
+
+    public ActorType DetermineTargetType(ILogMessage message, CombatEventType eventType)
+    {
+        if (message.TargetEntity?.IsPlayer == true)
+            return ActorType.Player;
+
+        return eventType switch
+        {
+            CombatEventType.Heal or CombatEventType.HoTTick or CombatEventType.Shield => ActorType.Player,
+            _ => ActorType.Enemy,
+        };
+    }
+
     private static bool TryParseDamage(ILogMessage message, string formatted, DateTime timestampUtc, out CombatEvent combatEvent)
     {
-        var match = DamageRegexes.Match(formatted);
-        if (!match.Success)
+        if (!LooksLikeDamage(formatted))
         {
             combatEvent = default!;
             return false;
         }
 
-        var source = BuildActor(message.SourceEntity, ActorType.Player);
-        var target = BuildActor(message.TargetEntity, ActorType.Enemy);
-        var amount = ParseAmount(match.Groups["amount"].Value);
+        var amount = ParseLastAmount(formatted);
+        if (amount <= 0)
+        {
+            combatEvent = default!;
+            return false;
+        }
 
         combatEvent = new CombatEvent
         {
             TimestampUtc = timestampUtc,
             Type = CombatEventType.Damage,
-            Source = source,
-            Target = target,
+            Source = new ActorIdentity(),
+            Target = new ActorIdentity(),
             Amount = amount,
             ActionId = message.LogMessageId,
             IsCritical = formatted.Contains("critical", StringComparison.OrdinalIgnoreCase),
@@ -112,26 +129,27 @@ public sealed class CombatEventParser
 
     private static bool TryParseHeal(ILogMessage message, string formatted, DateTime timestampUtc, out CombatEvent combatEvent)
     {
-        var match = HealRegexes.Match(formatted);
-        if (!match.Success)
+        if (!LooksLikeHeal(formatted))
         {
             combatEvent = default!;
             return false;
         }
 
-        var source = BuildActor(message.SourceEntity, ActorType.Player);
-        var target = BuildActor(message.TargetEntity, ActorType.Player);
-        var amount = ParseAmount(match.Groups["amount"].Value);
-        var overheal = match.Groups["overheal"].Success ? ParseAmount(match.Groups["overheal"].Value) : 0;
+        var amount = ParseLastAmount(formatted);
+        if (amount <= 0)
+        {
+            combatEvent = default!;
+            return false;
+        }
 
         combatEvent = new CombatEvent
         {
             TimestampUtc = timestampUtc,
             Type = CombatEventType.Heal,
-            Source = source,
-            Target = target,
+            Source = new ActorIdentity(),
+            Target = new ActorIdentity(),
             Amount = amount,
-            Overheal = overheal,
+            Overheal = 0,
             ActionId = message.LogMessageId,
             IsCritical = formatted.Contains("critical", StringComparison.OrdinalIgnoreCase),
         };
@@ -140,40 +158,54 @@ public sealed class CombatEventParser
 
     private static bool TryParseShield(ILogMessage message, string formatted, DateTime timestampUtc, out CombatEvent combatEvent)
     {
-        var match = ShieldRegexes.Match(formatted);
-        if (!match.Success)
+        if (!LooksLikeShield(formatted))
         {
             combatEvent = default!;
             return false;
         }
 
-        var source = BuildActor(message.SourceEntity, ActorType.Player);
-        var target = BuildActor(message.TargetEntity, ActorType.Player);
-        var amount = ParseAmount(match.Groups["amount"].Value);
+        var amount = ParseLastAmount(formatted);
+        if (amount <= 0)
+        {
+            combatEvent = default!;
+            return false;
+        }
 
         combatEvent = new CombatEvent
         {
             TimestampUtc = timestampUtc,
             Type = CombatEventType.Shield,
-            Source = source,
-            Target = target,
+            Source = new ActorIdentity(),
+            Target = new ActorIdentity(),
             Amount = amount,
             ActionId = message.LogMessageId,
         };
         return true;
     }
 
-    private static ActorIdentity BuildActor(ILogMessageEntity? entity, ActorType defaultType)
+    private static bool LooksLikeDamage(string text)
+        => text.Contains("damage", StringComparison.OrdinalIgnoreCase)
+            && !LooksLikeHeal(text)
+            && !LooksLikeShield(text);
+
+    private static bool LooksLikeHeal(string text)
+        => text.Contains(" HP", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("heals", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("restores", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("recovers", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeShield(string text)
+        => text.Contains("barrier", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("absorbs", StringComparison.OrdinalIgnoreCase);
+
+    private static int ParseLastAmount(string value)
     {
-        if (entity == null)
-            return new ActorIdentity { Name = string.Empty, Type = ActorType.Unknown };
+        var match = AmountRegex.Matches(value).Cast<Match>().LastOrDefault();
+        if (match == null)
+            return 0;
 
-        var type = entity.IsPlayer ? ActorType.Player : defaultType;
-        return ActorIdentity.FromLogEntity(entity, type);
+        return int.TryParse(match.Value.Replace(",", string.Empty), out var amount) ? amount : 0;
     }
-
-    private static int ParseAmount(string value)
-        => int.TryParse(value.Replace(",", string.Empty), out var amount) ? amount : 0;
 
     public CombatEvent CreateShieldEvent(
         ActorIdentity source,
