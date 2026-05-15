@@ -185,27 +185,46 @@ public sealed class BagAssistantWindow : Window, IDisposable
 
     private static int PushFfxivThemeColors()
     {
-        // Dark grey palette to better match FFXIV's inventory panel style.
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(0.14f, 0.15f, 0.17f, 0.97f));
-        ImGui.PushStyleColor(ImGuiCol.PopupBg, new Vector4(0.13f, 0.14f, 0.16f, 0.98f));
-        ImGui.PushStyleColor(ImGuiCol.TitleBg, new Vector4(0.21f, 0.23f, 0.27f, 0.98f));
-        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, new Vector4(0.36f, 0.38f, 0.44f, 0.98f));
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.12f, 0.13f, 0.15f, 0.95f));
-        ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(0.46f, 0.48f, 0.52f, 0.92f));
-        ImGui.PushStyleColor(ImGuiCol.FrameBg, new Vector4(0.20f, 0.21f, 0.24f, 0.94f));
-        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, new Vector4(0.28f, 0.30f, 0.34f, 0.96f));
-        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, new Vector4(0.34f, 0.36f, 0.41f, 0.96f));
-        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.24f, 0.25f, 0.28f, 0.93f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.30f, 0.34f, 0.97f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.35f, 0.37f, 0.42f, 0.98f));
-        ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.24f, 0.26f, 0.30f, 0.92f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.31f, 0.33f, 0.38f, 0.95f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.38f, 0.40f, 0.46f, 0.96f));
-        ImGui.PushStyleColor(ImGuiCol.Separator, new Vector4(0.44f, 0.46f, 0.50f, 0.86f));
-        ImGui.PushStyleColor(ImGuiCol.Tab, new Vector4(0.20f, 0.21f, 0.25f, 0.95f));
-        ImGui.PushStyleColor(ImGuiCol.TabHovered, new Vector4(0.33f, 0.35f, 0.40f, 0.97f));
-        ImGui.PushStyleColor(ImGuiCol.TabActive, new Vector4(0.43f, 0.45f, 0.52f, 0.98f));
-        return 20;
+        // Test: Start with only the most basic ImGui colors
+        // Gradually add colors back to find the one causing the crash
+        try
+        {
+            // Tier 1: Absolute basics (these MUST exist)
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(0.14f, 0.15f, 0.17f, 0.97f));
+            ImGui.PushStyleColor(ImGuiCol.PopupBg, new Vector4(0.13f, 0.14f, 0.16f, 0.98f));
+            ImGui.PushStyleColor(ImGuiCol.FrameBg, new Vector4(0.20f, 0.21f, 0.24f, 0.94f));
+            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.24f, 0.25f, 0.28f, 0.93f));
+            ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(0.46f, 0.48f, 0.52f, 0.92f));
+            
+            // Tier 2: Common extended colors
+            ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, new Vector4(0.28f, 0.30f, 0.34f, 0.96f));
+            ImGui.PushStyleColor(ImGuiCol.FrameBgActive, new Vector4(0.34f, 0.36f, 0.41f, 0.96f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.30f, 0.34f, 0.97f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.35f, 0.37f, 0.42f, 0.98f));
+            
+            // Tier 3: Title colors
+            ImGui.PushStyleColor(ImGuiCol.TitleBg, new Vector4(0.21f, 0.23f, 0.27f, 0.98f));
+            ImGui.PushStyleColor(ImGuiCol.TitleBgActive, new Vector4(0.36f, 0.38f, 0.44f, 0.98f));
+            
+            // Tier 4: Other colors
+            ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.12f, 0.13f, 0.15f, 0.95f));
+            ImGui.PushStyleColor(ImGuiCol.Separator, new Vector4(0.44f, 0.46f, 0.50f, 0.86f));
+            ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.24f, 0.26f, 0.30f, 0.92f));
+            ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.31f, 0.33f, 0.38f, 0.95f));
+            ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.38f, 0.40f, 0.46f, 0.96f));
+            
+            // Tier 5: Tab colors (might not exist in older ImGui)
+            ImGui.PushStyleColor(ImGuiCol.Tab, new Vector4(0.20f, 0.21f, 0.25f, 0.95f));
+            ImGui.PushStyleColor(ImGuiCol.TabHovered, new Vector4(0.33f, 0.35f, 0.40f, 0.97f));
+            ImGui.PushStyleColor(ImGuiCol.TabActive, new Vector4(0.43f, 0.45f, 0.52f, 0.98f));
+            
+            return 20;
+        }
+        catch
+        {
+            // If any color push fails, silently fail the entire theme
+            return 0;
+        }
     }
 
     private static int PushFfxivThemeStyleVars()
