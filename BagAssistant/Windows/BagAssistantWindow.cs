@@ -205,9 +205,7 @@ public sealed class BagAssistantWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Tab, new Vector4(0.20f, 0.21f, 0.25f, 0.95f));
         ImGui.PushStyleColor(ImGuiCol.TabHovered, new Vector4(0.33f, 0.35f, 0.40f, 0.97f));
         ImGui.PushStyleColor(ImGuiCol.TabActive, new Vector4(0.43f, 0.45f, 0.52f, 0.98f));
-        ImGui.PushStyleColor(ImGuiCol.TabUnfocused, new Vector4(0.17f, 0.18f, 0.21f, 0.95f));
-        ImGui.PushStyleColor(ImGuiCol.TabUnfocusedActive, new Vector4(0.28f, 0.29f, 0.34f, 0.96f));
-        return 22;
+        return 20;
     }
 
     private static int PushFfxivThemeStyleVars()
