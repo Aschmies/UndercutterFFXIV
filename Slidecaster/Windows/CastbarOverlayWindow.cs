@@ -198,6 +198,8 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
         var castProgress = Math.Clamp(elapsedSeconds / trackedCastDurationSeconds, 0f, 1f);
         var safeWindowRatio = Math.Clamp((GetConfiguredSafeWindowMs() / 1000f) / trackedCastDurationSeconds, 0f, 1f);
         var safeStartRatio = 1f - safeWindowRatio;
+        var safeStartSeconds = MathF.Max(0f, trackedCastDurationSeconds - (GetConfiguredSafeWindowMs() / 1000f));
+        var safeElapsedSeconds = elapsedSeconds - safeStartSeconds;
 
         var alpha = Math.Clamp(configuration.OverlayOpacity, 0.1f, 1f);
         var baseR = Math.Clamp(configuration.OverlayColorR, 0f, 1f);
@@ -242,6 +244,14 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
 
         var drawColor = isCurrentlySafe ? activeSafeZoneColor : safeZoneColor;
 
+        if (configuration.UseBorderFlashCue)
+        {
+            if (isCurrentlySafe)
+                DrawBorderFlash(drawList, castbarPos, castbarSize, safeElapsedSeconds);
+
+            return;
+        }
+
         if (configuration.DrawAsLine)
         {
             var lineY1 = overlayY1 + (overlayHeight - (overlayHeight * configuration.LineHeightScale)) * 0.5f;
@@ -274,6 +284,29 @@ public sealed unsafe class CastbarOverlayWindow : Window, IDisposable
             var textPos = new Vector2((x1 + x2 - textSize.X) * 0.5f, y1 - textSize.Y - 4f);
             drawList.AddText(textPos, textColor, label);
         }
+    }
+
+    private static void DrawBorderFlash(ImDrawListPtr drawList, Vector2 castbarPos, Vector2 castbarSize, float safeElapsedSeconds)
+    {
+        var pulse = 0.5f + 0.5f * MathF.Sin(safeElapsedSeconds * 18f);
+        var leadFlash = Math.Clamp(1f - safeElapsedSeconds / 0.18f, 0f, 1f);
+        var sustain = 0.45f + 0.55f * pulse;
+        var intensity = Math.Clamp(Math.Max(leadFlash, sustain) * 0.95f, 0f, 1f);
+
+        var baseColor = new Vector4(0.24f, 0.92f, 0.48f, intensity * 0.95f);
+        var glowColor = new Vector4(0.96f, 0.96f, 0.62f, intensity * 0.30f);
+        var brightColor = new Vector4(0.44f, 1.00f, 0.68f, intensity * 0.80f);
+
+        var outerMin = new Vector2(castbarPos.X - 6f, castbarPos.Y - 6f);
+        var outerMax = new Vector2(castbarPos.X + castbarSize.X + 6f, castbarPos.Y + castbarSize.Y + 6f);
+        var midMin = new Vector2(castbarPos.X - 3f, castbarPos.Y - 3f);
+        var midMax = new Vector2(castbarPos.X + castbarSize.X + 3f, castbarPos.Y + castbarSize.Y + 3f);
+        var innerMin = new Vector2(castbarPos.X - 1f, castbarPos.Y - 1f);
+        var innerMax = new Vector2(castbarPos.X + castbarSize.X + 1f, castbarPos.Y + castbarSize.Y + 1f);
+
+        drawList.AddRect(outerMin, outerMax, ImGui.ColorConvertFloat4ToU32(glowColor), 6f, ImDrawFlags.None, 5.0f);
+        drawList.AddRect(midMin, midMax, ImGui.ColorConvertFloat4ToU32(baseColor), 4f, ImDrawFlags.None, 2.2f);
+        drawList.AddRect(innerMin, innerMax, ImGui.ColorConvertFloat4ToU32(brightColor), 3f, ImDrawFlags.None, 1.3f);
     }
 
     private bool TryGetCastbarRect(out Vector2 position, out Vector2 size)

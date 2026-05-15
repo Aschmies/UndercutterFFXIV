@@ -119,6 +119,14 @@ public sealed class SlidecasterWindow : Window
             configuration.Save();
         }
 
+        var borderFlashCue = configuration.UseBorderFlashCue;
+        if (ImGui.Checkbox("Use border flash cue instead of overlay", ref borderFlashCue))
+        {
+            configuration.UseBorderFlashCue = borderFlashCue;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("Replaces the overlay fill with a pulsing border flash around the cast bar during the safe window.");
+
         var endTrim = configuration.OverlayEndTrimPx;
         if (ImGui.SliderFloat("Overlay End Trim (px)", ref endTrim, -20f, 120f, "%.1f"))
         {
@@ -276,6 +284,9 @@ public sealed class SlidecasterWindow : Window
 
         ImGui.Spacing();
         ImGui.TextDisabled($"Current safe trigger: {overlayWindow.GetConfiguredSafeWindowMs()}ms before cast end");
-        ImGui.TextDisabled("Overlay appears with your cast bar and hides immediately when casting ends.");
+        if (configuration.UseBorderFlashCue)
+            ImGui.TextDisabled("Border flash cue appears during the safe window and hides immediately when casting ends.");
+        else
+            ImGui.TextDisabled("Overlay appears with your cast bar and hides immediately when casting ends.");
     }
 }

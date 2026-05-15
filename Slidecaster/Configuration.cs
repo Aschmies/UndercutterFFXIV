@@ -15,6 +15,7 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool ShowSafeText { get; set; } = true;
     public bool PlaySafeMoveSound { get; set; } = false;
+    public bool UseBorderFlashCue { get; set; } = false;
 
     // Volume of the safe-move sound cue (0.0 silent .. 1.0 full).
     public float SafeCueVolume { get; set; } = 0.6f;
@@ -51,6 +52,7 @@ public sealed class Configuration : IPluginConfiguration
     public int DefaultLatencyCompensationMs { get; set; } = 0;
     public bool DefaultShowSafeText { get; set; } = true;
     public bool DefaultPlaySafeMoveSound { get; set; } = false;
+    public bool DefaultUseBorderFlashCue { get; set; } = false;
     public float DefaultSafeCueVolume { get; set; } = 0.6f;
     public float DefaultOverlayOpacity { get; set; } = 0.45f;
     public float DefaultOverlayHeightScale { get; set; } = 0.50f;
@@ -78,6 +80,7 @@ public sealed class Configuration : IPluginConfiguration
         DefaultLatencyCompensationMs = LatencyCompensationMs;
         DefaultShowSafeText = ShowSafeText;
         DefaultPlaySafeMoveSound = PlaySafeMoveSound;
+        DefaultUseBorderFlashCue = UseBorderFlashCue;
         DefaultSafeCueVolume = SafeCueVolume;
         DefaultOverlayOpacity = OverlayOpacity;
         DefaultOverlayHeightScale = OverlayHeightScale;
@@ -103,6 +106,7 @@ public sealed class Configuration : IPluginConfiguration
         LatencyCompensationMs = DefaultLatencyCompensationMs;
         ShowSafeText = DefaultShowSafeText;
         PlaySafeMoveSound = DefaultPlaySafeMoveSound;
+        UseBorderFlashCue = DefaultUseBorderFlashCue;
         SafeCueVolume = DefaultSafeCueVolume;
         OverlayOpacity = DefaultOverlayOpacity;
         OverlayHeightScale = DefaultOverlayHeightScale;
@@ -134,6 +138,7 @@ public sealed class Configuration : IPluginConfiguration
         LatencyCompensationMs = 0;
         ShowSafeText = true;
         PlaySafeMoveSound = false;
+        UseBorderFlashCue = false;
         SafeCueVolume = 0.6f;
         OverlayOpacity = 0.45f;
         OverlayHeightScale = 0.50f;
@@ -156,6 +161,7 @@ public sealed class Configuration : IPluginConfiguration
         DefaultLatencyCompensationMs = LatencyCompensationMs;
         DefaultShowSafeText = ShowSafeText;
         DefaultPlaySafeMoveSound = PlaySafeMoveSound;
+        DefaultUseBorderFlashCue = UseBorderFlashCue;
         DefaultSafeCueVolume = SafeCueVolume;
         DefaultOverlayOpacity = OverlayOpacity;
         DefaultOverlayHeightScale = OverlayHeightScale;
