@@ -101,7 +101,7 @@ public sealed class BagAssistantWindow : Window, IDisposable
                 DrawVisualZonesTab();
                 ImGui.EndTabItem();
             }
-            if (ImGui.BeginTabItem("Junk & Settings"))
+            if (ImGui.BeginTabItem("Settings"))
             {
                 DrawSettingsTab();
                 ImGui.EndTabItem();
