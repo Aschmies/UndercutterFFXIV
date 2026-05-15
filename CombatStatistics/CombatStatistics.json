@@ -7,7 +7,7 @@
   "Changelog": "v1.0.5: Fixed to only track party members (filtered out NPC damage), moved overlay default position to right-center, improved party member filtering logic.",
   "InternalName": "CombatStatistics",
   "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
-  "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",
+  "IconUrl": "",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
   "LoadRequiredState": 0,
