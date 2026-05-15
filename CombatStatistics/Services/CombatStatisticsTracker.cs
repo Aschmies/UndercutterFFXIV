@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using CombatStatistics.Config;
 using CombatStatistics.Models;
 using CombatStatistics.Parsing;
@@ -63,6 +64,25 @@ public sealed class CombatStatisticsTracker
         if (!parser.TryParse(message, out var combatEvent))
             return;
 
+        var sourceFallbackType = parser.DetermineSourceType(message, combatEvent.Type);
+        var targetFallbackType = parser.DetermineTargetType(message, combatEvent.Type);
+
+        combatEvent = new CombatEvent
+        {
+            TimestampUtc = combatEvent.TimestampUtc,
+            Type = combatEvent.Type,
+            Source = actorTracker.ResolveFromLogEntity(message.SourceEntity, sourceFallbackType, true),
+            Target = actorTracker.ResolveFromLogEntity(message.TargetEntity, targetFallbackType, combatEvent.Type is CombatEventType.Heal or CombatEventType.HoTTick or CombatEventType.Shield),
+            ActionId = combatEvent.ActionId,
+            Amount = combatEvent.Amount,
+            Overheal = combatEvent.Overheal,
+            IsCritical = combatEvent.IsCritical,
+            IsDirectHit = combatEvent.IsDirectHit,
+            IsPet = combatEvent.IsPet,
+            IsDamageOverTime = combatEvent.IsDamageOverTime,
+            IsHealingOverTime = combatEvent.IsHealingOverTime,
+        };
+
         var source = NormalizeActor(combatEvent.Source);
         var target = NormalizeActor(combatEvent.Target);
 
@@ -84,6 +104,16 @@ public sealed class CombatStatisticsTracker
             IsDamageOverTime = combatEvent.IsDamageOverTime,
             IsHealingOverTime = combatEvent.IsHealingOverTime,
         });
+    }
+
+    public ActorStats? TryGetLocalPlayerStats()
+    {
+        var localName = CombatStatisticsPlugin.ObjectTable.LocalPlayer?.Name.TextValue;
+        if (string.IsNullOrWhiteSpace(localName))
+            return null;
+
+        return encounterTracker.CurrentEncounter.Actors.Values
+            .FirstOrDefault(actor => actor.Actor.Name.Equals(localName, StringComparison.OrdinalIgnoreCase));
     }
 
     public void RecordDamage(ActorIdentity source, ActorIdentity target, uint actionId, int amount, bool isCritical = false, bool isDirectHit = false, bool isDoT = false, bool isPet = false)

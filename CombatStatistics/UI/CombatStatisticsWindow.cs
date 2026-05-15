@@ -69,10 +69,13 @@ public sealed class CombatStatisticsWindow : Window
         }
 
         ImGui.TextUnformatted($"Encounter started: {encounter.StartedUtc:HH:mm:ss} UTC");
+        ImGui.TextUnformatted($"Encounter duration: {encounter.Duration.TotalSeconds:N1}s");
         ImGui.TextUnformatted($"Events: {encounter.EventCount}");
         ImGui.TextUnformatted($"Raid damage: {encounter.TotalRaidDamage:N0}");
         ImGui.TextUnformatted($"Raid healing: {encounter.TotalRaidHealing:N0}");
         ImGui.Separator();
+
+        var encounterSeconds = encounter.DurationSeconds;
 
         if (ImGui.BeginTable("##combatstats-table", 7, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.Sortable, new Vector2(0, 260f)))
         {
@@ -97,13 +100,13 @@ public sealed class CombatStatisticsWindow : Window
                 ImGui.TextUnformatted(actor.Actor.Type.ToString());
 
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted($"{actor.Dps:N0}");
+                ImGui.TextUnformatted($"{actor.GetDamagePerSecond(encounterSeconds):N0}");
 
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{actor.DamageTotal:N0}");
 
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted($"{actor.Hps:N0}");
+                ImGui.TextUnformatted($"{actor.GetHealingPerSecond(encounterSeconds):N0}");
 
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{actor.HealingTotal:N0}");
@@ -198,6 +201,13 @@ public sealed class CombatStatisticsWindow : Window
         if (ImGui.SliderFloat("Overlay opacity", ref overlayOpacity, 0.2f, 1f, "%.2f"))
         {
             configuration.OverlayOpacity = overlayOpacity;
+            configuration.Save();
+        }
+
+        var overlayUsePerMinute = configuration.OverlayUsePerMinuteMetrics;
+        if (ImGui.Checkbox("Overlay uses DPM/HPM instead of DPS/HPS", ref overlayUsePerMinute))
+        {
+            configuration.OverlayUsePerMinuteMetrics = overlayUsePerMinute;
             configuration.Save();
         }
 

@@ -68,6 +68,8 @@ public sealed class EncounterSummary
             ? TimeSpan.Zero
             : ((EndedUtc ?? LastEventUtc) - StartedUtc);
 
+    public double DurationSeconds => Math.Max(0.001d, Duration.TotalSeconds);
+
     public long TotalRaidDamage => actors.Values.Sum(actor => actor.DamageTotal);
     public long TotalRaidHealing => actors.Values.Sum(actor => actor.HealingTotal);
     public IReadOnlyList<ActorStats> TopDamageActors(int maxRows) => actors.Values.OrderByDescending(x => x.DamageTotal).Take(maxRows).ToList();
