@@ -66,7 +66,7 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
         if (Config.OverlayDockLeftSide)
         {
             // Screenshot-style docking: panel sits to the left of the inventory window.
-            pos = new Vector2(anchorPos.X - windowWidth - 6f, anchorPos.Y + 2f);
+                pos = new Vector2(anchorPos.X - windowWidth - 1f, anchorPos.Y + 2f);
         }
         else
         {
