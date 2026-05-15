@@ -1,6 +1,7 @@
 using CombatStatistics.Config;
 using CombatStatistics.Services;
 using CombatStatistics.UI;
+using Dalamud.Game.Chat;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -14,6 +15,7 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
@@ -47,6 +49,7 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
 
         PluginInterface.UiBuilder.Draw += DrawUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
+        ChatGui.LogMessage += OnLogMessage;
         Framework.Update += OnFrameworkUpdate;
 
         if (Configuration.ShowMainWindowOnStart)
@@ -61,6 +64,11 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
         overlayWindow.IsOpen = Configuration.ShowOverlay && tracker.HasActiveEncounter;
     }
 
+    private void OnLogMessage(ILogMessage message)
+    {
+        tracker.HandleLogMessage(message);
+    }
+
     private void DrawUI() => windowSystem.Draw();
 
     private void ToggleMainUi() => mainWindow.Toggle();
@@ -68,6 +76,7 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
     public void Dispose()
     {
         Framework.Update -= OnFrameworkUpdate;
+        ChatGui.LogMessage -= OnLogMessage;
         PluginInterface.UiBuilder.Draw -= DrawUI;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         CommandManager.RemoveHandler(CommandName);

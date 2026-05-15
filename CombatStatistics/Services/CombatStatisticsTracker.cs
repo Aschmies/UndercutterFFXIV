@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using CombatStatistics.Config;
 using CombatStatistics.Models;
 using CombatStatistics.Parsing;
+using Dalamud.Game.Chat;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 
@@ -50,11 +51,39 @@ public sealed class CombatStatisticsTracker
                 IsHealingOverTime = combatEvent.IsHealingOverTime,
             };
 
-            if (ShouldRecord(normalizedEvent))
+            if (IsRelevant(source, target, normalizedEvent.Type))
                 encounterTracker.RecordEvent(normalizedEvent);
         }
 
         encounterTracker.Tick(TimeSpan.FromSeconds(Math.Max(1, configuration.EncounterTimeoutSeconds)));
+    }
+
+    public void HandleLogMessage(ILogMessage message)
+    {
+        if (!parser.TryParse(message, out var combatEvent))
+            return;
+
+        var source = NormalizeActor(combatEvent.Source);
+        var target = NormalizeActor(combatEvent.Target);
+
+        if (!IsRelevant(source, target, combatEvent.Type))
+            return;
+
+        encounterTracker.RecordEvent(new CombatEvent
+        {
+            TimestampUtc = combatEvent.TimestampUtc,
+            Type = combatEvent.Type,
+            Source = source,
+            Target = target,
+            ActionId = combatEvent.ActionId,
+            Amount = combatEvent.Amount,
+            Overheal = combatEvent.Overheal,
+            IsCritical = combatEvent.IsCritical,
+            IsDirectHit = combatEvent.IsDirectHit,
+            IsPet = combatEvent.IsPet || source.IsPet,
+            IsDamageOverTime = combatEvent.IsDamageOverTime,
+            IsHealingOverTime = combatEvent.IsHealingOverTime,
+        });
     }
 
     public void RecordDamage(ActorIdentity source, ActorIdentity target, uint actionId, int amount, bool isCritical = false, bool isDirectHit = false, bool isDoT = false, bool isPet = false)
@@ -78,14 +107,14 @@ public sealed class CombatStatisticsTracker
         return actor;
     }
 
-    private static bool ShouldRecord(CombatEvent combatEvent)
+    private static bool IsRelevant(ActorIdentity source, ActorIdentity target, CombatEventType type)
     {
-        if (combatEvent.Source.Type is ActorType.Player or ActorType.Pet)
+        if (source.Type is ActorType.Player or ActorType.Pet)
             return true;
 
-        if (combatEvent.Target.Type is ActorType.Player or ActorType.Pet)
+        if (target.Type is ActorType.Player or ActorType.Pet)
             return true;
 
-        return combatEvent.Type is CombatEventType.Shield;
+        return type is CombatEventType.Shield;
     }
 }

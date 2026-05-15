@@ -1,6 +1,7 @@
 using System;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.Chat;
 
 namespace CombatStatistics.Models;
 
@@ -30,6 +31,21 @@ public sealed class ActorIdentity
             Job = job,
             Type = type,
             OwnerObjectId = ownerObjectId,
+        };
+    }
+
+    public static ActorIdentity FromLogEntity(ILogMessageEntity entity, ActorType type, string job = "")
+    {
+        var name = entity.Name.ExtractText();
+        var hash = HashCode.Combine(name, entity.HomeWorldId, entity.ObjStrId, (int)type);
+
+        return new ActorIdentity
+        {
+            ObjectId = unchecked((uint)hash),
+            ContentId = null,
+            Name = name,
+            Job = job,
+            Type = type,
         };
     }
 }
