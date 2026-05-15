@@ -33,6 +33,46 @@ public static class QuickSortPresets
 
     // Reagents / Ingredients / Cooking ingredients live in many categories — easier to detect via flags below.
 
+    private static readonly string[] DefaultZoneCategoryPriority =
+    [
+        "Gear",
+        "Consumables",
+        "Materia",
+        "Crafting",
+        "Gathering",
+        "Crystals",
+        "Junk",
+        "Misc",
+    ];
+
+    private static IReadOnlyList<string> ResolveZoneCategoryPriority(
+        Configuration config,
+        IReadOnlyDictionary<string, List<InventoryItemInfo>> byCategory)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var ordered = new List<string>();
+
+        var configured = config.ZoneCategoryPriority ?? Array.Empty<string>();
+        foreach (var raw in configured)
+        {
+            var tag = NormalizeZoneTag(raw);
+            if (string.IsNullOrWhiteSpace(tag) || tag == "None") continue;
+            if (seen.Add(tag)) ordered.Add(tag);
+        }
+
+        foreach (var fallback in DefaultZoneCategoryPriority)
+        {
+            if (seen.Add(fallback)) ordered.Add(fallback);
+        }
+
+        foreach (var key in byCategory.Keys.OrderBy(k => k, StringComparer.Ordinal))
+        {
+            if (seen.Add(key)) ordered.Add(key);
+        }
+
+        return ordered;
+    }
+
     public static readonly QuickPreset GroupGearToBag1 = new()
     {
         Name = "Gear → Bag 1",
@@ -445,6 +485,77 @@ public static class QuickSortPresets
         _ => items.OrderBy(i => i.ItemId),
     };
 
+    private static string NormalizeZoneTag(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "None";
+        var tag = raw.Trim();
+        return tag switch
+        {
+            "Crystal" => "Crystals",
+            _ => tag,
+        };
+    }
+
+    private static HashSet<string> ParseZoneTagSet(string? raw)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(raw)) return result;
+
+        var parts = raw.Split(['|', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var p in parts)
+        {
+            var tag = NormalizeZoneTag(p);
+            if (tag == "None") continue;
+            result.Add(tag);
+        }
+
+        return result;
+    }
+
+    private static List<QueuedMove> BuildVirtualSwapMoves(
+        IReadOnlyList<InventoryItemInfo> items,
+        IReadOnlyDictionary<(InventoryType bag, int slot), InventoryItemInfo> target)
+    {
+        var current = new Dictionary<(InventoryType bag, int slot), InventoryItemInfo>();
+        var locOf = new Dictionary<InventoryItemInfo, (InventoryType bag, int slot)>();
+        foreach (var item in items)
+        {
+            var k = (item.Container, item.Slot);
+            current[k] = item;
+            locOf[item] = k;
+        }
+
+        var moves = new List<QueuedMove>();
+        var orderedTargets = target.Keys
+            .OrderBy(k => Array.IndexOf(InventoryService.PlayerBags, k.bag))
+            .ThenBy(k => k.slot)
+            .ToList();
+
+        foreach (var key in orderedTargets)
+        {
+            var desired = target[key];
+            if (current.TryGetValue(key, out var here) && ReferenceEquals(here, desired)) continue;
+            if (!locOf.TryGetValue(desired, out var srcKey)) continue;
+
+            moves.Add(new QueuedMove(srcKey.bag, srcKey.slot, key.bag, key.slot, false, desired.Name));
+
+            current.TryGetValue(key, out var displaced);
+            current[key] = desired;
+            locOf[desired] = key;
+            if (displaced != null)
+            {
+                current[srcKey] = displaced;
+                locOf[displaced] = srcKey;
+            }
+            else
+            {
+                current.Remove(srcKey);
+            }
+        }
+
+        return moves;
+    }
+
     /// <summary>
     /// Generic full-rebuild engine. Used by every Bag Assistant sort.
     ///
@@ -591,11 +702,73 @@ public static class QuickSortPresets
         bool[] bagFlags,
         Configuration config)
     {
-        return BuildFullRebuildPlan(
-            items,
-            slotTagger: g => (layoutMap != null && g >= 0 && g < layoutMap.Length) ? layoutMap[g] : "None",
-            itemCategorizer: i => CategorizeForZone(i, config),
-            bagFlags: bagFlags);
+        var activeSlots = new List<(InventoryType bag, int slot)>();
+        var allowedTagsBySlot = new Dictionary<(InventoryType bag, int slot), HashSet<string>>();
+
+        for (int g = 0; g < 140; g++)
+        {
+            int bagIdx = g / 35;
+            int slotIdx = g % 35;
+            if (bagIdx >= bagFlags.Length || !bagFlags[bagIdx]) continue;
+
+            var bag = InventoryService.PlayerBags[bagIdx];
+            var key = (bag, slotIdx);
+            activeSlots.Add(key);
+
+            var raw = (layoutMap != null && g >= 0 && g < layoutMap.Length) ? layoutMap[g] : null;
+            allowedTagsBySlot[key] = ParseZoneTagSet(raw);
+        }
+
+        var byCategory = new Dictionary<string, List<InventoryItemInfo>>(StringComparer.Ordinal);
+        foreach (var item in items)
+        {
+            var bagIdx = Array.IndexOf(InventoryService.PlayerBags, item.Container);
+            if (bagIdx < 0 || bagIdx >= bagFlags.Length || !bagFlags[bagIdx]) continue;
+
+            var category = CategorizeForZone(item, config);
+            if (!byCategory.TryGetValue(category, out var list))
+            {
+                list = new List<InventoryItemInfo>();
+                byCategory[category] = list;
+            }
+            list.Add(item);
+        }
+
+        foreach (var key in byCategory.Keys.ToList())
+            byCategory[key] = SortForCategory(key, byCategory[key]).ToList();
+
+        var categoryOrder = ResolveZoneCategoryPriority(config, byCategory);
+
+        var target = new Dictionary<(InventoryType bag, int slot), InventoryItemInfo>();
+        var overflow = new List<InventoryItemInfo>();
+
+        foreach (var category in categoryOrder)
+        {
+            if (!byCategory.TryGetValue(category, out var bucket) || bucket.Count == 0) continue;
+
+            var matchingSlots = activeSlots
+                .Where(s => !target.ContainsKey(s)
+                            && allowedTagsBySlot.TryGetValue(s, out var tags)
+                            && tags.Contains(category))
+                .ToList();
+
+            int assignCount = Math.Min(bucket.Count, matchingSlots.Count);
+            for (int i = 0; i < assignCount; i++)
+                target[matchingSlots[i]] = bucket[i];
+
+            for (int i = assignCount; i < bucket.Count; i++)
+                overflow.Add(bucket[i]);
+        }
+
+        foreach (var slot in activeSlots)
+        {
+            if (overflow.Count == 0) break;
+            if (target.ContainsKey(slot)) continue;
+            target[slot] = overflow[0];
+            overflow.RemoveAt(0);
+        }
+
+        return BuildVirtualSwapMoves(items, target);
     }
 
     // ─── Preset planners (all routed through BuildFullRebuildPlan) ────────────

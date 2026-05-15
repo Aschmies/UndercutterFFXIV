@@ -93,19 +93,9 @@ public sealed class BagAssistantWindow : Window, IDisposable
                 DrawVisualZonesTab();
                 ImGui.EndTabItem();
             }
-            if (ImGui.BeginTabItem("Run / Preview"))
-            {
-                DrawRunTab();
-                ImGui.EndTabItem();
-            }
             if (ImGui.BeginTabItem("Junk & Settings"))
             {
                 DrawSettingsTab();
-                ImGui.EndTabItem();
-            }
-            if (ImGui.BeginTabItem("Advanced"))
-            {
-                DrawAdvancedTab();
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Help"))
@@ -1053,9 +1043,118 @@ public sealed class BagAssistantWindow : Window, IDisposable
         new System.Numerics.Vector4(0.5f, 0.5f, 0.5f, 1f), // Junk
     };
 
+    private HashSet<string> ParseSlotTags(string raw)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(raw)) return set;
+
+        foreach (var part in raw.Split(['|', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (string.Equals(part, "None", StringComparison.Ordinal)) continue;
+            if (Array.IndexOf(zoneTags, part) >= 0) set.Add(part);
+        }
+        return set;
+    }
+
+    private static string SerializeSlotTags(HashSet<string> tags)
+    {
+        if (tags.Count == 0) return "None";
+        return string.Join("|", tags.OrderBy(t => t, StringComparer.Ordinal));
+    }
+
+    private string BuildSlotLabel(HashSet<string> tags, int slotIndex)
+    {
+        if (tags.Count == 0) return $"Slot {slotIndex + 1}";
+        var ordered = tags.OrderBy(t => t, StringComparer.Ordinal).ToList();
+        var baseText = ordered[0];
+        if (ordered.Count > 1) baseText += $" +{ordered.Count - 1}";
+        if (Config.ShowVisualZoneNumbers) baseText += $"\n({slotIndex + 1})";
+        return baseText;
+    }
+
+    private System.Numerics.Vector4 ResolveSlotColor(HashSet<string> tags)
+    {
+        if (tags.Count == 0) return zoneColors[0];
+        var first = tags.OrderBy(t => t, StringComparer.Ordinal).First();
+        var idx = Array.IndexOf(zoneTags, first);
+        return idx >= 0 ? zoneColors[idx] : zoneColors[0];
+    }
+
+    private void EnsureZonePriorityConfig()
+    {
+        var defaults = new[] { "Gear", "Consumables", "Materia", "Crafting", "Gathering", "Crystals", "Junk", "Misc" };
+        var source = Config.ZoneCategoryPriority ?? Array.Empty<string>();
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var rebuilt = new List<string>();
+
+        foreach (var entry in source)
+        {
+            if (string.IsNullOrWhiteSpace(entry)) continue;
+            var normalized = entry.Trim();
+            if (string.Equals(normalized, "None", StringComparison.Ordinal)) continue;
+            if (seen.Add(normalized)) rebuilt.Add(normalized);
+        }
+
+        foreach (var fallback in defaults)
+        {
+            if (seen.Add(fallback)) rebuilt.Add(fallback);
+        }
+
+        if (!source.SequenceEqual(rebuilt, StringComparer.Ordinal))
+        {
+            Config.ZoneCategoryPriority = rebuilt.ToArray();
+            Config.Save();
+        }
+    }
+
+    private void DrawZonePriorityEditor()
+    {
+        EnsureZonePriorityConfig();
+        var priority = Config.ZoneCategoryPriority?.ToList() ?? new List<string>();
+
+        ImGui.TextUnformatted("Shared Slot Priority");
+        ImGui.TextDisabled("When a slot allows multiple categories, higher entries claim that slot first.");
+
+        var changed = false;
+        for (int i = 0; i < priority.Count; i++)
+        {
+            ImGui.PushID($"zone_prio_{i}");
+            ImGui.TextUnformatted($"{i + 1}. {priority[i]}");
+            ImGui.SameLine();
+
+            var disableUp = i == 0;
+            if (disableUp) ImGui.BeginDisabled();
+            if (ImGui.SmallButton("Up") && i > 0)
+            {
+                (priority[i - 1], priority[i]) = (priority[i], priority[i - 1]);
+                changed = true;
+            }
+            if (disableUp) ImGui.EndDisabled();
+
+            ImGui.SameLine();
+            var disableDown = i >= priority.Count - 1;
+            if (disableDown) ImGui.BeginDisabled();
+            if (ImGui.SmallButton("Down") && i < priority.Count - 1)
+            {
+                (priority[i + 1], priority[i]) = (priority[i], priority[i + 1]);
+                changed = true;
+            }
+            if (disableDown) ImGui.EndDisabled();
+
+            ImGui.PopID();
+        }
+
+        if (changed)
+        {
+            Config.ZoneCategoryPriority = priority.ToArray();
+            Config.Save();
+        }
+    }
+
     private void DrawVisualZonesTab()
     {
-        ImGui.TextWrapped("Visual Layout Zones let you assign specific categories to specific slots in your bags. Items will be automatically routed and sorted into these designated areas.");
+        ImGui.TextWrapped("Visual Layout Zones let you assign specific categories to specific slots in your bags. A slot can hold multiple allowed categories (for example: Gear + Consumables + Materia). Apply Zones fills matching categories in section order, then cleans up overflow.");
         ImGui.Spacing();
 
         if (ImGui.Button("Apply Visual Zones Now"))
@@ -1096,6 +1195,9 @@ public sealed class BagAssistantWindow : Window, IDisposable
 
         ImGui.Spacing();
         ImGui.Separator();
+        DrawZonePriorityEditor();
+        ImGui.Spacing();
+        ImGui.Separator();
 
         if (ImGui.BeginTabBar("##ZoneBagsTabBar"))
         {
@@ -1114,7 +1216,7 @@ public sealed class BagAssistantWindow : Window, IDisposable
     private void DrawZoneGrid(int bagIndex)
     {
         int offset = bagIndex * 35;
-        ImGui.Text("Click or drag across slots to paint them with the active tag.");
+        ImGui.Text("Left-drag paints with the selected category. Paint a slot with multiple categories to allow all of them. Select 'None' and drag to clear.");
         ImGui.Spacing();
         
         if (ImGui.BeginTable($"##ZoneTable_{bagIndex}", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit))
@@ -1127,25 +1229,45 @@ public sealed class BagAssistantWindow : Window, IDisposable
                     ImGui.TableNextColumn();
                     int slotIndex = r * 5 + c;
                     int globalIndex = offset + slotIndex;
-                    string currentTag = Config.VisualZoneLayout[globalIndex];
-                    int tagIdx = Array.IndexOf(zoneTags, currentTag);
-                    if (tagIdx < 0) tagIdx = 0;
+                    var currentTagRaw = Config.VisualZoneLayout[globalIndex] ?? "None";
+                    var slotTags = ParseSlotTags(currentTagRaw);
 
                     ImGui.PushID($"zoneBtn_{globalIndex}");
-                    ImGui.PushStyleColor(ImGuiCol.Button, zoneColors[tagIdx]);
+                    ImGui.PushStyleColor(ImGuiCol.Button, ResolveSlotColor(slotTags));
                     
-                    var title = string.IsNullOrEmpty(currentTag) || currentTag == "None" ? $"Slot {slotIndex+1}" : currentTag;
-                    if (Config.ShowVisualZoneNumbers && !title.StartsWith("Slot")) title += $"\n({slotIndex+1})";
+                    var title = BuildSlotLabel(slotTags, slotIndex);
                     ImGui.Button(title, new System.Numerics.Vector2(90, 40));
                     
                     if (ImGui.IsItemHovered() && ImGui.IsMouseDown(ImGuiMouseButton.Left))
                     {
                         var newTag = zoneTags[activeZoneTagIndex];
-                        if (Config.VisualZoneLayout[globalIndex] != newTag)
+                        var changed = false;
+                        if (newTag == "None")
                         {
-                            Config.VisualZoneLayout[globalIndex] = newTag;
+                            if (slotTags.Count > 0)
+                            {
+                                slotTags.Clear();
+                                changed = true;
+                            }
+                        }
+                        else if (slotTags.Add(newTag))
+                        {
+                            changed = true;
+                        }
+
+                        if (changed)
+                        {
+                            Config.VisualZoneLayout[globalIndex] = SerializeSlotTags(slotTags);
                             Config.Save();
                         }
+                    }
+
+                    if (ImGui.IsItemHovered())
+                    {
+                        var hoverText = slotTags.Count == 0
+                            ? "No categories assigned."
+                            : $"Assigned: {string.Join(", ", slotTags.OrderBy(t => t, StringComparer.Ordinal))}";
+                        ImGui.SetTooltip($"Slot {slotIndex + 1}\n{hoverText}");
                     }
 
                     ImGui.PopStyleColor();
@@ -1158,16 +1280,27 @@ public sealed class BagAssistantWindow : Window, IDisposable
 
     private void DrawHelpTab()
     {
-        ImGui.TextWrapped("Bag Assistant gives you two ways to organise your inventory.");
+        ImGui.TextWrapped("Bag Assistant helps you keep full inventories clean with one-click sorting and painted Layout Zones.");
         ImGui.Spacing();
-        ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "Quick Sort (recommended)");
-        ImGui.TextWrapped("One-click presets. 'Smart Sort Everything' covers the common case: gear -> Bag 1, food/medicine -> Bag 2, crafting materials -> Bag 3, crystals/materia -> Bag 4. Or pick a single targeted preset (e.g. 'HQ Gear -> Bag 1').");
+
+        ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "Quick Sort");
+        ImGui.TextWrapped("Use Smart Sort for the default flow: Gear -> Bag 1, Food/Medicine -> Bag 2, Materials -> Bag 3, Crystals/Materia -> Bag 4. You can also run Gatherer, Raider, and Hoarder presets from the main window or overlay.");
         ImGui.Spacing();
-        ImGui.TextColored(new Vector4(0.7f, 0.9f, 1f, 1f), "Custom Rules (advanced)");
-        ImGui.TextWrapped("Build your own rule list with detailed filters (category, rarity, level, ilvl, job, HQ, name, vendor price, item ID, etc.). Rules are evaluated top-to-bottom, first match wins.");
+
+        ImGui.TextColored(new Vector4(0.7f, 0.9f, 1f, 1f), "Layout Zones");
+        ImGui.TextWrapped("Paint category zones per slot and run Apply Zones to rebuild your inventory to match. Slots can hold multiple categories, and shared-slot assignment follows your configured priority order in the Layout Zones tab.");
         ImGui.Spacing();
-        ImGui.TextWrapped("Commands:");
-        ImGui.BulletText("/bagassistant or /ba — open this window.");
+
+        ImGui.TextColored(new Vector4(0.8f, 1f, 0.8f, 1f), "Sorting Behavior");
+        ImGui.TextWrapped("Sorts run cleanup passes automatically, so full inventories keep refining until stable (up to a safe pass limit). Apply Zones can also auto-merge stacks first to reduce duplicates.");
+        ImGui.Spacing();
+
+        ImGui.TextColored(new Vector4(1f, 0.7f, 0.7f, 1f), "Junk Safety");
+        ImGui.TextWrapped("Delete Junk only targets low-value white items according to your safety settings. Review your Junk thresholds before enabling aggressive cleanup.");
+        ImGui.Spacing();
+
+        ImGui.TextUnformatted("Commands:");
+        ImGui.BulletText("/bagassistant or /ba opens this window.");
     }
 
     private bool[] GetBagFlags() => new[] { Config.IncludeBag1, Config.IncludeBag2, Config.IncludeBag3, Config.IncludeBag4 };

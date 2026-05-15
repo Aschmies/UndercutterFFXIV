@@ -23,6 +23,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
 
     private const string CommandName = "/bagassistant";
     private const string ShortCommand = "/ba";
+    private const int MaxRebuildPasses = 3;
 
     public Configuration Configuration { get; }
 
@@ -100,10 +101,49 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
     private void RunRebuild(string label, System.Func<List<InventoryItemInfo>, bool[], List<Services.QueuedMove>> planner)
     {
         if (SortQueue.IsBusy) return;
+
+        if (!TryQueueRebuildPass(label, planner, 1, reportNoop: true))
+            return;
+
+        AttachRebuildCleanupPasses(label, planner, 2);
+    }
+
+    private bool TryQueueRebuildPass(
+        string label,
+        System.Func<List<InventoryItemInfo>, bool[], List<Services.QueuedMove>> planner,
+        int pass,
+        bool reportNoop)
+    {
         var bagFlags = GetBagFlags();
         var items = InventoryService.ScanBags(bagFlags);
         var moves = planner(items, bagFlags);
-        SortQueue.EnqueueDirect(moves, label);
+        if (moves.Count == 0)
+        {
+            if (reportNoop)
+                SortQueue.StatusMessage = pass <= 1 ? $"{label}: nothing to move." : $"{label}: fully sorted in {pass - 1} pass(es).";
+            return false;
+        }
+
+        var passLabel = pass == 1 ? label : $"{label} (cleanup pass {pass})";
+        SortQueue.EnqueueDirect(moves, passLabel);
+        return true;
+    }
+
+    private void AttachRebuildCleanupPasses(
+        string label,
+        System.Func<List<InventoryItemInfo>, bool[], List<Services.QueuedMove>> planner,
+        int nextPass)
+    {
+        SortQueue.OnComplete = () =>
+        {
+            SortQueue.OnComplete = null;
+            if (nextPass > MaxRebuildPasses) return;
+
+            if (!TryQueueRebuildPass(label, planner, nextPass, reportNoop: true))
+                return;
+
+            AttachRebuildCleanupPasses(label, planner, nextPass + 1);
+        };
     }
 
     public void RunSmartSort()
@@ -218,7 +258,7 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
         return QuickSortPresets.SnapshotBagLayout(items, bagType);
     }
 
-        public void ApplyVisualZones(bool skipAutoMerge = false)
+    public void ApplyVisualZones(bool skipAutoMerge = false)
     {
         if (SortQueue.IsBusy) return;
         var bagFlags = GetBagFlags();
@@ -242,9 +282,8 @@ public sealed class BagAssistantPlugin : IDalamudPlugin
             }
         }
 
-        // Full rebuild: categorize → sort → assign to painted slots → emit minimal swap moves.
-        var plan = QuickSortPresets.BuildApplyVisualZonesPlan(items, Configuration.VisualZoneLayout, bagFlags, Configuration);
-        SortQueue.EnqueueDirect(plan, "Apply Visual Zones (full rebuild)");
+        RunRebuild("Apply Visual Zones", (scanItems, flags) =>
+            QuickSortPresets.BuildApplyVisualZonesPlan(scanItems, Configuration.VisualZoneLayout, flags, Configuration));
     }
 
     public void SyncLayoutToOtherBag(InventoryType sourceBag, InventoryType targetBag, List<uint?> template)

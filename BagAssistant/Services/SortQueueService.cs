@@ -94,6 +94,7 @@ public sealed class SortQueueService(InventoryService inventoryService, Configur
     {
         queue.Clear();
         timer.Stop();
+        OnComplete = null;
         StatusMessage = "Sort stopped.";
     }
 

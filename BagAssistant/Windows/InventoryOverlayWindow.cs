@@ -24,6 +24,7 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
     private Vector2 anchorPos;
     private Vector2 anchorSize;
     private bool openJunkConfirmPopup = true;
+    private float lastMeasuredWindowHeight = 56f;
 
     public InventoryOverlayWindow(BagAssistantPlugin plugin, IGameGui gameGui)
         : base("##BagAssistantInventoryOverlay",
@@ -55,17 +56,9 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
 
     public override void PreDraw()
     {
-        // Anchor the button strip so its BOTTOM edge sits just above the top of the inventory addon.
-        // This keeps the button box visually attached to the inventory, with its bottom edge aligned.
-        var windowHeight = 0f;
-        var ctx = (ImGuiContext*)ImGui.GetCurrentContext();
-        if (ctx != null)
-        {
-            // Estimate window height using previous frame or fallback to a default.
-            windowHeight = ImGui.GetWindowHeight() > 0 ? ImGui.GetWindowHeight() : 52f;
-        }
-        // Position so the bottom of the overlay is just above the inventory window.
-        var pos = new Vector2(anchorPos.X, anchorPos.Y - windowHeight - 2f); // 2px gap
+        // Anchor the strip so its bottom sits just above the inventory's top border.
+        var windowHeight = MathF.Max(40f, lastMeasuredWindowHeight);
+        var pos = new Vector2(anchorPos.X, anchorPos.Y - windowHeight - 1f);
         ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
         // Cap window width to the inventory addon's width; height is auto via AlwaysAutoResize.
         var maxW = MathF.Max(220f, anchorSize.X);
@@ -112,18 +105,56 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
             return;
         }
 
-        // Smart Sort + per-rule + Undo
-        if (ImGui.Button("Smart Sort##ov_smart", new Vector2(80, 0)))
+        const float primaryW = 104f;
+        const float smallW = 74f;
+
+        // Row 1: most-used actions
+        if (ImGui.Button("Smart Sort##ov_smart", new Vector2(primaryW, 0)))
             plugin.RunSmartSort();
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Sort everything: Gear -> Bag1, Food/Medicine -> Bag2,\nMaterials -> Bag3, Crystals/Materia -> Bag4.");
 
-        WrapSameLine(80);
+        WrapSameLine(primaryW);
+        if (ImGui.Button("Apply Zones##ov_zones", new Vector2(primaryW, 0))) plugin.ApplyVisualZones();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Rebuild inventory into your painted Layout Zones.");
+
+        WrapSameLine(primaryW);
+        if (ImGui.Button("Merge Stacks##ov_merge", new Vector2(primaryW, 0))) plugin.MergeStacks();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Consolidate duplicate items\ninto single stacks.");
+
+        WrapSameLine(smallW);
+        if (plugin.CanUndo)
+        {
+            if (ImGui.Button("Undo##ov_undo", new Vector2(smallW, 0))) plugin.UndoLastSort();
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Reverse the last sort.");
+        }
+        else
+        {
+            ImGui.BeginDisabled();
+            ImGui.Button("Undo##ov_undo_dis", new Vector2(smallW, 0));
+            ImGui.EndDisabled();
+        }
+
+        ImGui.Separator();
+
+        // Row 2: one-click presets + selected rule
+        if (ImGui.SmallButton("Gatherer")) plugin.RunGathererSort();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Crystals & Materia top priority,\nmaterials next, rest in Bag2.");
+
+        WrapSameLine(60);
+        if (ImGui.SmallButton("Raider")) plugin.RunRaiderSort();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("High ilvl gear + consumables\nfor combat readiness.");
+
+        WrapSameLine(60);
+        if (ImGui.SmallButton("Hoarder")) plugin.RunHoarderSort();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Group by rarity (white/green/blue/purple)\nto find junk easily.");
+
+        WrapSameLine(primaryW);
         var rule = ResolveOverlayRule();
         if (rule != null)
         {
             ImGui.PushStyleColor(ImGuiCol.Button, rule.GetColor() * new Vector4(1, 1, 1, 0.5f));
-            if (ImGui.Button($"{rule.Name}##ov_rule", new Vector2(80, 0)))
+            if (ImGui.Button($"{rule.Name}##ov_rule", new Vector2(primaryW, 0)))
                 plugin.RunSingleRule(rule);
             ImGui.PopStyleColor();
             if (ImGui.IsItemHovered()) ImGui.SetTooltip($"Run only this rule:\n{rule.Name}");
@@ -131,28 +162,24 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
         else
         {
             ImGui.BeginDisabled();
-            ImGui.Button("(no rule)##ov_rule_none", new Vector2(80, 0));
+            ImGui.Button("(no rule)##ov_rule_none", new Vector2(primaryW, 0));
             ImGui.EndDisabled();
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Pick a rule for the overlay button\nin Settings tab.");
         }
 
-        WrapSameLine(60);
-        if (plugin.CanUndo)
-        {
-            if (ImGui.SmallButton("Undo##ov_undo")) plugin.UndoLastSort();
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Reverse the last sort.");
-        }
-        else
-        {
-            ImGui.BeginDisabled();
-            ImGui.SmallButton("Undo##ov_undo_dis");
-            ImGui.EndDisabled();
-        }
+        ImGui.Separator();
 
-        // Delete Junk + presets
-        WrapSameLine(80);
-        if (ImGui.Button("Delete Junk##ov_junk", new Vector2(80, 0)))
+        // Row 3: maintenance and utility
+        if (ImGui.SmallButton("Extract Materia##ov_materia")) plugin.ExtractMateria();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Move all gear at 100% spiritbond to\nBag 1 for materia extraction.");
+
+        WrapSameLine(100);
+        if (ImGui.SmallButton("Vendor Trash##ov_trash")) plugin.GroupVendorTrash();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Group all vendor trash (grey items)\ninto Bag 4 for easy discard.");
+
+        WrapSameLine(92);
+        if (ImGui.Button("Delete Junk##ov_junk", new Vector2(primaryW, 0)))
         {
             ImGui.OpenPopup("Confirm Delete Junk##ov");
             openJunkConfirmPopup = true;
@@ -188,37 +215,13 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
             ImGui.EndPopup();
         }
 
-        WrapSameLine(70);
-        if (ImGui.SmallButton("Gatherer")) plugin.RunGathererSort();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Crystals & Materia top priority,\nmaterials next, rest in Bag2.");
-
-        WrapSameLine(60);
-        if (ImGui.SmallButton("Raider")) plugin.RunRaiderSort();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("High ilvl gear + consumables\nfor combat readiness.");
-
-        WrapSameLine(60);
-        if (ImGui.SmallButton("Hoarder")) plugin.RunHoarderSort();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Group by rarity (white/green/blue/purple)\nto find junk easily.");
-
-        WrapSameLine(110);
-        if (ImGui.SmallButton("Extract Materia##ov_materia")) plugin.ExtractMateria();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Move all gear at 100% spiritbond to\nBag 1 for materia extraction.");
-
-        WrapSameLine(100);
-        if (ImGui.SmallButton("Merge Stacks##ov_merge")) plugin.MergeStacks();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Consolidate duplicate items\ninto single stacks.");
-
-        WrapSameLine(95);
-        if (ImGui.SmallButton("Apply Zones##ov_zones")) plugin.ApplyVisualZones();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Rebuild inventory into your painted Layout Zones.");
-
-        WrapSameLine(100);
-        if (ImGui.SmallButton("Vendor Trash##ov_trash")) plugin.GroupVendorTrash();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Group all vendor trash (grey items)\ninto Bag 4 for easy discard.");
-
-        WrapSameLine(40);
-        if (ImGui.SmallButton("BA##ov_open")) plugin.ToggleMainUi();
+        WrapSameLine(90);
+        if (ImGui.SmallButton("Open BA##ov_open")) plugin.ToggleMainUi();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open Bag Assistant");
+
+        var currentWindowHeight = ImGui.GetWindowHeight();
+        if (currentWindowHeight > 0f)
+            lastMeasuredWindowHeight = currentWindowHeight;
     }
 
     private SortRule? ResolveOverlayRule()

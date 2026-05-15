@@ -67,6 +67,22 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Array of 140 strings (35 per bag * 4 bags) indicating the visual zone tag assigned to each slot.</summary>
     public string[] VisualZoneLayout { get; set; } = new string[140];
 
+    /// <summary>
+    /// Category assignment order used by Apply Zones when a slot allows multiple categories.
+    /// Earlier categories claim matching shared slots first.
+    /// </summary>
+    public string[] ZoneCategoryPriority { get; set; } =
+    [
+        "Gear",
+        "Consumables",
+        "Materia",
+        "Crafting",
+        "Gathering",
+        "Crystals",
+        "Junk",
+        "Misc",
+    ];
+
     private IDalamudPluginInterface? pluginInterface;
     public void Initialize(IDalamudPluginInterface pi)
     {
