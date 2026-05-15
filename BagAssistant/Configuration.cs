@@ -61,6 +61,15 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Show a floating button strip above the inventory addon while it's open.</summary>
     public bool ShowInventoryOverlay { get; set; } = true;
 
+    /// <summary>
+    /// If true, dock the floating inventory buttons to the LEFT side of the inventory window.
+    /// If false, dock them ABOVE the inventory window.
+    /// </summary>
+    public bool OverlayDockLeftSide { get; set; } = false;
+
+    /// <summary>If true, Bag Assistant uses a darker FFXIV-inspired UI palette.</summary>
+    public bool UseFfxivTheme { get; set; } = true;
+
     /// <summary>Index into <see cref="Rules"/> for the rule the overlay's rule button runs (-1 = none selected).</summary>
     public int OverlayRuleIndex { get; set; } = -1;
 

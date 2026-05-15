@@ -25,6 +25,9 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
     private Vector2 anchorSize;
     private bool openJunkConfirmPopup = true;
     private float lastMeasuredWindowHeight = 56f;
+    private float lastMeasuredWindowWidth = 240f;
+    private int pushedThemeColorCount;
+    private int pushedThemeVarCount;
 
     public InventoryOverlayWindow(BagAssistantPlugin plugin, IGameGui gameGui)
         : base("##BagAssistantInventoryOverlay",
@@ -56,21 +59,55 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
 
     public override void PreDraw()
     {
-        // Anchor the strip so its bottom sits just above the inventory's top border.
         var windowHeight = MathF.Max(40f, lastMeasuredWindowHeight);
-        var pos = new Vector2(anchorPos.X, anchorPos.Y - windowHeight - 1f);
+        var windowWidth = MathF.Max(220f, lastMeasuredWindowWidth);
+
+        Vector2 pos;
+        if (Config.OverlayDockLeftSide)
+        {
+            // Screenshot-style docking: panel sits to the left of the inventory window.
+            pos = new Vector2(anchorPos.X - windowWidth - 6f, anchorPos.Y + 2f);
+        }
+        else
+        {
+            // Default docking: panel sits above inventory with bottom edge aligned near top border.
+            pos = new Vector2(anchorPos.X, anchorPos.Y - windowHeight - 1f);
+        }
+
         ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
         // Cap window width to the inventory addon's width; height is auto via AlwaysAutoResize.
-        var maxW = MathF.Max(220f, anchorSize.X);
+        var maxW = Config.OverlayDockLeftSide
+            ? 300f
+            : MathF.Max(220f, anchorSize.X);
         ImGui.SetNextWindowSizeConstraints(new Vector2(220, 0), new Vector2(maxW, 9999));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(6, 6));
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(6, 4));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 6f);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
+        pushedThemeVarCount = 0;
+
+        pushedThemeColorCount = 0;
+        if (Config.UseFfxivTheme)
+        {
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(0.13f, 0.14f, 0.16f, 0.96f));
+            ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(0.46f, 0.48f, 0.52f, 0.92f));
+            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.24f, 0.25f, 0.28f, 0.93f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.30f, 0.34f, 0.97f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.35f, 0.37f, 0.42f, 0.98f));
+            pushedThemeColorCount = 5;
+
+            ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 5f);
+            ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
+            pushedThemeVarCount = 2;
+        }
     }
 
     public override void PostDraw()
     {
+        if (pushedThemeVarCount > 0)
+            ImGui.PopStyleVar(pushedThemeVarCount);
+        if (pushedThemeColorCount > 0)
+            ImGui.PopStyleColor(pushedThemeColorCount);
         ImGui.PopStyleVar(4);
     }
 
@@ -104,6 +141,9 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
                 plugin.UndoLastSort();
             return;
         }
+
+        if (Config.UseFfxivTheme)
+            DrawOverlayChrome();
 
         const float primaryW = 104f;
         const float smallW = 74f;
@@ -222,6 +262,24 @@ public sealed unsafe class InventoryOverlayWindow : Window, IDisposable
         var currentWindowHeight = ImGui.GetWindowHeight();
         if (currentWindowHeight > 0f)
             lastMeasuredWindowHeight = currentWindowHeight;
+
+        var currentWindowWidth = ImGui.GetWindowWidth();
+        if (currentWindowWidth > 0f)
+            lastMeasuredWindowWidth = currentWindowWidth;
+    }
+
+    private static void DrawOverlayChrome()
+    {
+        var drawList = ImGui.GetWindowDrawList();
+        var p = ImGui.GetWindowPos();
+        var s = ImGui.GetWindowSize();
+        var max = new Vector2(p.X + s.X, p.Y + s.Y);
+
+        var edge = ImGui.ColorConvertFloat4ToU32(new Vector4(0.52f, 0.55f, 0.60f, 0.90f));
+        var glow = ImGui.ColorConvertFloat4ToU32(new Vector4(0.90f, 0.92f, 0.98f, 0.14f));
+
+        drawList.AddRect(p, max, edge, 6f, ImDrawFlags.None, 1.25f);
+        drawList.AddLine(new Vector2(p.X + 6f, p.Y + 22f), new Vector2(max.X - 6f, p.Y + 22f), glow, 1.8f);
     }
 
     private SortRule? ResolveOverlayRule()

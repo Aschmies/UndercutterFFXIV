@@ -76,6 +76,14 @@ public sealed class BagAssistantWindow : Window, IDisposable
 
     public override void Draw()
     {
+        var themedColors = 0;
+        var themedVars = 0;
+        if (Config.UseFfxivTheme)
+        {
+            themedColors = PushFfxivThemeColors();
+            themedVars = PushFfxivThemeStyleVars();
+        }
+
         if (ImGui.BeginTabBar("##BAQTabs"))
         {
             if (ImGui.BeginTabItem("Quick Sort"))
@@ -165,6 +173,74 @@ public sealed class BagAssistantWindow : Window, IDisposable
             ImGui.Separator();
             ImGui.TextColored(new Vector4(0.7f, 0.9f, 1f, 1f), statusMessage);
         }
+
+        if (Config.UseFfxivTheme)
+            DrawFfxivWindowChrome();
+
+        if (themedVars > 0)
+            ImGui.PopStyleVar(themedVars);
+        if (themedColors > 0)
+            ImGui.PopStyleColor(themedColors);
+    }
+
+    private static int PushFfxivThemeColors()
+    {
+        // Dark grey palette to better match FFXIV's inventory panel style.
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(0.14f, 0.15f, 0.17f, 0.97f));
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, new Vector4(0.13f, 0.14f, 0.16f, 0.98f));
+        ImGui.PushStyleColor(ImGuiCol.TitleBg, new Vector4(0.21f, 0.23f, 0.27f, 0.98f));
+        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, new Vector4(0.36f, 0.38f, 0.44f, 0.98f));
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.12f, 0.13f, 0.15f, 0.95f));
+        ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(0.46f, 0.48f, 0.52f, 0.92f));
+        ImGui.PushStyleColor(ImGuiCol.FrameBg, new Vector4(0.20f, 0.21f, 0.24f, 0.94f));
+        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, new Vector4(0.28f, 0.30f, 0.34f, 0.96f));
+        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, new Vector4(0.34f, 0.36f, 0.41f, 0.96f));
+        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.24f, 0.25f, 0.28f, 0.93f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.30f, 0.34f, 0.97f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.35f, 0.37f, 0.42f, 0.98f));
+        ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.24f, 0.26f, 0.30f, 0.92f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.31f, 0.33f, 0.38f, 0.95f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.38f, 0.40f, 0.46f, 0.96f));
+        ImGui.PushStyleColor(ImGuiCol.Separator, new Vector4(0.44f, 0.46f, 0.50f, 0.86f));
+        ImGui.PushStyleColor(ImGuiCol.Tab, new Vector4(0.20f, 0.21f, 0.25f, 0.95f));
+        ImGui.PushStyleColor(ImGuiCol.TabHovered, new Vector4(0.33f, 0.35f, 0.40f, 0.97f));
+        ImGui.PushStyleColor(ImGuiCol.TabActive, new Vector4(0.43f, 0.45f, 0.52f, 0.98f));
+        ImGui.PushStyleColor(ImGuiCol.TabUnfocused, new Vector4(0.17f, 0.18f, 0.21f, 0.95f));
+        ImGui.PushStyleColor(ImGuiCol.TabUnfocusedActive, new Vector4(0.28f, 0.29f, 0.34f, 0.96f));
+        return 22;
+    }
+
+    private static int PushFfxivThemeStyleVars()
+    {
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 10f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 6f);
+        ImGui.PushStyleVar(ImGuiStyleVar.GrabRounding, 6f);
+        ImGui.PushStyleVar(ImGuiStyleVar.TabRounding, 6f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
+        return 5;
+    }
+
+    private static void DrawFfxivWindowChrome()
+    {
+        var drawList = ImGui.GetWindowDrawList();
+        var p = ImGui.GetWindowPos();
+        var s = ImGui.GetWindowSize();
+        var max = new Vector2(p.X + s.X, p.Y + s.Y);
+
+        var edge = ImGui.ColorConvertFloat4ToU32(new Vector4(0.52f, 0.55f, 0.60f, 0.92f));
+        var inner = ImGui.ColorConvertFloat4ToU32(new Vector4(0.16f, 0.17f, 0.20f, 0.92f));
+        var glow = ImGui.ColorConvertFloat4ToU32(new Vector4(0.90f, 0.92f, 0.98f, 0.16f));
+
+        drawList.AddRect(p, max, edge, 10f, ImDrawFlags.None, 1.35f);
+        drawList.AddRect(new Vector2(p.X + 1f, p.Y + 1f), new Vector2(max.X - 1f, max.Y - 1f), inner, 9f, ImDrawFlags.None, 1f);
+
+        var topY = p.Y + 33f;
+        drawList.AddLine(new Vector2(p.X + 8f, topY), new Vector2(max.X - 8f, topY), glow, 2f);
+        drawList.AddLine(new Vector2(p.X + 8f, topY + 1.5f), new Vector2(max.X - 8f, topY + 1.5f), edge, 1f);
+
+        // Subtle bevel lines to mimic FFXIV's dark panel framing.
+        drawList.AddLine(new Vector2(p.X + 3f, p.Y + 3f), new Vector2(max.X - 3f, p.Y + 3f), glow, 1f);
+        drawList.AddLine(new Vector2(p.X + 3f, p.Y + 3f), new Vector2(p.X + 3f, max.Y - 3f), glow, 1f);
     }
 
     // ─── Tab: Quick Sort ─────────────────────────────────────────────────────
@@ -801,6 +877,20 @@ public sealed class BagAssistantWindow : Window, IDisposable
             Config.Save();
         }
         ImGui.TextDisabled("When enabled, a set of sorting buttons appears above the inventory addon while it is open.");
+
+        var dockLeft = Config.OverlayDockLeftSide;
+        if (ImGui.Checkbox("Dock overlay to left side of inventory (screenshot style)", ref dockLeft))
+        {
+            Config.OverlayDockLeftSide = dockLeft;
+            Config.Save();
+        }
+
+        var useFfxivTheme = Config.UseFfxivTheme;
+        if (ImGui.Checkbox("Use FFXIV-inspired UI theme", ref useFfxivTheme))
+        {
+            Config.UseFfxivTheme = useFfxivTheme;
+            Config.Save();
+        }
 
         ImGui.Separator();
         ImGui.TextUnformatted("Apply Zones Behavior");
