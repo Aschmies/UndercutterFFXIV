@@ -78,11 +78,13 @@ public sealed class BagAssistantWindow : Window, IDisposable
     {
         var themedColors = 0;
         var themedVars = 0;
-        if (Config.UseFfxivTheme)
-        {
-            themedColors = PushFfxivThemeColors();
-            themedVars = PushFfxivThemeStyleVars();
-        }
+        // DISABLED: Theme causes native exception in cimgui.dll (C0000005 Access Violation)
+        // Unmanaged exceptions bypass C# exception handling
+        // if (Config.UseFfxivTheme)
+        // {
+        //     themedColors = PushFfxivThemeColors();
+        //     themedVars = PushFfxivThemeStyleVars();
+        // }
 
         if (ImGui.BeginTabBar("##BAQTabs"))
         {
@@ -174,8 +176,9 @@ public sealed class BagAssistantWindow : Window, IDisposable
             ImGui.TextColored(new Vector4(0.7f, 0.9f, 1f, 1f), statusMessage);
         }
 
-        if (Config.UseFfxivTheme)
-            DrawFfxivWindowChrome();
+        // DISABLED: Chrome drawing causes native exception
+        // if (Config.UseFfxivTheme)
+        //     DrawFfxivWindowChrome();
 
         if (themedVars > 0)
             ImGui.PopStyleVar(themedVars);
