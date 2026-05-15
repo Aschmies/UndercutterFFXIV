@@ -50,6 +50,11 @@ namespace ArmouryCleaner
         // the direct discard. Faster but slightly less compatible across patches.
         public bool DiscardDirectlyFromArmoury { get; set; } = true;
 
+        // ── Delays ──────────────────────────────────────────────────────────────────
+        // Minimum and maximum delay (in milliseconds) between item deletions/moves
+        // Used to randomize timing for a more human-like pace
+        public int DelayMinMs { get; set; } = 800;
+        public int DelayMaxMs { get; set; } = 1100;
         private IDalamudPluginInterface? pluginInterface;
 
         public void Initialize(IDalamudPluginInterface pi) => pluginInterface = pi;
