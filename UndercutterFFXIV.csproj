@@ -8,6 +8,8 @@
     <Authors>Aschy</Authors>
     <Description>Market Master Pro: manual market intelligence and arbitrage analytics for Dalamud</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,6 +28,12 @@
     <Compile Remove="Slidecaster\**" />
     <EmbeddedResource Remove="Slidecaster\**" />
     <None Remove="Slidecaster\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="CombatStatistics\**" />
+    <EmbeddedResource Remove="CombatStatistics\**" />
+    <None Remove="CombatStatistics\**" />
   </ItemGroup>
 
   <ItemGroup>

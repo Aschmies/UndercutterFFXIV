@@ -1,0 +1,17 @@
+{
+  "Version": "1.0.1",
+  "Author": "Aschy",
+  "Name": "Combat Statistics",
+  "Punchline": "Real-time DPS and HPS tracking with encounter history and an overlay.",
+  "Description": "Tracks DPS, HPS, overheal, pet contribution, and encounter summaries with a compact overlay and detailed breakdowns.",
+  "Changelog": "v1.0.1: Initial release with combat encounter tracking, DPS/HPS summaries, detailed actor breakdowns, and a compact overlay.",
+  "InternalName": "CombatStatistics",
+  "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "Tags": ["combat", "statistics", "dps", "hps", "overlay"]
+}
