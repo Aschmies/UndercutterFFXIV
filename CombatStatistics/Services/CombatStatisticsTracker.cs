@@ -129,6 +129,14 @@ public sealed class CombatStatisticsTracker
 
     public void ArchiveCurrentEncounter() => encounterTracker.ArchiveCurrentEncounter();
 
+    public void ResetForDutyEnd()
+    {
+        if (encounterTracker.HasActiveEncounter)
+            encounterTracker.ArchiveCurrentEncounter();
+        else
+            encounterTracker.Reset();
+    }
+
     private ActorIdentity NormalizeActor(ActorIdentity actor)
     {
         if (configuration.MergePetsWithOwner)
