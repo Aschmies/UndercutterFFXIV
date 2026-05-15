@@ -1,8 +1,8 @@
 {
-  "Version": "1.0.17",
+  "Version": "1.0.18",
   "Author": "Aschy",
   "Name": "Armoury Cleaner",
-  "Description": "Filter and discard unwanted gear from your armoury chest.",
+  "Description": "Filter and discard unwanted gear from your armoury chest. Customize deletion timing with configurable min/max delays.",
   "InternalName": "ArmouryCleaner",
   "RepoUrl": "https://github.com/Aschmies/AschyQOL",
   "ApplicableVersion": "any",

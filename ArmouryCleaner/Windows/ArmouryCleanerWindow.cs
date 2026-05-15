@@ -87,7 +87,7 @@ namespace ArmouryCleaner.Windows
             }
             else
             {
-                nextDelayMs = Rng.Next(800, 1101);
+                nextDelayMs = Rng.Next(Config.DelayMinMs, Config.DelayMaxMs + 1);
                 queueTimer.Restart();
                 var action = queueIsDiscard ? "Discarding" : "Moving";
                 statusMessage = $"{action}... {done}/{queueTotal} (next in {nextDelayMs}ms)";
@@ -239,6 +239,26 @@ namespace ArmouryCleaner.Windows
             DrawRarityCheckbox("Purple##skipPurple", new Vector4(0.75f, 0.40f, 1.00f, 1f), ref skipPurple, v => { Config.SkipPurple = v; Config.Save(); });
             ImGui.SameLine();
             DrawRarityCheckbox("Pink##skipPink",     new Vector4(1.00f, 0.50f, 0.80f, 1f), ref skipPink,   v => { Config.SkipPink   = v; Config.Save(); });
+            ImGui.TextUnformatted("Delete Timing");
+            var delayMin = Config.DelayMinMs;
+            if (ImGui.SliderInt("Min Delay (ms)##delayMin", ref delayMin, 100, 5000))
+            {
+                Config.DelayMinMs = Math.Min(delayMin, Config.DelayMaxMs);
+                Config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Minimum milliseconds to wait between item deletions/moves. Lower = faster, higher = safer.");
+
+            var delayMax = Config.DelayMaxMs;
+            if (ImGui.SliderInt("Max Delay (ms)##delayMax", ref delayMax, Config.DelayMinMs, 10000))
+            {
+                Config.DelayMaxMs = Math.Max(delayMax, Config.DelayMinMs);
+                Config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Maximum milliseconds to wait between item deletions/moves. Delays are randomized between min and max.");
+
+            ImGui.Spacing();
 
             ImGui.Spacing();
             if (ImGui.Button("Scan Armoury##scan"))
@@ -355,7 +375,7 @@ namespace ArmouryCleaner.Windows
                             processQueue.Enqueue(item);
                         queueTotal = processQueue.Count;
                         queueIsDiscard = false;
-                        nextDelayMs = Rng.Next(800, 1101);
+                        nextDelayMs = Rng.Next(Config.DelayMinMs, Config.DelayMaxMs + 1);
                         queueTimer.Restart();
                         statusMessage = $"Moving 0/{queueTotal}...";
                         confirmingMoveToInventory = false;
@@ -376,7 +396,7 @@ namespace ArmouryCleaner.Windows
                             processQueue.Enqueue(item);
                         queueTotal = processQueue.Count;
                         queueIsDiscard = true;
-                        nextDelayMs = Rng.Next(800, 1101);
+                        nextDelayMs = Rng.Next(Config.DelayMinMs, Config.DelayMaxMs + 1);
                         queueTimer.Restart();
                         statusMessage = $"Discarding 0/{queueTotal}...";
                         confirmingDiscardAll = false;
