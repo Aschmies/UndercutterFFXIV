@@ -52,7 +52,7 @@ public sealed class CombatStatisticsTracker
                 IsHealingOverTime = combatEvent.IsHealingOverTime,
             };
 
-            if (IsRelevant(source, target, normalizedEvent.Type))
+            if (IsRelevant(source, target, normalizedEvent.Type, actorTracker))
                 encounterTracker.RecordEvent(normalizedEvent);
         }
 
@@ -86,7 +86,7 @@ public sealed class CombatStatisticsTracker
         var source = NormalizeActor(combatEvent.Source);
         var target = NormalizeActor(combatEvent.Target);
 
-        if (!IsRelevant(source, target, combatEvent.Type))
+        if (!IsRelevant(source, target, combatEvent.Type, actorTracker))
             return;
 
         encounterTracker.RecordEvent(new CombatEvent
@@ -145,14 +145,23 @@ public sealed class CombatStatisticsTracker
         return actor;
     }
 
-    private static bool IsRelevant(ActorIdentity source, ActorIdentity target, CombatEventType type)
+    private static bool IsRelevant(ActorIdentity source, ActorIdentity target, CombatEventType type, ActorTracker actorTracker)
     {
-        if (source.Type is ActorType.Player or ActorType.Pet)
-            return true;
+        // Only track damage from party members (players and their pets)
+        if (source.Type is ActorType.Player)
+            return actorTracker.IsPartyMember(source);
 
-        if (target.Type is ActorType.Player or ActorType.Pet)
-            return true;
+        if (source.Type is ActorType.Pet)
+        {
+            // For pets, check if the owner is a party member
+            if (source.IsPet)
+                return true; // Pets are already filtered by NormalizeForMerge
+        }
 
-        return type is CombatEventType.Shield;
+        // Track healing and shields only if from party members
+        if (target.Type is ActorType.Player && (type is CombatEventType.Heal or CombatEventType.HoTTick or CombatEventType.Shield))
+            return actorTracker.IsPartyMember(target);
+
+        return false;
     }
 }

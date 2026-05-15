@@ -15,6 +15,7 @@ public sealed class ActorTracker
     private readonly Dictionary<ulong, ActorIdentity> actorsByContentId = new();
     private readonly Dictionary<string, List<ActorIdentity>> actorsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<uint, uint> petOwners = new();
+    private readonly HashSet<string> currentPartyMemberNames = new(StringComparer.OrdinalIgnoreCase);
 
     public void Reset()
     {
@@ -22,12 +23,18 @@ public sealed class ActorTracker
         actorsByContentId.Clear();
         actorsByName.Clear();
         petOwners.Clear();
+        currentPartyMemberNames.Clear();
     }
 
     public void RefreshWorldSnapshot(IObjectTable objectTable, IPartyList partyList, IClientState clientState)
     {
+        currentPartyMemberNames.Clear();
+        
         if (objectTable.LocalPlayer is IPlayerCharacter localPlayer)
+        {
             Upsert(ActorIdentity.FromObject(localPlayer, ActorType.Player, ResolveJobName(localPlayer, ActorType.Player)));
+            currentPartyMemberNames.Add(localPlayer.Name.TextValue);
+        }
 
         foreach (dynamic partyMember in partyList)
         {
@@ -40,6 +47,7 @@ public sealed class ActorTracker
                 Type = ActorType.Player,
             };
             Upsert(memberActor);
+            currentPartyMemberNames.Add(memberActor.Name);
         }
 
         foreach (var obj in objectTable)
@@ -105,6 +113,11 @@ public sealed class ActorTracker
 
     public bool TryGetByContentId(ulong contentId, out ActorIdentity? actor)
         => actorsByContentId.TryGetValue(contentId, out actor);
+
+    public bool IsPartyMember(ActorIdentity actor)
+    {
+        return currentPartyMemberNames.Contains(actor.Name);
+    }
 
     public ActorIdentity ResolveFromLogEntity(ILogMessageEntity? entity, ActorType fallbackType, bool preferPartyActor = false)
     {

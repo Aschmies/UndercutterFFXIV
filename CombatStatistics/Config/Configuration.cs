@@ -17,8 +17,8 @@ public sealed class Configuration : IPluginConfiguration
     public float OverlayFontSize { get; set; } = 14f;
     public bool OverlayUsePerMinuteMetrics { get; set; } = false;
 
-    public float OverlayWindowX { get; set; } = 80f;
-    public float OverlayWindowY { get; set; } = 180f;
+    public float OverlayWindowX { get; set; } = 1200f;
+    public float OverlayWindowY { get; set; } = 300f;
     public float MainWindowX { get; set; } = 240f;
     public float MainWindowY { get; set; } = 120f;
 
@@ -40,8 +40,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool DefaultShowOverlay { get; set; } = true;
     public bool DefaultShowMainWindowOnStart { get; set; } = true;
     public bool DefaultOverlayUsePerMinuteMetrics { get; set; } = false;
-    public float DefaultOverlayWindowX { get; set; } = 80f;
-    public float DefaultOverlayWindowY { get; set; } = 180f;
+    public float DefaultOverlayWindowX { get; set; } = 1200f;
+    public float DefaultOverlayWindowY { get; set; } = 300f;
     public float DefaultMainWindowX { get; set; } = 240f;
     public float DefaultMainWindowY { get; set; } = 120f;
     public float DefaultMainWindowWidth { get; set; } = 860f;
