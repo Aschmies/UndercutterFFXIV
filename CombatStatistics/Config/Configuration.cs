@@ -10,6 +10,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool MergePetsWithOwner { get; set; } = true;
     public bool ShowOverlay { get; set; } = true;
     public bool ShowMainWindowOnStart { get; set; } = true;
+    public bool ShowDebugInfo { get; set; } = false;
     public int EncounterTimeoutSeconds { get; set; } = 10;
     public int OverlayRowCount { get; set; } = 6;
     public float OverlayOpacity { get; set; } = 0.78f;

@@ -1,10 +1,10 @@
 {
-  "Version": "1.0.3",
+  "Version": "1.0.4",
   "Author": "Aschy",
   "Name": "Combat Statistics",
   "Punchline": "Real-time DPS and HPS tracking with encounter history and an overlay.",
   "Description": "Tracks DPS, HPS, overheal, pet contribution, and encounter summaries with a compact overlay and detailed breakdowns.",
-  "Changelog": "v1.0.3: Added draggable overlay with saved position, improved player/party actor attribution, and added DPS/HPS vs DPM/HPM overlay mode toggle.",
+  "Changelog": "v1.0.4: Added debug mode to overlay showing calculation breakdown, fixed DPS/HPS to use encounter duration instead of per-actor event window, added manual and duty-end auto-reset.",
   "InternalName": "CombatStatistics",
   "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
   "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",

@@ -35,6 +35,20 @@ public sealed class CombatStatisticsOverlayWindow : Window
 
     public override void Draw()
     {
+        var accent = new Vector4(configuration.OverlayAccentR, configuration.OverlayAccentG, configuration.OverlayAccentB, 1f);
+
+        ImGui.PushStyleColor(ImGuiCol.Text, accent);
+        ImGui.TextUnformatted("Combat Statistics");
+        ImGui.PopStyleColor();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Reset"))
+            tracker.ResetEncounter();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Debug"))
+            configuration.ShowDebugInfo = !configuration.ShowDebugInfo;
+
+        ImGui.Separator();
+
         var encounter = tracker.CurrentEncounter;
         if (!tracker.HasActiveEncounter)
         {
@@ -61,8 +75,13 @@ public sealed class CombatStatisticsOverlayWindow : Window
         var usePerMinute = configuration.OverlayUsePerMinuteMetrics;
         var damageLabel = usePerMinute ? "DPM" : "DPS";
         var healingLabel = usePerMinute ? "HPM" : "HPS";
-        var accent = new Vector4(configuration.OverlayAccentR, configuration.OverlayAccentG, configuration.OverlayAccentB, 1f);
-
+        
+        if (configuration.ShowDebugInfo)
+        {
+            ImGui.TextDisabled($"Encounter Duration: {encounterSeconds:F1}s | Events: {encounter.EventCount}");
+            ImGui.TextDisabled($"Raid Total Dmg: {raidDamage:N0}");
+        }
+        
         ImGui.PushStyleColor(ImGuiCol.Text, accent);
         ImGui.TextUnformatted($"Top {damageLabel}/{healingLabel}");
         ImGui.PopStyleColor();
@@ -81,6 +100,11 @@ public sealed class CombatStatisticsOverlayWindow : Window
             ImGui.TextUnformatted($"{healingRate:N0} {healingLabel}");
             ImGui.SameLine(490f);
             ImGui.TextDisabled($"{percent:N1}%");
+            
+            if (configuration.ShowDebugInfo)
+            {
+                ImGui.TextDisabled($"  → Damage:{actor.DamageTotal:N0} | {actor.GetDebugInfo(encounterSeconds)}");
+            }
         }
 
         var position = ImGui.GetWindowPos();

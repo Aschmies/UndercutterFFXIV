@@ -2,6 +2,7 @@ using CombatStatistics.Config;
 using CombatStatistics.Services;
 using CombatStatistics.UI;
 using Dalamud.Game.Chat;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -19,6 +20,7 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
     private const string CommandName = "/combatstats";
@@ -27,6 +29,7 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
     private readonly CombatStatisticsTracker tracker;
     private readonly CombatStatisticsWindow mainWindow;
     private readonly CombatStatisticsOverlayWindow overlayWindow;
+    private bool wasBoundByDuty;
 
     public Configuration Configuration { get; }
 
@@ -38,6 +41,7 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
         tracker = new CombatStatisticsTracker(Configuration);
         mainWindow = new CombatStatisticsWindow(Configuration, tracker);
         overlayWindow = new CombatStatisticsOverlayWindow(Configuration, tracker);
+        wasBoundByDuty = IsBoundByDuty();
 
         windowSystem.AddWindow(mainWindow);
         windowSystem.AddWindow(overlayWindow);
@@ -60,9 +64,22 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        HandleDutyStateTransition();
         tracker.Update(ObjectTable, PartyList, ClientState);
         overlayWindow.IsOpen = Configuration.ShowOverlay && tracker.HasActiveEncounter;
     }
+
+    private void HandleDutyStateTransition()
+    {
+        var isBoundByDuty = IsBoundByDuty();
+        if (wasBoundByDuty && !isBoundByDuty)
+            tracker.ResetForDutyEnd();
+
+        wasBoundByDuty = isBoundByDuty;
+    }
+
+    private static bool IsBoundByDuty()
+        => Condition.Any(ConditionFlag.BoundByDuty, ConditionFlag.BoundByDuty56, ConditionFlag.BoundByDuty95);
 
     private void OnLogMessage(ILogMessage message)
     {

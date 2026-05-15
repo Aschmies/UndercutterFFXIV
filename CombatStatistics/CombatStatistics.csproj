@@ -2,12 +2,17 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <AssemblyName>CombatStatistics</AssemblyName>
     <RootNamespace>CombatStatistics</RootNamespace>
     <Authors>Aschy</Authors>
     <Description>Combat Statistics: track DPS, HPS, overheal, and raid contribution with a compact overlay and detailed breakdowns.</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Icon>icon.png</Icon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="icon.png" />
+  </ItemGroup>
 
 </Project>
