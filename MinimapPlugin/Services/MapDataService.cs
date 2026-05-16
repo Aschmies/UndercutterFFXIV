@@ -72,20 +72,28 @@ public sealed class MapDataService : IDisposable
                 }
 
                 // Build a priority-ordered candidate list.
-                // For sub-areas (e.g. "x6d8/02"), the parent zone texture is tried first
-                // because sub-area textures are often 4×4 placeholder stubs.
-                // Uses only FileExists — no GetFile<TexFile> so there is no Lumina API fragility.
+                // FFXIV map texture canonical format: ui/map/{territory}/{variant}/{territory}_{variant}_m.tex
+                // e.g. mapId "x6fe/01" → ui/map/x6fe/01/x6fe_01_m.tex
+                // Also try flat forms in case they exist as alternates/fallbacks.
                 var candidates = new List<string>();
                 if (mapId.Contains('/'))
                 {
-                    var folder = mapId.Split('/')[0];
-                    candidates.Add($"ui/map/{folder}/{folder}_m.tex");   // parent zone (usually 2048×2048)
-                    candidates.Add($"ui/map/{mapId}_m.tex");              // sub-area primary
-                    candidates.Add($"ui/map/{mapId}_s.tex");              // sub-area small
+                    var parts  = mapId.Split('/');
+                    var folder  = parts[0]; // e.g. "x6fe"
+                    var variant = parts[1]; // e.g. "01"
+                    // canonical sub-directory form (most zones)
+                    candidates.Add($"ui/map/{folder}/{variant}/{folder}_{variant}_m.tex");
+                    candidates.Add($"ui/map/{folder}/{variant}/{folder}_{variant}_s.tex");
+                    // parent-zone flat form (fallback — some zones share the territory texture)
+                    candidates.Add($"ui/map/{folder}/{folder}_m.tex");
+                    // legacy flat form seen in older zones
+                    candidates.Add($"ui/map/{folder}/{variant}_m.tex");
                 }
                 else
                 {
-                    candidates.Add($"ui/map/{mapId}_m.tex");
+                    candidates.Add($"ui/map/{mapId}/{mapId}_m.tex");   // canonical single-area form
+                    candidates.Add($"ui/map/{mapId}_m.tex");            // flat form
+                    candidates.Add($"ui/map/{mapId}/{mapId}_s.tex");
                     candidates.Add($"ui/map/{mapId}_s.tex");
                 }
 
