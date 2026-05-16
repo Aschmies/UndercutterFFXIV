@@ -81,10 +81,11 @@ public sealed class EntityService
 
             markers.Add(new MapMarker
             {
-                WorldX = pos.X,
-                WorldZ = pos.Z,
-                Type   = markerType,
-                Label  = obj.Name.TextValue,
+                WorldX      = pos.X,
+                WorldZ      = pos.Z,
+                Type        = markerType,
+                Label       = obj.Name.TextValue,
+                AetheryteId = markerType == MarkerType.Aetheryte ? (uint)obj.BaseId : 0,
             });
         }
 
