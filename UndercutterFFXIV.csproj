@@ -37,6 +37,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="MinimapPlugin\**" />
+    <EmbeddedResource Remove="MinimapPlugin\**" />
+    <None Remove="MinimapPlugin\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.7" />
   </ItemGroup>
 
