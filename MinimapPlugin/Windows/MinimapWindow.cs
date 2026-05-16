@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using System.Numerics;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
@@ -166,7 +168,25 @@ public sealed class MinimapWindow : Window, IDisposable
                 screenPos = CoordinateHelper.MapPixelToScreen(markerPixel, playerMapPixel, center, visibleHalf, winSize * 0.5f);
 
             DrawMarker(drawList, screenPos, marker.Type);
-        }
+            // Aetheryte click-to-teleport
+            if (marker.AetheryteId != 0)
+            {
+                const float hit = 8f;
+                var hitMin = screenPos - new Vector2(hit, hit);
+                var hitMax = screenPos + new Vector2(hit, hit);
+                if (ImGui.IsMouseHoveringRect(hitMin, hitMax))
+                {
+                    ImGui.SetTooltip($"Teleport: {marker.Label}");
+                    if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                    {
+                        var entry = Plugin.AetheryteList.FirstOrDefault(a => a.AetheryteId == marker.AetheryteId);
+                        if (entry != null)
+                        {
+                            unsafe { Telepo.Instance()->Teleport(entry.AetheryteId, entry.SubIndex); }
+                        }
+                    }
+                }
+            }        }
 
         // ── Draw player arrow (always centred) ──────────────────────────────
         // In player-up mode the arrow always points up; in north-up it rotates.

@@ -15,4 +15,6 @@ public sealed class MapMarker
     public float WorldZ { get; set; }
     public MarkerType Type { get; set; }
     public string Label { get; set; } = string.Empty;
+    /// <summary>Non-zero for aetheryte markers — the Aetheryte sheet row ID used for teleportation.</summary>
+    public uint AetheryteId { get; set; }
 }
