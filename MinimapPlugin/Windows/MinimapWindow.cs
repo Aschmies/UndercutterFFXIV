@@ -215,9 +215,9 @@ public sealed class MinimapWindow : Window, IDisposable
         ImGui.SetCursorScreenPos(windowMin + new Vector2(dbgX, dbgY));
         ImGui.TextDisabled($"{mapInfo.MapId} #{mapInfo.MapRowId}");
         ImGui.SetCursorScreenPos(windowMin + new Vector2(dbgX, dbgY + 12));
-        ImGui.TextDisabled($"tex {texW}x{texH}  sf={mapInfo.SizeFactor}");
+        ImGui.TextDisabled($"tex {texW}x{texH}  {System.IO.Path.GetFileName(mapInfo.TexturePath)}");
         ImGui.SetCursorScreenPos(windowMin + new Vector2(dbgX, dbgY + 24));
-        ImGui.TextDisabled($"uv({uvMin.X:F2},{uvMin.Y:F2})-({uvMax.X:F2},{uvMax.Y:F2})");
+        ImGui.TextDisabled($"sf={mapInfo.SizeFactor} uv({uvMin.X:F2},{uvMin.Y:F2})-({uvMax.X:F2},{uvMax.Y:F2})");
         ImGui.SetCursorScreenPos(windowMin + new Vector2(dbgX, dbgY + 36));
         ImGui.TextDisabled($"w({playerPos.X:F0},{playerPos.Z:F0}) ox={mapInfo.OffsetX} oy={mapInfo.OffsetY}");
     }

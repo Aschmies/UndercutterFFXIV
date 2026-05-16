@@ -1,9 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dalamud.Interface.Textures;
 using Dalamud.Plugin.Services;
 using MinimapPlugin.Models;
-using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
 
 namespace MinimapPlugin.Services;
@@ -15,6 +15,8 @@ public sealed class MapDataService : IDisposable
     private readonly IPluginLog log;
 
     private ISharedImmediateTexture? currentTexture;
+    // Fallback paths to try automatically if the loaded texture is a tiny stub (≤16 px)
+    private readonly Queue<string> texFallbackQueue = new();
     private bool texDimensionsLogged;
 
     public bool IsLoading { get; private set; }
@@ -27,8 +29,9 @@ public sealed class MapDataService : IDisposable
         this.log = log;
     }
 
-    /// <summary>Load map texture using a Lumina Map row ID (from IClientState.MapId).</summary>
-    public void LoadMapForMapId(uint mapRowId)
+    /// <summary>Load map texture using a Lumina Map row ID (from IClientState.MapId).
+    /// <paramref name="territoryType"/> is optional; used to widen the fallback texture search.</summary>
+    public void LoadMapForMapId(uint mapRowId, uint territoryType = 0)
     {
         if (mapRowId == 0) return;
 
@@ -36,6 +39,7 @@ public sealed class MapDataService : IDisposable
         currentTexture = null;
         CurrentMapInfo = null;
         texDimensionsLogged = false;
+        texFallbackQueue.Clear();
 
         Task.Run(() =>
         {
@@ -67,39 +71,55 @@ public sealed class MapDataService : IDisposable
                     return;
                 }
 
-                // Try _m.tex → _s.tex → parent zone _m.tex.
-                // Some sub-areas have a 4×4 stub texture — skip those via dimension check.
-                string texPath = $"ui/map/{mapId}_m.tex";
-                if (!IsRealMapTexture(texPath))
+                // Build a priority-ordered candidate list.
+                // For sub-areas (e.g. "x6d8/02"), the parent zone texture is tried first
+                // because sub-area textures are often 4×4 placeholder stubs.
+                // Uses only FileExists — no GetFile<TexFile> so there is no Lumina API fragility.
+                var candidates = new List<string>();
+                if (mapId.Contains('/'))
                 {
-                    var smPath = $"ui/map/{mapId}_s.tex";
-                    if (IsRealMapTexture(smPath))
+                    var folder = mapId.Split('/')[0];
+                    candidates.Add($"ui/map/{folder}/{folder}_m.tex");   // parent zone (usually 2048×2048)
+                    candidates.Add($"ui/map/{mapId}_m.tex");              // sub-area primary
+                    candidates.Add($"ui/map/{mapId}_s.tex");              // sub-area small
+                }
+                else
+                {
+                    candidates.Add($"ui/map/{mapId}_m.tex");
+                    candidates.Add($"ui/map/{mapId}_s.tex");
+                }
+
+                // Add the territory's own map as a last-resort fallback
+                if (territoryType != 0)
+                {
+                    var terr = dataManager.GetExcelSheet<TerritoryType>()?.GetRowOrDefault(territoryType);
+                    if (terr != null)
                     {
-                        texPath = smPath;
-                    }
-                    else if (mapId.Contains('/'))
-                    {
-                        // Sub-area (e.g. "x6d8/01") — try the parent zone full texture.
-                        // Keep the sub-area's sf/ox/oy metadata; it is calibrated to the 2048×2048 parent texture.
-                        var folder = mapId.Split('/')[0];
-                        var parentPath = $"ui/map/{folder}/{folder}_m.tex";
-                        if (IsRealMapTexture(parentPath))
+                        var terrMapId = terr.Value.Map.Value.Id.ExtractText().TrimEnd('\0');
+                        if (!string.IsNullOrEmpty(terrMapId))
                         {
-                            texPath = parentPath;
-                            log.Info($"[Minimap] Sub-area '{mapId}' has stub tex; using parent '{folder}/{folder}_m.tex'");
+                            var tp = $"ui/map/{terrMapId}_m.tex";
+                            if (!candidates.Contains(tp)) candidates.Add(tp);
                         }
-                        else
-                        {
-                            log.Warning($"[Minimap] No usable tex for '{mapId}'; will try '{texPath}' anyway.");
-                        }
-                    }
-                    else
-                    {
-                        log.Warning($"[Minimap] No usable tex for '{mapId}'; will try '{texPath}' anyway.");
                     }
                 }
 
-                log.Info($"[Minimap] row={mapRowId} id='{mapId}' sf={sizeFactor} ox={offsetX} oy={offsetY} path='{texPath}'");
+                // Log what exists so the Dalamud log shows the full picture
+                foreach (var c in candidates)
+                    log.Info($"[Minimap]   {(dataManager.FileExists(c) ? " exists" : "MISSING")} {c}");
+
+                // Pick the first existing path; queue the rest as automatic fallbacks
+                string? texPath = null;
+                foreach (var c in candidates)
+                {
+                    if (!dataManager.FileExists(c)) continue;
+                    if (texPath == null) texPath = c;
+                    else texFallbackQueue.Enqueue(c);
+                }
+                texPath ??= candidates[0]; // last resort: attempt even if missing
+
+                log.Info($"[Minimap] row={mapRowId} id='{mapId}' sf={sizeFactor} ox={offsetX} oy={offsetY}");
+                log.Info($"[Minimap] Loading: '{texPath}' (+{texFallbackQueue.Count} fallback(s))");
 
                 var info = new ZoneMapInfo
                 {
@@ -125,26 +145,28 @@ public sealed class MapDataService : IDisposable
         });
     }
 
-    /// <summary>Returns true if the game file at <paramref name="path"/> exists AND is large enough
-    /// to be a real map texture (≥ 32 px). Skips 4×4 stubs the game ships for some sub-areas.</summary>
-    private bool IsRealMapTexture(string path)
-    {
-        if (!dataManager.FileExists(path)) return false;
-        var tex = dataManager.GetFile<TexFile>(path);
-        return tex != null && tex.Header.Width >= 32 && tex.Header.Height >= 32;
-    }
-
-    /// <summary>Returns the current texture wrap for use within an ImGui Draw frame.</summary>
-    /// Returns null while the texture is still loading (wrap size is 1×1 placeholder).</summary>
+    /// <summary>Returns the current texture wrap for use within an ImGui Draw frame.
+    /// Returns null while the texture is still loading or while a stub fallback is being swapped in.</summary>
     public Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? GetCurrentTextureWrap()
     {
         var wrap = currentTexture?.GetWrapOrEmpty();
         if (wrap == null || wrap.Width <= 1) return null;
 
+        // Stub detection: if the loaded texture is tiny (≤16 px placeholder), try the next fallback.
+        if (wrap.Width <= 16 && wrap.Height <= 16 && texFallbackQueue.Count > 0)
+        {
+            var nextPath = texFallbackQueue.Dequeue();
+            log.Warning($"[Minimap] Texture is {wrap.Width}×{wrap.Height} stub; trying next fallback: '{nextPath}'");
+            texDimensionsLogged = false;
+            currentTexture = textureProvider.GetFromGame(nextPath);
+            if (CurrentMapInfo != null) CurrentMapInfo.TexturePath = nextPath;
+            return null; // pick up on next frame
+        }
+
         if (!texDimensionsLogged)
         {
             texDimensionsLogged = true;
-            log.Info($"[Minimap] Texture loaded: {wrap.Width}×{wrap.Height} for '{CurrentMapInfo?.TexturePath}'");
+            log.Info($"[Minimap] Texture ready: {wrap.Width}×{wrap.Height} for '{CurrentMapInfo?.TexturePath}'");
         }
 
         return wrap;
