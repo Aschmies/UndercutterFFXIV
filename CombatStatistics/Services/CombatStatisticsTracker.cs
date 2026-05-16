@@ -32,6 +32,8 @@ public sealed class CombatStatisticsTracker
     {
         actorTracker.RefreshWorldSnapshot(objectTable, partyList, clientState);
 
+        var isInDuty = CombatStatisticsPlugin.IsBoundByDuty();
+
         while (eventQueue.TryDequeue(out var combatEvent))
         {
             var source = NormalizeActor(combatEvent.Source);
@@ -52,7 +54,7 @@ public sealed class CombatStatisticsTracker
                 IsHealingOverTime = combatEvent.IsHealingOverTime,
             };
 
-            if (IsRelevant(source, target, normalizedEvent.Type, actorTracker))
+            if (IsRelevant(source, target, normalizedEvent.Type, actorTracker, isInDuty))
                 encounterTracker.RecordEvent(normalizedEvent);
         }
 
@@ -86,7 +88,8 @@ public sealed class CombatStatisticsTracker
         var source = NormalizeActor(combatEvent.Source);
         var target = NormalizeActor(combatEvent.Target);
 
-        if (!IsRelevant(source, target, combatEvent.Type, actorTracker))
+        var isInDuty = CombatStatisticsPlugin.IsBoundByDuty();
+        if (!IsRelevant(source, target, combatEvent.Type, actorTracker, isInDuty))
             return;
 
         encounterTracker.RecordEvent(new CombatEvent
@@ -145,22 +148,19 @@ public sealed class CombatStatisticsTracker
         return actor;
     }
 
-    private static bool IsRelevant(ActorIdentity source, ActorIdentity target, CombatEventType type, ActorTracker actorTracker)
+    private static bool IsRelevant(ActorIdentity source, ActorIdentity target, CombatEventType type, ActorTracker actorTracker, bool isInDuty)
     {
-        // Only track damage from party members (players and their pets)
+        // In duty content, accept all player-sourced events — the party list may not be
+        // populated yet when the first combat events arrive, so skip the membership check.
         if (source.Type is ActorType.Player)
-            return actorTracker.IsPartyMember(source);
+            return isInDuty || actorTracker.IsPartyMember(source);
 
-        if (source.Type is ActorType.Pet)
-        {
-            // For pets, check if the owner is a party member
-            if (source.IsPet)
-                return true; // Pets are already filtered by NormalizeForMerge
-        }
+        if (source.Type is ActorType.Pet && source.IsPet)
+            return true; // pets are already filtered by NormalizeForMerge
 
-        // Track healing and shields only if from party members
+        // Healing/shields: relevant if the target is a player in duty, or a known party member.
         if (target.Type is ActorType.Player && (type is CombatEventType.Heal or CombatEventType.HoTTick or CombatEventType.Shield))
-            return actorTracker.IsPartyMember(target);
+            return isInDuty || actorTracker.IsPartyMember(target);
 
         return false;
     }

@@ -72,13 +72,16 @@ public sealed class CombatStatisticsPlugin : IDalamudPlugin
     private void HandleDutyStateTransition()
     {
         var isBoundByDuty = IsBoundByDuty();
-        if (wasBoundByDuty && !isBoundByDuty)
+
+        if (!wasBoundByDuty && isBoundByDuty)
+            tracker.ResetForDutyEnd(); // archive any stale encounter before new duty starts
+        else if (wasBoundByDuty && !isBoundByDuty)
             tracker.ResetForDutyEnd();
 
         wasBoundByDuty = isBoundByDuty;
     }
 
-    private static bool IsBoundByDuty()
+    internal static bool IsBoundByDuty()
         => Condition.Any(ConditionFlag.BoundByDuty, ConditionFlag.BoundByDuty56, ConditionFlag.BoundByDuty95);
 
     private void OnLogMessage(ILogMessage message)

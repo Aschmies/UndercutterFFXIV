@@ -1,10 +1,10 @@
 {
-  "Version": "1.0.7",
+  "Version": "1.0.8",
   "Author": "Aschy",
   "Name": "Combat Statistics",
   "Punchline": "Real-time DPS and HPS tracking with encounter history and an overlay.",
   "Description": "Tracks DPS, HPS, overheal, pet contribution, and encounter summaries with a compact overlay and detailed breakdowns.",
-  "Changelog": "v1.0.7: Restored shared plugin icon metadata for Dalamud install screen.",
+  "Changelog": "v1.0.8: Fix encounter auto-load in group duty content with real players.",
   "InternalName": "CombatStatistics",
   "RepoUrl": "https://github.com/Aschmies/UndercutterFFXIV",
   "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",
