@@ -8,13 +8,16 @@ public static class CoordinateHelper
 {
     /// <summary>
     /// Converts world-space (X, Z) coordinates to map-pixel coordinates using Lumina map metadata.
-    /// Formula: pixelCoord = (worldCoord + offset) * (sizeFactor / 100) + (textureDimension / 2)
+    /// Verified FFXIV formula: displayX = 21 + (worldX + offsetX) * sf / 2048
+    ///                          displayY = 21 - (worldZ + offsetY) * sf / 2048   (Z inverted: +Z = south = top of display)
+    /// → pixelX = (worldX + offsetX) * (sf / 40) + texW/2
+    ///   pixelY = -(worldZ + offsetY) * (sf / 40) + texH/2
     /// </summary>
     public static Vector2 WorldToMapPixel(float worldX, float worldZ, ZoneMapInfo map, int textureWidth, int textureHeight)
     {
-        float scale = map.SizeFactor / 100.0f;
-        float mapX = (worldX + map.OffsetX) * scale + (textureWidth * 0.5f);
-        float mapY = (worldZ + map.OffsetY) * scale + (textureHeight * 0.5f);
+        float scale = map.SizeFactor / 40.0f;
+        float mapX =  (worldX + map.OffsetX) * scale + (textureWidth  * 0.5f);
+        float mapY = -(worldZ + map.OffsetY) * scale + (textureHeight * 0.5f);
         return new Vector2(mapX, mapY);
     }
 

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Dalamud.Interface.Textures;
 using Dalamud.Plugin.Services;
 using MinimapPlugin.Models;
+using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
 
 namespace MinimapPlugin.Services;
@@ -66,33 +67,35 @@ public sealed class MapDataService : IDisposable
                     return;
                 }
 
-                // Try _m.tex → _s.tex → parent zone _m.tex
+                // Try _m.tex → _s.tex → parent zone _m.tex.
+                // Some sub-areas have a 4×4 stub texture — skip those via dimension check.
                 string texPath = $"ui/map/{mapId}_m.tex";
-                if (!dataManager.FileExists(texPath))
+                if (!IsRealMapTexture(texPath))
                 {
                     var smPath = $"ui/map/{mapId}_s.tex";
-                    if (dataManager.FileExists(smPath))
+                    if (IsRealMapTexture(smPath))
                     {
                         texPath = smPath;
                     }
                     else if (mapId.Contains('/'))
                     {
-                        // Sub-area with numeric ID (e.g. "x6e2/00") — try the parent zone texture
+                        // Sub-area (e.g. "x6d8/01") — try the parent zone full texture.
+                        // Keep the sub-area's sf/ox/oy metadata; it is calibrated to the 2048×2048 parent texture.
                         var folder = mapId.Split('/')[0];
                         var parentPath = $"ui/map/{folder}/{folder}_m.tex";
-                        if (dataManager.FileExists(parentPath))
+                        if (IsRealMapTexture(parentPath))
                         {
                             texPath = parentPath;
-                            log.Info($"[Minimap] Sub-area '{mapId}' has no standalone tex; falling back to parent '{folder}/{folder}_m.tex'");
+                            log.Info($"[Minimap] Sub-area '{mapId}' has stub tex; using parent '{folder}/{folder}_m.tex'");
                         }
                         else
                         {
-                            log.Warning($"[Minimap] No _m/_s tex found for '{mapId}', path '{texPath}' will be attempted anyway.");
+                            log.Warning($"[Minimap] No usable tex for '{mapId}'; will try '{texPath}' anyway.");
                         }
                     }
                     else
                     {
-                        log.Warning($"[Minimap] '{texPath}' not found in game files; will attempt anyway.");
+                        log.Warning($"[Minimap] No usable tex for '{mapId}'; will try '{texPath}' anyway.");
                     }
                 }
 
@@ -122,7 +125,16 @@ public sealed class MapDataService : IDisposable
         });
     }
 
-    /// <summary>Returns the current texture wrap for use within an ImGui Draw frame.
+    /// <summary>Returns true if the game file at <paramref name="path"/> exists AND is large enough
+    /// to be a real map texture (≥ 32 px). Skips 4×4 stubs the game ships for some sub-areas.</summary>
+    private bool IsRealMapTexture(string path)
+    {
+        if (!dataManager.FileExists(path)) return false;
+        var tex = dataManager.GetFile<TexFile>(path);
+        return tex != null && tex.Header.Width >= 32 && tex.Header.Height >= 32;
+    }
+
+    /// <summary>Returns the current texture wrap for use within an ImGui Draw frame.</summary>
     /// Returns null while the texture is still loading (wrap size is 1×1 placeholder).</summary>
     public Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? GetCurrentTextureWrap()
     {
