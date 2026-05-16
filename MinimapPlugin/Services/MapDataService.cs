@@ -64,6 +64,8 @@ public sealed class MapDataService : IDisposable
 
                 var texPath = $"ui/map/{mapId}_m.tex";
 
+                log.Debug($"[Minimap] Territory {territoryId} → mapId='{mapId}' texPath='{texPath}'");
+
                 var info = new ZoneMapInfo
                 {
                     TerritoryId = territoryId,
@@ -78,7 +80,9 @@ public sealed class MapDataService : IDisposable
 
                 CurrentMapInfo = info;
                 currentTexture = texture;
-                log.Debug($"[Minimap] Loaded map {mapId} for territory {territoryId}.");
+
+                // Verify the texture loads (logged on next draw, but warn early if something looks off)
+                log.Debug($"[Minimap] ISharedImmediateTexture acquired for {texPath}.");
             }
             catch (Exception ex)
             {
@@ -92,9 +96,14 @@ public sealed class MapDataService : IDisposable
     }
 
     /// <summary>Returns the current texture wrap for use within an ImGui Draw frame, or null if unavailable.</summary>
-    /// <summary>Returns the current texture wrap for the current frame, or null if unavailable. Must be called from the main thread.</summary>
+    /// <summary>Returns the current texture wrap for use within an ImGui Draw frame.
+    /// Returns null while the texture is still loading (wrap size is 1x1 placeholder).</summary>
     public Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? GetCurrentTextureWrap()
-        => currentTexture?.GetWrapOrEmpty();
+    {
+        var wrap = currentTexture?.GetWrapOrEmpty();
+        if (wrap == null || wrap.Width <= 1) return null;
+        return wrap;
+    }
 
     public void Dispose()
     {
