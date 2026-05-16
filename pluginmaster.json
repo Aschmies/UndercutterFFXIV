@@ -213,9 +213,9 @@
     "IsTestingExclusive": false,
     "RepoUrl": "https://github.com/Aschmies/AschyQOL",
     "IconUrl": "https://raw.githubusercontent.com/Aschmies/AschyQOL/main/assets/icon-market-master-pro.png",
-    "DownloadLinkInstall": "",
-    "DownloadLinkUpdate": "",
-    "DownloadLinkTesting": "",
+    "DownloadLinkInstall": "https://github.com/Aschmies/AschyQOL/releases/download/mm-v1.0.0/MinimapPlugin-mm-v1.0.0.zip",
+    "DownloadLinkUpdate": "https://github.com/Aschmies/AschyQOL/releases/download/mm-v1.0.0/MinimapPlugin-mm-v1.0.0.zip",
+    "DownloadLinkTesting": "https://github.com/Aschmies/AschyQOL/releases/download/mm-v1.0.0/MinimapPlugin-mm-v1.0.0.zip",
     "DalamudApiLevel": 15,
     "ApplicableVersion": "any",
     "LoadRequiredState": 0,
@@ -230,7 +230,7 @@
       "map",
       "navigation"
     ],
-    "LastUpdated": 0,
+    "LastUpdated": 1778915494,
     "DownloadCount": 0
   }
 ]
