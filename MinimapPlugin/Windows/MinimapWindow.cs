@@ -115,10 +115,20 @@ public sealed class MinimapWindow : Window, IDisposable
         var mapInfo     = mapDataService.CurrentMapInfo;
         var textureWrap = mapDataService.GetCurrentTextureWrap();
 
-        if (mapInfo == null || textureWrap == null)
+        // GetCurrentTextureWrap() returns null while the ISharedImmediateTexture placeholder is 1×1.
+        // This happens for a frame or two while the game texture loads from disk.
+        if (mapInfo == null)
         {
             ImGui.SetCursorScreenPos(windowMin + new Vector2(8, winSize * 0.5f - 8));
             ImGui.TextDisabled("No map data");
+            return;
+        }
+
+        if (textureWrap == null)
+        {
+            // Map info loaded but texture still decoding — skip this frame and try next
+            ImGui.SetCursorScreenPos(windowMin + new Vector2(8, winSize * 0.5f - 8));
+            ImGui.TextDisabled("Loading...");
             return;
         }
 
@@ -166,6 +176,10 @@ public sealed class MinimapWindow : Window, IDisposable
 
         // Border
         drawList.AddRect(windowMin, windowMax, 0xAA000000, 0f, ImDrawFlags.None, 1.5f);
+
+        // Debug: show map ID in bottom-left so we can confirm Lumina lookup
+        ImGui.SetCursorScreenPos(windowMin + new Vector2(4, winSize - 16));
+        ImGui.TextDisabled(mapInfo.MapId);
     }
 
     // ────────────────────────────────────────────────────────────────────────
