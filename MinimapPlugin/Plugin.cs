@@ -64,13 +64,13 @@ public sealed class Plugin : IDalamudPlugin
 
         // Prime the map for the current zone using MapId directly (updated every frame by Dalamud from AgentMap)
         if (ClientState.MapId != 0)
-            mapDataService.LoadMapForMapId(ClientState.MapId);
+            mapDataService.LoadMapForMapId(ClientState.MapId, ClientState.TerritoryType);
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
 
     private void OnMapIdChanged(uint mapId)
-        => mapDataService.LoadMapForMapId(mapId);
+        => mapDataService.LoadMapForMapId(mapId, ClientState.TerritoryType);
 
     private void OnCommand(string command, string args)
     {
